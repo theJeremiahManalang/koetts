@@ -3,3 +3,9 @@ __pycache__/
 results/
 .cache/
 *.pyc
+vendor/
+weights/
+node_modules/
+.next/
+*.tsbuildinfo
+web/.env*

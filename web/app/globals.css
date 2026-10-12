@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+body { background: #f8fafc; color: #0f172a; font-family: Arial, Helvetica, sans-serif; }
+button, input { outline-offset: 4px; }
+button:not(:disabled) { cursor: pointer; }
