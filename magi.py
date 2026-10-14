@@ -4,6 +4,9 @@ from config import MODEL_ID, MODEL_REVISION
 
 
 class Magi:
+    model_id = MODEL_ID
+    revision = MODEL_REVISION
+
     def __init__(self, device="auto"):
         # Lazy imports let --help and input validation work before ML setup.
         import torch

@@ -1,5 +1,12 @@
 # Learn MagiV3 by running it
 
+## Web proof of concept
+
+The Next.js + TypeScript + Tailwind app in `web/` lets you upload a manga panel,
+click MAGI v3, and read only its extracted text. With the Python environment below
+installed, run `cd web`, `npm install`, then `npm run dev` and open
+http://127.0.0.1:3000. See [web/README.md](web/README.md) for setup and limits.
+
 This is a commented Python starter for `ragavsachdeva/magiv3`. It runs the three methods in the Hugging Face example, saves their results as JSON, and draws boxes on copies of your images. You do not need to train the model.
 
 ## 1. What the model does
@@ -169,3 +176,111 @@ To run the lightweight checks after installing dependencies:
 ## 9. Model use terms
 
 The model card permits personal, research, noncommercial, and not-for-profit use, and directs other uses to the author for a licensing arrangement. Check the current model card before commercial deployment. This starter does not change the model's terms: https://huggingface.co/ragavsachdeva/magiv3#license-and-citation
+
+## 10. Reusable runner: MAGI and Comic Text Detector
+
+The shared command now selects a backend with `--model`. MAGI remains the default,
+so existing commands continue to work, with results now nested under `results/magi/`.
+`--task all` means all supported tasks: detection + OCR for MAGI (plus grounding
+when captions are supplied), and detection only for Comic Text Detector (CTD).
+CTD rejects `ocr`, `ground`, and captions before loading a model.
+
+After the one-time CTD setup below, compare detection on the same images:
+
+```powershell
+.\.venv\Scripts\python.exe run.py --model magi --input images --task detect
+.\.venv\Scripts\python.exe run.py --model comic-text-detector --input images --task detect
+```
+
+Read text using MAGI:
+
+```powershell
+.\.venv\Scripts\python.exe run.py --model magi --input images --task ocr
+```
+
+CTD is a text detector, not a text recognizer. Its output does not contain a
+transcription. Do not compare MAGI OCR text against CTD's empty text placeholders.
+For detection comparison, use `predictions.detections.texts` from both models;
+each box is `[x_min, y_min, x_max, y_max]` in pixels of the EXIF-corrected RGB image.
+A text block may differ in granularity between models. More boxes does not mean
+better accuracy. Neither list position nor overlay label guarantees reading order.
+
+### One-time CTD setup (Python 3.11)
+
+Use the project virtual environment after installing PyTorch as above:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-ctd.txt
+git clone https://github.com/dmMaze/comic-text-detector.git vendor/comic-text-detector
+git -C vendor/comic-text-detector checkout 440b978563c71b758e31aaa315d100faba1efa2f
+New-Item -ItemType Directory -Force weights
+Invoke-WebRequest 'https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.2.1/comictextdetector.pt.onnx' -OutFile 'weights/comictextdetector.pt.onnx'
+.\.venv\Scripts\python.exe -m pip check
+```
+
+Skip cloning/downloading if those files already exist. The upstream source and
+large weights are ignored by Git, so a fresh clone of this project needs this setup.
+The upstream repository is not a pip-installable package. The adapter imports its
+`inference.TextDetector` directly. Its dependencies include a few packages imported
+by upstream training utilities even though this runner only performs inference.
+
+The default ONNX backend uses OpenCV on CPU. `--device auto` reports CPU for this
+backend; explicit `--device cuda` fails rather than falsely claiming GPU execution.
+For CUDA, download the `.pt` checkpoint from the same official release and use:
+
+```powershell
+.\.venv\Scripts\python.exe run.py --model comic-text-detector --input images --task detect --ctd-weights weights/comictextdetector.pt --device cuda
+```
+
+The `.pt` path requires a compatible CUDA PyTorch build. This project pins PyTorch
+2.5.1; upstream checkpoint loading is not validated with later PyTorch defaults.
+You can override the source folder using `--ctd-repo C:/path/to/comic-text-detector`.
+Use a fresh process for each model, as in the commands above: upstream CTD uses
+common top-level import names such as `utils` and `models`.
+
+### Output layout and metadata
+
+```text
+results/
+  magi/
+    <UTC timestamp>/
+      0000_page1.jpg.json
+      0000_page1.jpg.detections.png
+      0000_page1.jpg.ocr.png             (when OCR runs)
+  comic-text-detector/
+    <UTC timestamp>/
+      0000_page1.jpg.json
+      0000_page1.jpg.detections.png
+      0000_page1.jpg.mask.png
+      0000_page1.jpg.mask-refined.png
+```
+
+`--output experiments` changes the root to `experiments`, retaining the model and
+timestamp folders. Existing results are preserved. Folder timestamps use UTC.
+The CLI loads one model once and processes one image at a time.
+
+JSON retains the existing `predictions` structure and records the selected model,
+revision, source path, image size, actual device, task, and artifact filenames.
+CTD additionally records its checkpoint SHA-256, source directory, Git revision,
+dirty-checkout status, backend, and input size. CTD's `text_blocks` preserves native
+line polygons, orientation, language estimates, and other upstream attributes.
+Its raw and refined masks are separate PNGs to keep JSON manageable. A source
+revision is null if the checkout lacks Git metadata; dirty status flags changes.
+
+### Implementation files
+
+- `run.py`: common CLI, early option validation, processing, model-specific folders,
+  metadata, JSON, overlays, and optional model artifacts.
+- `runners.py`: lazy model selection and supported-task validation. New backends
+  can be added here without duplicating the file-processing loop.
+- `magi.py`: existing MAGI wrapper plus model identity/revision attributes.
+- `comic_text_detector.py`: new upstream CTD adapter, RGB-to-BGR conversion,
+  common detection boxes, preserved native output, masks, checkpoint metadata.
+- `requirements-ctd.txt`: CTD inference dependencies, separate from MAGI's list.
+- `tests/test_runners.py`: routing, validation, image conversion, empty detections,
+  mask persistence, output separation, and repeat-run preservation checks.
+- `.gitignore`: excludes local upstream source and downloaded weights.
+- `TEXT_EXTRACTION_RESEARCH.md`: researched next steps for OCR and reading order.
+
+See `VALIDATION.md` for the distinction between local plumbing tests and real model
+inference. Model licenses remain those of their upstream authors; CTD is GPL-3.0.
