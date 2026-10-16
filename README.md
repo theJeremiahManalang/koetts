@@ -1,5 +1,15 @@
 # Learn MagiV3 by running it
 
+## Character analysis web proof of concept
+
+The `character-analysis-web` branch adds image upload, RTL/LTR reading direction,
+editable dialogue, character appearance crops, persistent character IDs, selected
+Windows voices, and downloadable WAV audio using the existing Magi wrapper.
+See [web/README.md](web/README.md) to run it and
+[CHARACTER_ANALYSIS_WALKTHROUGH.md](CHARACTER_ANALYSIS_WALKTHROUGH.md) for the
+file/function walkthrough and connection to the supplied notebook.
+
+
 This is a commented Python starter for `ragavsachdeva/magiv3`. It runs the three methods in the Hugging Face example, saves their results as JSON, and draws boxes on copies of your images. You do not need to train the model.
 
 ## 1. What the model does
