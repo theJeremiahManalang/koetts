@@ -70,13 +70,13 @@ def review_document(project, stage, scene_id=None):
                             for sid, c in data["cast"].items()],
                    "appearances": [{k: a[k] for k in schemas.AppearanceEdit.model_fields} for a in data["appearances"]], "approve": False}
     elif stage == "sources":
-        command = {"sources": [{k: s[k] for k in schemas.SourceEdit.model_fields} for s in data["sources"]]}
+        command = {"sources": [{k: ("manual" if s.get(k) == "manual" else None) if k == "speaker_origin" else s[k] for k in schemas.SourceEdit.model_fields} for s in data["sources"]]}
     else:
         scene = next((s for s in data["scenes"] if s["scene_id"] == scene_id), None)
         if scene is None:
             raise ValueError("Choose a known --scene for script review")
         command = {"scene_id": scene_id, "title": scene["title"], "context": scene["context"],
-                   "turns": [{k: t[k] for k in schemas.TurnEdit.model_fields} for t in scene["turns"]], "approve": False}
+                   "turns": [{k: ("manual" if t.get(k) == "manual" else None) if k == "speaker_origin" else t[k] for k in schemas.TurnEdit.model_fields} for t in scene["turns"]], "approve": False}
     return {"stage": stage, "base_revision": digest(data), "command": command}
 
 

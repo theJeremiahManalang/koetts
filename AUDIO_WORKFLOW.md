@@ -14,8 +14,8 @@ and install `requirements.txt`. For planning, review, and audio, also install:
 .\.venv\Scripts\python.exe -m pip install -r requirements-audio.txt
 ```
 
-An audio-only environment does not need PyTorch. Optional MP3 export requires
-`ffmpeg` on PATH.
+An audio-only environment does not need PyTorch. MP3 export uses the encoder bundled
+with `imageio-ffmpeg` in the audio dependencies, or `ffmpeg` on PATH when available.
 Configure `GEMINI_API_KEY` through your host's environment, never
 in project files. Only `plan` and `render` make Gemini generation calls. Model
 availability is account-dependent. The supplied Gemini adapter is retained; live

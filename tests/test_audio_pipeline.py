@@ -96,6 +96,34 @@ class PipelineTests(unittest.TestCase):
         restored.render_selected(schemas.RenderCommand(scene_ids=selection.scene_ids))
         self.assertEqual(Path(restored.export_audio(selection).wav_path).read_bytes(), audio)
 
+    def test_compiled_mp3_exports_all_or_specific_scenes_in_chapter_order(self):
+        import subprocess
+        from imageio_ffmpeg import get_ffmpeg_exe
+        self.approve()
+        draft = review_document(self.router.project, "sources")
+        for index, source in enumerate(draft["command"]["sources"], 1):
+            source["scene_id"] = f"scene_{index:03d}"
+        apply_review(self.router, draft)
+        ids = [scene.scene_id for scene in self.router.project.scenes]
+        for scene_id in ids:
+            apply_review(self.router, review_document(self.router.project, "script", scene_id), approve=True)
+        self.router.render_selected(schemas.RenderCommand(scene_ids=ids))
+        calls = len(self.calls)
+        for selection in (list(reversed(ids)), [ids[2], ids[0]]):
+            result = self.router.export_audio(schemas.RenderSelection(scene_ids=selection), mp3=True)
+            directory = Path(result.export_directory)
+            timeline = read_json(directory / "timeline.json")
+            expected = [scene_id for scene_id in ids if scene_id in selection]
+            self.assertEqual([s["scene_id"] for s in timeline["scenes"]], expected)
+            self.assertEqual([s["scene_id"] for s in read_json(directory / "approved_script.json")], expected)
+            mp3 = directory / "chapter_narration.mp3"
+            self.assertGreater(mp3.stat().st_size, 0)
+            decoded = subprocess.run([get_ffmpeg_exe(), "-v", "error", "-i", str(mp3), "-f", "s16le", "-acodec", "pcm_s16le", "-"], check=True, capture_output=True)
+            self.assertAlmostEqual(len(decoded.stdout) / 2 / 24000, timeline["total_duration_sec"], places=2)
+            self.assertEqual(len(self.calls), calls)  # Export never generates speech.
+        self.router.export_audio(schemas.RenderSelection(scene_ids=[ids[1]]))
+        self.assertFalse((directory / "chapter_narration.mp3").exists())
+
     def test_stale_review_rejected_and_failed_approval_is_atomic(self):
         draft = review_document(self.router.project, "cast")
         before = (self.router.root / "project.json").read_bytes()

@@ -38,8 +38,13 @@ new provider calls.
 - **Script approval:** edit exact wording/delivery, insert narration linked to
   evidence, set intentional silence, and approve each scene independently.
 - **Audio & export:** select approved scenes, inspect requests, render/reuse takes,
-  audition them, choose a take or regenerate one segment, export WAV/optional MP3,
+  audition them, choose a take or regenerate one segment, export compiled MP3/WAV,
   and download manifests/timeline/script or a resumable project ZIP.
+
+Use **Select all** or individual scene checkboxes to choose the compilation. After
+rendering the selected scenes, **Compile selected scenes to MP3** combines their
+chosen takes in chapter order into one file. **Download compiled MP3** saves it.
+The audio dependencies include an MP3 encoder; a system FFmpeg is also supported.
 
 Changes remain local to the form until Apply. Leaving a dirty section asks before
 discarding edits. Server mutations compare the project fingerprint, rejecting stale

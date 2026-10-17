@@ -2,17 +2,18 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
 import sys
 
-from manga_tts import PipelineConfig, PipelineRouter, schemas
+from manga_tts import PipelineConfig, PipelineRouter, schemas, tts
 from manga_tts.cli import workspace_lock
 from manga_tts.config import VOICES
 from manga_tts.extraction import extract_chapter
 from manga_tts.script import cast_signature, scene_signature
-from manga_tts.storage import asset, digest, read_json, write_json
+from manga_tts.storage import asset, digest, read_json, write_json, save_project
 
 ROOT = Path(__file__).resolve().parent / "results" / "web"
 
@@ -23,19 +24,57 @@ def identifier(value):
     return value
 
 
+def source_signature(data):
+    return digest({key: data.get(key) for key in ("sources", "page_order", "panel_order")})
+
+
+def export_signature(data):
+    return digest({key: data[key] for key in ("cast", "appearances", "sources", "scenes", "settings", "selected_takes", "approvals", "cast_approval")})
+
+
+def workflow_status(data, root):
+    ready = []
+    for scene in data["scenes"]:
+        try:
+            segments = tts.compile_segments(data, scene)
+            if not segments:
+                continue
+            for segment in segments:
+                selected = data["selected_takes"].get(tts.selection_key(segment))
+                take = next((t for t in data["takes"].get(segment["signature"], []) if t["take_id"] == selected), None)
+                if not take or hashlib.sha256(asset(root, take["path"]).read_bytes()).hexdigest() != take["audio_sha256"]:
+                    break
+            else:
+                ready.append(scene["scene_id"])
+        except (ValueError, OSError):
+            continue
+    exported = data.get("web_export_scenes", []) if data.get("web_export_signature") == export_signature(data) and (root / "exports/chapter_narration.wav").is_file() else []
+    return {"sources_reviewed": bool(data["sources"]) and data.get("source_review_signature") == source_signature(data),
+            "proposal_applied": bool(data["proposal"]) and data.get("proposal_applied_signature") == digest(data["proposal"]),
+            "audio_ready_scenes": ready, "exported_scenes": exported}
+
+
 def snapshot(router):
     data = schemas.dump(router.project)
     pages = []
     for page in data["chapter"]["pages"]:
-        candidates = [f"originals/{page.get('image_filename', '')}", f"input/{page.get('image_filename', '')}",
-                      f"input/previews/page_{page['page_index']:03d}_annotated.jpg"]
-        image = next((p for p in candidates if asset(router.root, p).is_file()), None)
-        pages.append({**page, "preview_path": image})
+        candidates = [f"originals/{page.get('image_filename', '')}", f"input/{page.get('image_filename', '')}"]
+        original = next((p for p in candidates if asset(router.root, p).is_file()), None)
+        annotated = f"input/previews/page_{page['page_index']:03d}_annotated.jpg"
+        annotated = annotated if asset(router.root, annotated).is_file() else None
+        pages.append({**page, "preview_path": original or annotated,
+                      "original_path": original, "annotated_path": annotated})
     exports = [p.name for p in (router.root / "exports").glob("*") if p.is_file() and p.suffix in {".wav", ".mp3", ".json"}]
+    order = data.get("page_order") or [p["page_id"] for p in pages]
+    pages.sort(key=lambda page: order.index(page["page_id"]) if page["page_id"] in order else len(order))
+    for page in pages:
+        panel_order = data.get("panel_order", {}).get(page["page_id"])
+        if panel_order:
+            page["panels"] = sorted(page.get("panels", []), key=lambda panel: panel_order.index(panel["panel_id"]))
     return {"project": data, "revision": digest(data), "pages": pages, "voices": VOICES,
             "cast_approved": data["cast_approval"] == cast_signature(data),
             "approved_scenes": [s["scene_id"] for s in data["scenes"] if data["approvals"].get(s["scene_id"]) == scene_signature(data, s)],
-            "exports": exports, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
+            "workflow_status": workflow_status(data, router.root), "exports": exports, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
 
 
 def perform(router, request, progress):
@@ -59,7 +98,14 @@ def perform(router, request, progress):
     if request.get("revision") != digest(schemas.dump(router.project)):
         raise ValueError("This project changed in another session. Reload before applying your edits.")
     command = request.get("command", {})
-    if action == "cast-import":
+    if action == "rename":
+        title = command.get("title")
+        if not isinstance(title, str) or not title.strip() or len(title.strip()) > 120 or any(ord(c) < 32 for c in title):
+            raise ValueError("Enter a project title between 1 and 120 characters, without control characters.")
+        data = schemas.dump(router.project)
+        data["title"] = title.strip()
+        save_project(data, router.root)
+    elif action == "cast-import":
         router.import_cast(upload / "cast.zip")
     elif action == "cast-create":
         router.create_cast_member(schemas.CastCreate.model_validate(command))
@@ -67,10 +113,18 @@ def perform(router, request, progress):
         router.generate_proposal(progress=lambda e: progress(e.message))
     elif action == "proposal":
         router.apply_proposal(schemas.Proposal.model_validate(command))
-    elif action in {"cast", "sources", "script", "settings", "narration", "take"}:
+    elif action == "sync-speakers":
+        if command.get("scenes"):
+            review = schemas.SceneBatchReview.model_validate(command)
+            review = review.model_copy(update={"scenes": [scene.model_copy(update={"approve": False}) for scene in review.scenes]})
+            router.apply_scene_reviews(review)
+        else:
+            router.sync_cast_speakers()
+    elif action in {"cast", "sources", "script", "script-batch", "settings", "narration", "take"}:
         types = {"cast": (schemas.CastReview, router.apply_cast_review),
                  "sources": (schemas.SourceReview, router.apply_source_review),
                  "script": (schemas.SceneReview, router.apply_scene_review),
+                 "script-batch": (schemas.SceneBatchReview, router.apply_scene_reviews),
                  "settings": (schemas.SettingsUpdate, router.update_settings),
                  "narration": (schemas.NarrationInsert, router.insert_narration),
                  "take": (schemas.TakeSelection, router.select_take)}
@@ -87,6 +141,17 @@ def perform(router, request, progress):
         router.bundle_project(ROOT / "downloads" / (request["project"] + ".zip"))
     else:
         raise ValueError("Unknown workflow action")
+    if action in {"sources", "proposal", "export"}:
+        data = schemas.dump(router.project)
+        if action == "sources":
+            data["source_review_signature"] = source_signature(data)
+        elif action == "proposal":
+            data["proposal_applied_signature"] = digest(data["proposal"])
+            data["source_review_signature"] = None
+        else:
+            data["web_export_signature"] = export_signature(data)
+            data["web_export_scenes"] = command["scene_ids"]
+        save_project(data, router.root)
     return {}
 
 

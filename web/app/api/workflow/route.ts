@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     const projects = [];
     for (const name of await readdir(path.join(dataRoot, "projects"))) {
       if (!/^[a-f0-9]{32}$/.test(name)) continue;
-      try { const p = await jsonFile(path.join(dataRoot, "projects", name, "project.json")); projects.push({ id: name, name: p.chapter_id, scenes: p.scenes.length }); } catch { /* incomplete import */ }
+      try { const p = await jsonFile(path.join(dataRoot, "projects", name, "project.json")); projects.push({ id: name, name: p.title || p.chapter_id, scenes: p.scenes.length }); } catch { /* incomplete import */ }
     }
     return Response.json({ projects, has_api_key: !!process.env.GEMINI_API_KEY });
   } catch { return Response.json({ error: "Could not load this workspace. A job may still be running; try reloading shortly." }, { status: 409 }); }
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const text = await request.text();
     if (text.length > 5_000_000) throw new Error("Review request is too large.");
     const payload = JSON.parse(text);
-    if (!["cast-create", "plan", "proposal", "cast", "sources", "script", "settings", "narration", "take", "inspect", "render", "export", "bundle"].includes(payload.action)) throw new Error("Unknown action.");
+    if (!["rename", "cast-create", "plan", "proposal", "cast", "sources", "script", "script-batch", "sync-speakers", "settings", "narration", "take", "inspect", "render", "export", "bundle"].includes(payload.action)) throw new Error("Unknown action.");
     return Response.json(await launch(validId(payload.project), job, payload), { status: 202 });
   } catch (error) {
     if (staging) await rm(staging, { recursive: true, force: true });

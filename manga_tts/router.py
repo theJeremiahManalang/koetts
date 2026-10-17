@@ -17,7 +17,7 @@ from . import resolution, script, storage, tts
 from .config import PipelineConfig, VERSION, PathLike
 from .gemini import GeminiRenderer, LOGGER, create_client
 from .schemas import (
-    CastCreate, CastMember, CastReview, SourceReview, SceneReview, NarrationInsert, SettingsUpdate,
+    CastCreate, CastMember, CastReview, SourceReview, SceneReview, SceneBatchReview, NarrationInsert, SettingsUpdate,
     RenderSelection, RenderCommand, TakeSelection, Project, Proposal, Segment,
     ProgressCallback, ProgressEvent, MigrationReport, RenderResult, ExportResult,
     Renderer, Failure, WorkflowError, dump,
@@ -63,6 +63,10 @@ def operation(stage: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                         "Resolve or reject": "Resolve or reject every appearance before approving the cast.",
                         "Resolve or exclude": "Resolve or exclude every included speaker before approval.",
                         "Punctuation-only": "Approve a vocalization, intentional silence or exclusion for punctuation-only speech.",
+                        "Use supported momentary vocal tags": "Unsupported vocal tag. Use <gasp>, <breath>, <sigh>, <laugh>, <cough>, or <short pause>. Put action directions in Acting direction.",
+                        "Excluded source is in an included turn": "A spoken turn uses an excluded source. Uncheck Include for that turn, or include its source in Source & reading order before approving.",
+                        "Scene turns must cover source bubbles": "The script no longer matches the reviewed sources. Apply Source & reading order again, then review the rebuilt script.",
+                        "neither speech nor intentional silence": "An included turn is empty. Enter spoken wording, set intentional silence, or uncheck Include before approving.",
                         "existing project": "Choose a new workspace for restoration; an existing project cannot be replaced.",
                         "Project exists": "Resume the existing project or choose a new workspace.",
                         "No visual evidence": "Page images or annotated previews are missing from this workspace.",
@@ -71,6 +75,7 @@ def operation(stage: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                         "Proposal validation failed": "The proposal is invalid. Inspect planning_cache response diagnostics.",
                         "Visual evidence changed": "Visual evidence changed. Generate a fresh proposal before applying it.",
                         "Missing current audio": "Current audio is missing. Render the selected approved scenes before export.",
+                        "MP3 encoder unavailable": "MP3 export needs the audio dependencies. Install requirements-audio.txt, then export again.",
                         "No active project": "Create, load or restore a project before this operation.",
                         "Configure GEMINI_API_KEY": "Configure GEMINI_API_KEY in the environment or Colab Secrets, or inject a configured client.",
                     }
@@ -239,6 +244,7 @@ class PipelineRouter:
         candidate["cast"][speaker_id] = dump(CastMember(name=name, voice=voice, pronunciation="", references=[reference]))
         appearance.update(speaker_id=speaker_id, rejected=False)
         candidate.update(cast_approval=None, approvals={})
+        script.sync_cast_speakers(candidate)
         return self._commit(candidate)
 
     @operation("cast")
@@ -246,6 +252,9 @@ class PipelineRouter:
         """Apply a complete cast/gallery command, optionally approve atomically, then autosave."""
         command = CastReview.model_validate(command)
         candidate = script.review_cast(self._data(), dump(command))
+        for entry in command.new_characters:
+            if not storage.asset(self.root, candidate["cast"][entry.speaker_id]["references"][0]).is_file():
+                raise ValueError("The selected appearance has no reference image")
         return self._commit(candidate)
 
     @operation("cast")
@@ -291,10 +300,36 @@ class PipelineRouter:
         return self._commit(script.review_sources(self._data(), dump(command)))
 
     @operation("script")
+    def sync_cast_speakers(self) -> Project:
+        """Backfill clear speaker links in an existing project; never rewrite dialogue."""
+        candidate = self._data()
+        script.sync_cast_speakers(candidate)
+        return self._commit(candidate)
+
+    @operation("script")
     def apply_scene_review(self, command: SceneReview) -> Project:
         """Apply exact transcript edits and optional approval atomically; source evidence stays unchanged."""
         command = SceneReview.model_validate(command)
         return self._commit(script.review_scene(self._data(), dump(command)))
+
+    @operation("script")
+    def apply_scene_reviews(self, command: SceneBatchReview) -> Project:
+        """Validate all scene edits before publishing any of them."""
+        command = SceneBatchReview.model_validate(command)
+        ids = [scene.scene_id for scene in command.scenes]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Review each scene only once in a save")
+        candidate = self._data()
+        for scene in command.scenes:
+            edit = dump(scene)
+            edit["approve"] = False
+            candidate = script.review_scene(candidate, edit, sync_speakers=False)
+        script.sync_cast_speakers(candidate)
+        for review in command.scenes:
+            if review.approve:
+                scene = next(s for s in candidate["scenes"] if s["scene_id"] == review.scene_id)
+                script.approve_scene(candidate, scene)
+        return self._commit(candidate)
 
     @operation("narration")
     def insert_narration(self, command: NarrationInsert) -> Project:

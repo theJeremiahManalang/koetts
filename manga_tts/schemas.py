@@ -296,6 +296,13 @@ class ProjectFields(Contract):
     """
     version: int
     chapter_id: str
+    title: str = Field(default="", max_length=120)
+    source_review_signature: str | None = None
+    page_order: list[str] = Field(default_factory=list)
+    panel_order: dict[str, list[str]] = Field(default_factory=dict)
+    proposal_applied_signature: str | None = None
+    web_export_signature: str | None = None
+    web_export_scenes: list[str] = Field(default_factory=list)
     chapter: dict[str, Any]
     settings: Settings
     sources: list[Source]
@@ -349,15 +356,23 @@ class AppearanceEdit(Command):
     speaker_id: str
     rejected: bool
 
+class CastReferenceCreate(Command):
+    """New draft character anchored to an existing detected appearance."""
+    speaker_id: str = Field(pattern=r"^CHARACTER_[A-Za-z0-9_]+$", max_length=120)
+    char_id: str = Field(min_length=1)
+
+
 class CastReview(Command):
     """Complete cast/gallery review, optionally approved atomically."""
     cast: list[CastEdit]
     appearances: list[AppearanceEdit]
+    new_characters: list[CastReferenceCreate] = Field(default_factory=list)
     approve: bool = False
 
 class SourceEdit(Command):
     """Editable source fields, excluding immutable OCR and upstream labels."""
     source_id: str
+    speaker_origin: Literal["manual"] | None = None
     include: bool
     speaker_id: str
     order: int
@@ -373,10 +388,13 @@ class SourceEdit(Command):
 class SourceReview(Command):
     """Complete source ordering/edit transaction; rebuilds dialogue turns."""
     sources: list[SourceEdit]
+    page_order: list[str] | None = None
+    panel_order: dict[str, list[str]] | None = None
 
 class TurnEdit(Command):
     """Editable final transcript/acting fields; source evidence links stay immutable."""
     turn_id: str
+    speaker_origin: Literal["manual"] | None = None
     include: bool
     speaker_id: str
     text: str
@@ -393,6 +411,11 @@ class SceneReview(Command):
     context: str
     turns: list[TurnEdit]
     approve: bool = False
+
+
+class SceneBatchReview(Command):
+    """Save multiple scene drafts and explicit approvals as one transaction."""
+    scenes: list[SceneReview] = Field(min_length=1)
 
 class NarrationInsert(Command):
     """Visible-evidence narration at a reviewed turn boundary."""

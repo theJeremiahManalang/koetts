@@ -17,6 +17,42 @@ def cast_signature(p: dict[str, Any]) -> str:
     return digest({"cast": p["cast"], "appearances": p["appearances"]})
 
 
+def sync_cast_speakers(p: dict[str, Any]) -> None:
+    """Use unambiguous detection links without replacing manual/proposed choices."""
+    appearances = {(a["page_id"], a["char_id"]): a for a in p["appearances"]}
+    changed_scenes = set()
+
+    def assign(item, speaker, scene_id):
+        origin = item.get("speaker_origin", "")
+        managed = origin == "cast" and item["speaker_id"] == item.get("cast_speaker_id")
+        unresolved = item["speaker_id"] == UNKNOWN and origin not in {"manual", "proposal"}
+        if not managed and not unresolved:
+            return
+        if speaker == UNKNOWN and not managed:
+            return
+        if item["speaker_id"] != speaker:
+            changed_scenes.add(scene_id)
+        item.update(speaker_id=speaker, speaker_origin="cast", cast_speaker_id=speaker)
+
+    for source in p["sources"]:
+        linked = [appearances.get((source["page_id"], link.get("char_id"))) if isinstance(link.get("char_id"), str) else None for link in source.get("magi_links", [])]
+        valid = linked and all(a and not a["rejected"] and a["speaker_id"] in p["cast"] and a["speaker_id"] != NARRATOR for a in linked)
+        speakers = {a["speaker_id"] for a in linked} if valid else set()
+        assign(source, next(iter(speakers)) if len(speakers) == 1 else UNKNOWN, source["scene_id"])
+
+    sources = {s["source_id"]: s for s in p["sources"]}
+    for scene in p["scenes"]:
+        for turn in scene["turns"]:
+            if turn["kind"] != "dialogue" or not turn["source_ids"]:
+                continue
+            linked = [sources.get(sid) for sid in turn["source_ids"]]
+            valid = all(s and s["speaker_id"] in p["cast"] for s in linked)
+            speakers = {s["speaker_id"] for s in linked} if valid else set()
+            assign(turn, next(iter(speakers)) if len(speakers) == 1 else UNKNOWN, scene["scene_id"])
+    for scene_id in changed_scenes:
+        p["approvals"].pop(scene_id, None)
+
+
 def approve_cast(p: dict[str, Any]) -> None:
     """Validate mapped/rejected appearances and record the current cast fingerprint in p.
 
@@ -27,6 +63,7 @@ def approve_cast(p: dict[str, Any]) -> None:
             raise ValueError(f"Resolve or reject appearance {a['char_id']}")
     if len(p["cast"]) < 2:
         raise ValueError("Add character references before approving the cast")
+    sync_cast_speakers(p)
     p["cast_approval"] = cast_signature(p)
 
 
@@ -73,9 +110,15 @@ def rebuild_turns(p: dict[str, Any], narration: dict[str, list[dict[str, Any]]] 
                        "speaker_id": source["speaker_id"], "source_ids": [], "text": "",
                        "include": source["include"], "delivery": source["delivery"], "emotion": source["emotion"],
                        "style": source["style"], "pacing": source["pacing"], "silence_sec": 0.0}
+            if source.get("speaker_origin"):
+                current["speaker_origin"] = source["speaker_origin"]
+                if source["speaker_origin"] == "cast":
+                    current["cast_speaker_id"] = source["speaker_id"]
             by_scene[source["scene_id"]]["turns"].append(current)
         assert current is not None  # Every new group creates a turn above.
         current["source_ids"].append(source["source_id"])
+        if source.get("speaker_origin") in {"manual", "proposal"}:
+            current["speaker_origin"] = source["speaker_origin"]
         reaction = source.get("reaction")
         spoken = reaction["text"] if reaction else source["text"]
         if reaction and reaction.get("silence_sec"):
@@ -161,6 +204,7 @@ def apply_proposal(p: dict[str, Any], proposal: dict[str, Any]) -> None:
         if turn_key != previous_turn_key:
             active_turn_group = s["source_id"]
 
+        target["speaker_origin"] = "proposal"
         target["turn_group"] = active_turn_group
         previous_turn_key = turn_key
         target["order"] = order
@@ -252,18 +296,31 @@ def exact_review(items: list[dict[str, Any]], field: str, expected: set[str]) ->
 def review_cast(data: dict[str, Any], command: dict[str, Any]) -> dict[str, Any]:
     """Return a complete cast/gallery edit candidate; optional approval is transactional. No I/O."""
     result = copy.deepcopy(data)
+    for entry in command.get("new_characters", []):
+        sid = entry["speaker_id"]
+        if sid in result["cast"]:
+            raise ValueError("New character identifiers must be unique")
+        appearance = next((a for a in result["appearances"] if a["char_id"] == entry["char_id"]), None)
+        if appearance is None:
+            raise ValueError("Choose an existing appearance for each new character")
+        result["cast"][sid] = {"name": "", "voice": "", "pronunciation": "", "acting_notes": "", "references": ["input/" + appearance["crop_path"]]}
     exact_review(command["cast"], "speaker_id", set(result["cast"]))
     exact_review(command["appearances"], "char_id", {a["char_id"] for a in result["appearances"]})
     for edit in command["cast"]:
         if not edit["name"].strip() or not edit["voice"].strip():
             raise ValueError("Cast names and voices cannot be empty")
         result["cast"][edit["speaker_id"]].update({key: edit[key].strip() for key in ("name", "voice", "pronunciation", "acting_notes")})
+    for entry in command.get("new_characters", []):
+        name = result["cast"][entry["speaker_id"]]["name"].casefold()
+        if sum(c["name"].casefold() == name for c in result["cast"].values()) > 1:
+            raise ValueError("This character name already exists; assign its existing entry instead")
     appearances = {item["char_id"]: item for item in result["appearances"]}
     for edit in command["appearances"]:
         if edit["speaker_id"] not in (set(result["cast"]) | {UNKNOWN}) - {NARRATOR}:
             raise ValueError("Invalid appearance speaker")
         appearances[edit["char_id"]].update(speaker_id=edit["speaker_id"], rejected=edit["rejected"])
     result.update(cast_approval=None, approvals={})
+    sync_cast_speakers(result)
     if command.get("approve", False):
         approve_cast(result)
     return result
@@ -272,6 +329,20 @@ def review_cast(data: dict[str, Any], command: dict[str, Any]) -> dict[str, Any]
 def review_sources(data: dict[str, Any], command: dict[str, Any]) -> dict[str, Any]:
     """Return reviewed source ordering/grouping and rebuilt turns; preserve evidence and narration. No I/O."""
     result = copy.deepcopy(data)
+    pages = {page["page_id"]: page for page in result["chapter"]["pages"]}
+    if command.get("page_order") is not None:
+        order = command["page_order"]
+        if len(order) != len(set(order)) or set(order) != set(pages):
+            raise ValueError("Image order must contain every image exactly once")
+        result["page_order"] = order
+    if command.get("panel_order") is not None:
+        for page_id, order in command["panel_order"].items():
+            if page_id not in pages:
+                raise ValueError("Unknown image in panel order")
+            expected = {panel["panel_id"] for panel in pages[page_id].get("panels", [])}
+            if len(order) != len(set(order)) or set(order) != expected:
+                raise ValueError("Panel order must contain every detected panel exactly once")
+        result["panel_order"] = command["panel_order"]
     exact_review(command["sources"], "source_id", {s["source_id"] for s in result["sources"]})
     sources = {s["source_id"]: s for s in result["sources"]}
     for edit in command["sources"]:
@@ -282,7 +353,11 @@ def review_sources(data: dict[str, Any], command: dict[str, Any]) -> dict[str, A
         reaction = edit["reaction"]
         if reaction and not 0 <= reaction["silence_sec"] <= MAX_SILENCE_SEC:
             raise ValueError("Silence must be between 0 and 30 seconds")
-        sources[edit["source_id"]].update(copy.deepcopy(edit))
+        target = sources[edit["source_id"]]
+        manual = edit.get("speaker_origin") == "manual" or edit["speaker_id"] != target["speaker_id"]
+        target.update({k: copy.deepcopy(v) for k, v in edit.items() if k != "speaker_origin"})
+        if manual:
+            target["speaker_origin"] = "manual"
     ordered = sorted(result["sources"], key=lambda source: source["order"])
     if len({source["order"] for source in ordered}) != len(ordered):
         raise ValueError("Order values must be unique")
@@ -296,7 +371,7 @@ def review_sources(data: dict[str, Any], command: dict[str, Any]) -> dict[str, A
     return result
 
 
-def review_scene(data: dict[str, Any], command: dict[str, Any]) -> dict[str, Any]:
+def review_scene(data: dict[str, Any], command: dict[str, Any], *, sync_speakers: bool = True) -> dict[str, Any]:
     """Return an exact scene edit candidate; combined apply/approval either succeeds completely or raises."""
     result = copy.deepcopy(data)
     scene = next((scene for scene in result["scenes"] if scene["scene_id"] == command["scene_id"]), None)
@@ -307,9 +382,15 @@ def review_scene(data: dict[str, Any], command: dict[str, Any]) -> dict[str, Any
     for edit in command["turns"]:
         if edit["speaker_id"] not in set(result["cast"]) | {UNKNOWN} or edit["delivery"] not in DELIVERIES:
             raise ValueError("Invalid turn speaker/delivery")
-        turns[edit["turn_id"]].update(copy.deepcopy(edit))
+        target = turns[edit["turn_id"]]
+        manual = edit.get("speaker_origin") == "manual" or edit["speaker_id"] != target["speaker_id"]
+        target.update({k: copy.deepcopy(v) for k, v in edit.items() if k != "speaker_origin"})
+        if manual:
+            target["speaker_origin"] = "manual"
     scene.update(title=command["title"], context=command["context"])
     result["approvals"].pop(scene["scene_id"], None)
+    if sync_speakers:
+        sync_cast_speakers(result)
     if command.get("approve", False):
         approve_scene(result, scene)
     return result

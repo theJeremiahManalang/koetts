@@ -3,6 +3,7 @@ from __future__ import annotations
 import array
 import hashlib
 import math
+import shutil
 from pathlib import Path
 import subprocess
 from typing import Any, Iterable, Callable
@@ -253,6 +254,15 @@ def export_audio(p: dict[str, Any], root: PathLike, scene_ids: list[str], mp3: b
     runs ffmpeg; failure can leave valid WAV/JSON outputs. I/O/subprocess errors propagate."""
     if not scene_ids or len(scene_ids) != len(set(scene_ids)):
         raise ValueError("Choose at least one scene, without duplicates")
+    encoder = None
+    if mp3:
+        encoder = shutil.which("ffmpeg")
+        if not encoder:
+            try:
+                from imageio_ffmpeg import get_ffmpeg_exe
+                encoder = get_ffmpeg_exe()
+            except (ImportError, RuntimeError):
+                raise ValueError("MP3 encoder unavailable; install requirements-audio.txt") from None
     known = {s["scene_id"] for s in p["scenes"]}
     if not set(scene_ids) <= known:
         raise ValueError("Unknown scene selection")
@@ -309,5 +319,12 @@ def export_audio(p: dict[str, Any], root: PathLike, scene_ids: list[str], mp3: b
     write_json(out / "approved_script.json", [s for s in p["scenes"] if s["scene_id"] in scene_ids])
     write_json(out / "render_manifest.json", {"chapter_id": p["chapter_id"], "settings": p["settings"], "segments": timeline})
     if mp3:
-        subprocess.run(["ffmpeg", "-y", "-i", str(wav), "-codec:a", "libmp3lame", "-b:a", "192k", str(out / "chapter_narration.mp3")], check=True, capture_output=True)
+        temporary = out / "chapter_narration.pending.mp3"
+        try:
+            subprocess.run([encoder, "-y", "-i", str(wav), "-codec:a", "libmp3lame", "-b:a", "192k", str(temporary)], check=True, capture_output=True)
+            temporary.replace(out / "chapter_narration.mp3")
+        finally:
+            temporary.unlink(missing_ok=True)
+    else:
+        (out / "chapter_narration.mp3").unlink(missing_ok=True)
     return wav
