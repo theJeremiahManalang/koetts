@@ -6,6 +6,7 @@ import { ImageOrder } from "./image-order";
 import { CastWorkspace } from "./cast-workspace";
 import { SourceWorkspace } from "./source-workspace";
 import { ScriptWorkspace } from "./script-workspace";
+import { LoadingState } from "./loading-state";
 import type { Acting, Job, Project, Segment, Snapshot } from "../lib/types";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
@@ -72,6 +73,7 @@ export default function Home() {
   const [imageSize, setImageSize] = useState({ src: "", width: 0, height: 0 });
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
+  const [initialLoading, setInitialLoading] = useState(true);
   function startOperation(operation: Operation) {
     setBusy(operation.pending);
     toast.loading(operation.pending, { id: operationToast, description: "Keep this page open, or reload to reconnect to the saved job." });
@@ -192,9 +194,10 @@ export default function Home() {
       try {
         await refreshList();
         const job = localStorage.getItem("manga-tts-job");
-        if (job) { setBusy("Reconnecting to your job…"); await watch(JSON.parse(job)); }
+        if (job) { setInitialLoading(false); setBusy("Reconnecting to your job…"); await watch(JSON.parse(job)); }
         else { const id = localStorage.getItem("manga-tts-project"); if (id) await openProject(id); }
       } catch (e) { toast.error("Saved projects could not be loaded", { description: e instanceof Error ? e.message : "Check the server connection and reload the page.", duration: Infinity }); }
+      finally { setInitialLoading(false); }
     })();
     return () => { mounted.current = false; };
   }, []);
@@ -309,6 +312,9 @@ export default function Home() {
 
   return <BusyContext.Provider value={busy}><div className="app-shell">
     <Toaster position="top-right" closeButton theme="light" toastOptions={{ duration: 6500, classNames: { toast: "reader-toast" } }} />
+    {initialLoading && <LoadingState label={busy || "Preparing your reading space…"} />}
+    <div hidden={initialLoading}>
+    {busy && !initialLoading && <LoadingState compact label={busy} />}
     <header className="site-header"><a className="brand" href="/" aria-label="Manga Reader home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">Manga Reader<span className="brand-dot">.</span></span></span></a><div className="header-actions"><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton></div></header>
     <main>
       <div className="reader-heading"><div><div className="eyebrow">YOUR READING SPACE</div><h1>A voice for every character.</h1><p>{snapshot ? "Review the story, direct the voices, and create your audiobook." : "Start with manga images or pick up a saved production."}</p></div><span className="mode-label"><span className="status-dot" />{snapshot ? `${(snapshot.project.title || snapshot.project.chapter_id)} · ${snapshot.approved_scenes.length}/${snapshot.project.scenes.length} scenes approved` : "Reviewed manga audio"}</span></div>
@@ -345,5 +351,6 @@ export default function Home() {
       </div>
       <footer className="reader-footer"><span>Original images preserved · Human approval before speech</span><span>Local workspace · Mono 24 kHz WAV · Resumable projects</span></footer>
     </main>
+    </div>
   </div></BusyContext.Provider>;
 }
