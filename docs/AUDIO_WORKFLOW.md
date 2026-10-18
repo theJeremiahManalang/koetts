@@ -1,0 +1,196 @@
+# Manga panels to reviewed audio
+
+This branch integrates the user-supplied `manga_tts` backend with the MagiV3 starter from `main`. The implementation is a local single-writer backend, with a
+CLI and a local web interface adapted from
+`character-analysis-web`. See [web/README.md](../web/README.md) to start the UI. It is
+not a hosted multi-user service.
+
+## Install
+
+Use Python 3.11+. For image extraction, follow the PyTorch/Magi setup in [MODELS.md](MODELS.md)
+and install `requirements.txt`. For planning, review, and audio, also install:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-audio.txt
+```
+
+An audio-only environment does not need PyTorch. MP3 export uses the encoder bundled
+with `imageio-ffmpeg` in the audio dependencies, or `ffmpeg` on PATH when available.
+Configure `GEMINI_API_KEY` through your host's environment, never
+in project files. Only `plan` and `render` make Gemini generation calls. Model
+availability is account-dependent. The supplied Gemini adapter is retained; live
+provider compatibility and voice quality must be checked with your account.
+
+The following examples use `python` for the activated project environment. Without
+activation, use `.\.venv\Scripts\python.exe` instead. Generated projects and drafts
+in these examples are under the already ignored `results/` directory.
+
+## 1. Extract images in the intended sequence
+
+```powershell
+python -m manga_tts extract --images page1.png page2.png page3.png --output results/chapter.zip --device cuda
+```
+
+You can upload individual panels or complete pages. The explicit file sequence is
+preserved. Alternatively, `--input images` uses natural filename order (page2
+before page10). Images are EXIF-oriented and stored as RGB PNG evidence; coordinates
+refer to those images. Originals are never modified.
+
+Default `--order model` preserves MagiV3's predicted RTL panel/text order.
+`--order rtl` proposes whitespace-based horizontal bands and right-to-left columns;
+`--order ltr` reverses column traversal. These are editable proposals, not guarantees
+for overlapping, diagonal, inset, or artistic layouts. AI planning and human source
+review can correct order across panel and page boundaries.
+
+The chapter ZIP contains `chapter_analysis.json`, page images, character crops,
+annotated previews, raw predictions, source image hashes and extraction diagnostics.
+OCR is matched geometrically, never by detection array index. Multiple contained
+OCR lines can populate one detected bubble. Unmatched/ambiguous OCR is retained as
+separate reviewable text; unresolved detection text stays blank. In model-order
+mode unmatched OCR is appended and explicitly flagged for order review. Resolve
+duplicates or missing words before approval. Model essential-text flags remain
+evidence and determine initial inclusion; review excluded text as well.
+
+IDs are persistent within the imported project. A fresh extraction is a new import;
+automatic reconciliation of human edits across extraction reruns is not implemented.
+
+## 2. Create the review project and import cast references
+
+```powershell
+python -m manga_tts create --workspace results/chapter-project --chapter results/chapter.zip --cast cast_references
+```
+
+`--chapter`, `--cast`, and optional `--originals` accept ZIPs or unpacked folders.
+This supports the exact sample folders supplied for this project. Creation requires
+an empty workspace. A cast folder has `cast.json` at its root, with entries such as:
+
+```json
+{"characters":[{"speaker_id":"ALICE","name":"Alice","references":["alice.png"],"voice":"Kore","pronunciation":"Alice","acting_notes":"Warm, natural delivery"}]}
+```
+
+Named characters need reference images. Optional `profile_path` points to a UTF-8
+profile in the same bundle. A generic cast entry may use `is_generic: true` without
+an image; it represents a shared voice, not a single character identity. `UNKNOWN`
+means unresolved; `NARRATOR` is separate and is never an attribution fallback.
+To import cast later: `python -m manga_tts import-cast --workspace results/chapter-project --cast cast_references`.
+
+## 3. Generate and explicitly load an AI proposal
+
+```powershell
+python -m manga_tts plan --workspace results/chapter-project --output results/proposal.json
+python -m manga_tts load-proposal --workspace results/chapter-project --file results/proposal.json
+```
+
+Planning uses pages, crops, references and OCR to propose identities, dialogue order,
+scene boundaries, acting and optional visible-evidence narration. Generate saves a
+proposal; loading applies it but does not approve it. Review the JSON before loading.
+It is also possible to skip planning and edit the cast/sources manually.
+
+## 4. Review cast, then source order, then exact script
+
+```powershell
+python -m manga_tts review --workspace results/chapter-project --stage cast --output results/cast-review.json
+```
+
+Edit the generated `command` fields: assign each appearance to a speaker or reject
+false detections, and choose voices. Then explicitly approve:
+
+```powershell
+python -m manga_tts apply --workspace results/chapter-project --file results/cast-review.json --approve
+python -m manga_tts review --workspace results/chapter-project --stage sources --output results/sources-review.json
+```
+
+Edit the sources against the page evidence: text, inclusion, speaker, unique order,
+scene/group IDs, and delivery. Only consecutive compatible bubbles may share a
+turn group. Apply sources before final script edits: rebuilding source groups replaces
+dialogue-turn wording. Original recovered text remains immutable evidence.
+
+```powershell
+python -m manga_tts apply --workspace results/chapter-project --file results/sources-review.json
+python -m manga_tts status --workspace results/chapter-project
+python -m manga_tts review --workspace results/chapter-project --stage script --scene scene_001 --output results/scene-001-review.json
+python -m manga_tts apply --workspace results/chapter-project --file results/scene-001-review.json --approve
+```
+
+Review the script file before the final command. Repeat the last two commands for
+each scene listed by `status`. Omitting `--approve` saves an unapproved draft.
+Unresolved included speakers, empty speech, invalid grouping, unsupported tags and
+stale approvals block rendering. No automatic blanket approval is performed.
+
+Review documents contain a base-state fingerprint. Any intervening applied change
+requires a fresh document; do not edit the fingerprint to bypass the check. Export
+and apply one review at a time. Existing draft/proposal output files are not overwritten.
+
+Use the web interface for visual review, crop-based character creation without a
+cast ZIP, and audio audition. CLI and web commands share a workspace lock; direct
+router callers remain responsible for single-writer ownership. After a crash,
+inspect the lock's PID and confirm no writer remains before removing that lock.
+
+## 5. Inspect, render, audition and export
+
+```powershell
+python -m manga_tts inspect --workspace results/chapter-project --scenes scene_001 scene_002 --output results/requests.json
+python -m manga_tts render --workspace results/chapter-project --scenes scene_001 scene_002
+python -m manga_tts export --workspace results/chapter-project --scenes scene_001 scene_002
+python -m manga_tts bundle --workspace results/chapter-project --output results/reviewed-project.zip
+```
+
+Use the actual scene IDs from `status`. Inspection requires approvals and makes no
+provider call. Rendering preflights the whole selection, splits requests at two
+speakers and the character budget, separates narration, generates silence locally,
+validates mono 24 kHz 16-bit PCM WAVs, and checkpoints each successful segment.
+Intact current takes are reused. An API timeout can still incur a charge before a
+response is lost; retries cannot guarantee exactly-once billing.
+
+Listen using the web audio panel or the WAV files. Regenerate only selected
+segments with `render ... --regenerate scene_001_001`. Previous takes remain. Select
+a retained take with `select-take --workspace ... --segment scene_001_001 --take TAKE_ID`.
+Take IDs and paths are stored in `project.json` and the exported manifest.
+
+Export never synthesizes missing audio. It writes:
+
+- `exports/chapter_narration.wav` (optional MP3 with `--mp3`).
+- `exports/approved_script.json` and `exports/cast.json`.
+- `exports/timeline.json` with frame-derived scene/segment timestamps.
+- `exports/render_manifest.json` with source/turn IDs, settings and selected take checksums.
+
+Export follows scene order, not argument order. Fixed export filenames are replaced;
+save a bundle outside the workspace before replacing a deliverable you need to keep.
+MP3 conversion failure may leave valid WAV/JSON output. Export publication is not a
+multi-file transaction. The bundle contains applied state/assets, not unapplied drafts.
+
+## Recovery and advanced edits
+
+```powershell
+python -m manga_tts restore --workspace results/restored --bundle results/reviewed-project.zip
+python -m manga_tts export --workspace results/restored --scenes scene_001 scene_002
+```
+
+Restore stages and validates the bundle before publishing to an empty workspace.
+Existing version-2 approvals and eligible takes are retained; version-1 projects
+require reapproval and new current requests. Neither restore nor export needs an API
+key when the necessary takes already exist.
+
+`settings --file settings-command.json` accepts a `SettingsUpdate` object:
+`{"settings":{"planning_model":"gemini-3.8-flash","tts_model":"gemini-3.8-flash-tts","max_chars":1200,"scene_pause":0.65,"segment_pause":0.12}}`.
+It clears scene approvals. `narrate --file narration-command.json` accepts
+`{"scene_id":"scene_001","position":0,"text":"A new morning.","evidence_source_ids":["page_001:p001_txt_01"]}`.
+Review and approve narration against the referenced visual evidence.
+
+## Validation and limits
+
+Run `python -m unittest discover -s tests -v`. Tests use synthetic images/predictions
+and valid synthetic PCM, exercising the real import/review/render/export/restore
+code. They cover geometry, RTL fallback, stale drafts, approval rollback, three-speaker
+segmentation, exclusions, silence, narration, targeted regeneration, corrupt takes,
+interrupted rendering, archive traversal and CLI writer exclusion.
+
+Set `MANGA_TTS_SAMPLE_PROJECT` to an unpacked supplied project to enable the optional
+compatibility test. It works on temporary copies and asserts byte-identical WAV export,
+cache reuse without a client, and bundle restore. Original sample files are untouched.
+
+This implementation has not established live Magi OCR accuracy or Gemini acting
+quality. It does not translate non-English manga, align words/bubbles to audio,
+automatically reconcile extraction reruns, or provide multi-user/cloud job scheduling.
+Those are separate extensions. The initial product remains upload/import, review,
+approve, generate, audition and export.

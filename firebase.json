@@ -1,0 +1,28 @@
+{
+  "apphosting": [
+    {
+      "backendId": "my-web-app",
+      "rootDir": "web",
+      "ignore": [
+        "**/node_modules/**",
+        "**/.next/**",
+        ".git",
+        ".venv",
+        "**/__pycache__/**",
+        "**/*.pyc",
+        "**/*.tsbuildinfo",
+        "results",
+        ".cache",
+        "vendor",
+        "weights",
+        ".agents",
+        ".codex",
+        ".aws",
+        "**/.env",
+        "**/.env.*",
+        "**/firebase-debug.log",
+        "**/firebase-debug.*.log"
+      ]
+    }
+  ]
+}

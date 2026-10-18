@@ -1,0 +1,5 @@
+# Lightweight audio/review environment; Magi extraction additionally needs requirements.txt.
+pydantic>=2.12,<3
+google-genai>=2.25.0,<3
+Pillow>=11.1,<13
+imageio-ffmpeg>=0.6,<0.7

@@ -1,0 +1,14 @@
+export type CastMember = { name: string; voice: string; pronunciation: string; acting_notes?: string; references: string[] };
+export type Appearance = { char_id: string; page_id: string; crop_path: string; speaker_id: string; rejected: boolean };
+export type Acting = { include: boolean; speaker_id: string; text: string; delivery: string; emotion: string; style: string; pacing: string };
+export type Source = Acting & { speaker_origin?: string; cast_speaker_id?: string; source_id: string; page_id: string; panel_id: string | null; bbox: number[]; original_text: string; order: number; scene_id: string; turn_group: string; reaction: { text: string; silence_sec: number } | null };
+export type Turn = Acting & { speaker_origin?: string; cast_speaker_id?: string; turn_id: string; source_ids: string[]; silence_sec: number; kind: string };
+export type Scene = { scene_id: string; title: string; context: string; turns: Turn[] };
+export type Take = { take_id: string; path: string; duration_sec: number; clipped_samples: number };
+export type Settings = { planning_model: string; tts_model: string; max_chars: number; scene_pause: number; segment_pause: number };
+export type Project = { page_order: string[]; panel_order: Record<string, string[]>; pending_characters?: { speaker_id: string; char_id: string }[]; chapter_id: string; title: string; cast: Record<string, CastMember>; appearances: Appearance[]; sources: Source[]; scenes: Scene[]; settings: Settings; takes: Record<string, Take[]>; selected_takes: Record<string, string>; proposal: { data: unknown } | null };
+export type Panel = { panel_id: string; bbox: number[]; reading_order?: number };
+export type Page = { panels: Panel[]; page_id: string; page_index: number; width: number; height: number; image_filename: string; preview_path: string | null; original_path: string | null; annotated_path: string | null };
+export type Snapshot = { workflow_status: { sources_reviewed: boolean; proposal_applied: boolean; audio_ready_scenes: string[]; exported_scenes: string[] }; project: Project; revision: string; pages: Page[]; voices: string[]; cast_approved: boolean; approved_scenes: string[]; exports: string[]; has_api_key: boolean };
+export type Segment = { segment_id: string; scene_id: string; signature: string; silence_sec: number; turns: Turn[]; request: unknown };
+export type Job = { id: string; project: string; status: string; message: string; result?: { segments?: Segment[] } };
