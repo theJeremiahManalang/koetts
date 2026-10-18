@@ -1,3 +1,5 @@
+> Historical walkthrough of the original OCR proof of concept. For the current studio workflow, see [AUDIO_WORKFLOW.md](AUDIO_WORKFLOW.md).
+
 # Manga text: file guide and request walkthrough
 
 This guide describes the current implementation. Start with the numbered flow,
@@ -412,11 +414,6 @@ listing every third-party file.
   tensor values, `write_json()` saves JSON, and `save_overlay()` draws predicted
   regions on copies of images. The web bridge does its own image loading and does
   not call these helpers.
-- **`comic_text_detector.py`**: Adapter for the separate Comic Text Detector
-  checkout. Loads its weights, converts RGB pixels to BGR, runs detection,
-  returns region metadata, and can save mask images. Its detection `texts` field
-  contains boxes, not recognized strings. It is not called by the web OCR flow.
-- **`requirements-ctd.txt`**: Dependencies for that detector backend.
 - **`example.py`**: Standalone Python usage example. Loads the sample image,
   supplies a caption, runs MAGI tasks, and writes `example-results.json`.
 - **`captions.example.json`**: Example filename-to-caption mapping for CLI
@@ -427,8 +424,7 @@ listing every third-party file.
 - **`tests/test_web_extract.py`**: Tests the bridge's text-only output, empty
   prediction behavior, and rejection of invalid images before model loading.
   Model calls are mocked, so these tests do not download or run real weights.
-- **`tests/test_runners.py`**: Tests model routing and option validation, CTD
-  conversion and masks, metadata, and CLI output separation with test doubles.
+- **`tests/test_runners.py`**: Tests MAGI option validation, metadata, overlays, and preservation of repeated CLI runs.
 - **`tests/test_project.py`**: Tests shared image/caption/output helpers and MAGI
   dispatch/validation without real model weights.
 - **`README.md`**: Overall setup, model usage, CLI examples, and a link to web setup.
@@ -449,8 +445,6 @@ listing every third-party file.
 - **`web/.next/`**: Generated Next.js development/build output.
 - **`web/*.tsbuildinfo`**: TypeScript incremental-check cache, when generated.
 - **`__pycache__/`**: Python bytecode cache.
-- **`vendor/comic-text-detector/`**: Downloaded CTD source, used only by that adapter.
-- **`weights/`**: Locally downloaded CTD checkpoints with the default setup.
 - **`results/`**: CLI outputs. The web path does not write results here.
 - **`web/.env.local`**, if created: Local server settings such as
   `PYTHON_EXECUTABLE`. The Python path is a server setting, not a browser setting.

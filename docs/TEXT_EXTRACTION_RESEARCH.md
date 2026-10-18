@@ -5,14 +5,11 @@ models or a guaranteed-order feature implemented in this change.
 
 ## What is implemented first
 
-The shared runner supports MAGI v3 and dmMaze/comic-text-detector. Both expose text
-boxes for comparison. MAGI also exposes its existing OCR and grounding methods.
-CTD exposes text blocks, line polygons, and masks; it does not recognize characters.
-The runner preserves model output order without asserting that it is correct.
+The runner uses MAGI v3 for detection, OCR, and grounding. Model predictions and reading order require human review.
 
 ## Practical extraction options
 
-For Japanese panels, a strong candidate is CTD detection followed by Manga OCR on
+For Japanese panels, a strong candidate is Manga OCR on
 individual text-block crops. Manga OCR supports vertical and horizontal Japanese,
 furigana, and multi-line bubble text. Its authors warn that long crops can cause
 errors and that the recognizer can invent text when the crop has no text. Restrict
@@ -20,7 +17,7 @@ recognition to detected regions and retain source crops for review. This is a
 candidate to benchmark, not evidence that it beats MAGI on this project's images.
 [Manga OCR documentation](https://github.com/kha-white/manga-ocr)
 
-This detector/recognizer combination already exists in Mokuro. It is a useful
+Mokuro provides a reference for region-based OCR. It is a useful
 reference implementation for Japanese extraction, although selectable text in a
 reader does not establish a correct narration sequence.
 [Mokuro documentation](https://github.com/kha-white/mokuro)
@@ -33,12 +30,7 @@ Japanese-specific recognizer without evaluating representative pages.
 
 ## Reading order is a separate problem
 
-CTD contains a coarse spatial sorting heuristic: it chooses horizontal direction
-based on whether a majority of detected blocks are classified Japanese, then uses
-a grid-based spatial weight. This is not a semantic guarantee. An English
-translation of a right-to-left manga can retain right-to-left panel order, making
-language alone an unreliable direction selector.
-[CTD text-block implementation](https://github.com/dmMaze/comic-text-detector/blob/440b978563c71b758e31aaa315d100faba1efa2f/utils/textblock.py)
+Reading direction should follow the source edition rather than OCR language alone.
 
 Recommended future pipeline:
 
@@ -56,7 +48,7 @@ Recommended future pipeline:
    For ambiguous layouts, require a reviewed order rather than claiming certainty.
 
 These pipeline steps are engineering recommendations inferred from the models'
-capabilities and limitations. Neither implementation currently provides a
+capabilities and limitations. Model output does not provide a
 verified audiobook reading-order guarantee. No automatic reordering was added.
 
 ## How to evaluate improvements
@@ -72,7 +64,4 @@ block-versus-line granularity explicitly. To isolate recognition, use identical
 reference crops; to compare complete systems, also score detection plus OCR end to
 end. Time inference separately from loading/downloads on the same hardware.
 
-For this project, the next experiment I recommend is CTD + Manga OCR for Japanese
-text, alongside MAGI OCR as a baseline, followed by explicit panel-aware ordering
-and a manual correction pass. Keep this separate from the initial two-detector
-comparison so extraction changes do not obscure detector differences.
+Future experiments can compare crop-based Manga OCR against MAGI using reviewed reference data. These alternatives are not installed or integrated.

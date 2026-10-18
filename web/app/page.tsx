@@ -2,11 +2,11 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes } from "react";
 import { Toaster, toast } from "sonner";
-import { ImageOrder } from "./image-order";
-import { CastWorkspace } from "./cast-workspace";
-import { SourceWorkspace } from "./source-workspace";
-import { ScriptWorkspace } from "./script-workspace";
-import { LoadingState } from "./loading-state";
+import { ImageOrder } from "../components/image-order";
+import { CastWorkspace } from "../components/cast-workspace";
+import { SourceWorkspace } from "../components/source-workspace";
+import { ScriptWorkspace } from "../components/script-workspace";
+import { LoadingState } from "../components/loading-state";
 import type { Acting, Job, Project, Segment, Snapshot } from "../lib/types";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
