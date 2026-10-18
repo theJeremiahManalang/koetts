@@ -1,0 +1,8 @@
+# Next.js is detected and built by the Firebase App Hosting adapter.
+# This configuration is for the website, not the Python processing backend.
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 40
