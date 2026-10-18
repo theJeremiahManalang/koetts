@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const ts = require("typescript");
 const api = {};
-const compiled = ts.transpileModule(require("node:fs").readFileSync(require.resolve("./script-review.ts"), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+const compiled = ts.transpileModule(require("node:fs").readFileSync(require.resolve("../lib/script-review.ts"), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 new Function("exports", compiled)(api);
 const scene = id => ({ scene_id: id, title: id, context: "", turns: [{ turn_id: id + "_turn", kind: "dialogue", source_ids: ["source"], include: true, text: "Hello", speaker_id: "A", delivery: "speech", emotion: "neutral", style: "", pacing: "", silence_sec: 0 }] });
 test("review flags excluded sources and punctuation before approval without changing the draft", () => {

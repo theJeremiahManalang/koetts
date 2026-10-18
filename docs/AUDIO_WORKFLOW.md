@@ -2,12 +2,12 @@
 
 This branch integrates the user-supplied `manga_tts` backend with the MagiV3 starter from `main`. The implementation is a local single-writer backend, with a
 CLI and a local web interface adapted from
-`character-analysis-web`. See [web/README.md](web/README.md) to start the UI. It is
+`character-analysis-web`. See [web/README.md](../web/README.md) to start the UI. It is
 not a hosted multi-user service.
 
 ## Install
 
-Use Python 3.11+. For image extraction, follow the PyTorch/Magi setup in README.md
+Use Python 3.11+. For image extraction, follow the PyTorch/Magi setup in [MODELS.md](MODELS.md)
 and install `requirements.txt`. For planning, review, and audio, also install:
 
 ```powershell

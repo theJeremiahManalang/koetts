@@ -68,37 +68,36 @@ Local checks ran using the app's bundled Python 3.12 and Pillow. That environmen
   one optional live-server HTTP test was skipped. Production build and TypeScript
   checks passed. Browser visual verification remains unavailable due to the earlier
   tool approval usage limit; no new live model/provider calls were made.
-## Reusable runner validation (2026-10-09)
+## Codebase cleanup verification — 2026-10-18
 
-Branch: `development`. Checked with the project's Python 3.11.9 virtual environment.
+- Moved supporting guides into `docs/`, shared studio UI into `web/components/`,
+  and frontend regression tests into `web/tests/`; updated imports and setup links.
+- Removed the disconnected fictional catalog, placeholder reader, browser-local
+  request form, their mock data, and 477 lines of associated styles.
+- Retained all model adapters, CLI/API entry points, saved results, model assets,
+  dependencies, and assistant configuration.
+- Python suite: 48 tests, 46 passed and 2 skipped (external sample and opt-in HTTP).
+- Separately ran the opt-in HTTP integration against a production server: passed
+  upload/restore, audio reuse, export, and download checks using synthetic audio.
+- Frontend regression tests: 8 passed. TypeScript check and production build passed.
+- Opened the production studio in a browser and inspected its initial page and styling.
+- Windows sandbox restrictions affected temporary-file operations, subprocess mocks,
+  and build path resolution; verification passed outside the sandbox.
+- Live Magi inference and Gemini generation were not rerun; no model/provider code changed.
 
-Passed:
+Run commands from the repository root, or from `web/` for npm commands.
 
-- Eight tests, including both original tests and six new runner tests.
-- Shared CLI integration with deterministic substitute models: correct model folders,
-  metadata, overlays, and preservation of results across repeated invocations.
-- CTD adapter tests: RGB-to-BGR conversion, block normalization, empty detections,
-  mask writing, unsupported-task rejection before loading, missing-source messages,
-  ONNX CPU selection even when CUDA is available, checkpoint fingerprint metadata,
-  and rejection of explicit CUDA for upstream ONNX.
-- Python compilation, CLI help, and `git diff --check`.
-- `pip check` reports no broken requirements in the currently installed environment.
-  This does not mean the new CTD requirements were successfully installed.
-- Downloaded the upstream CTD source at
-  `440b978563c71b758e31aaa315d100faba1efa2f` and the official
-  `comictextdetector.pt.onnx` release asset into ignored local folders.
+## Optional detector removal — 2026-10-18
 
-Blocked / not verified:
+Removed the unused alternate detector, its CLI flags and dependency list,
+downloaded source and checkpoint, and obsolete setup documentation. MAGI remains
+the extraction backend; existing MAGI CLI arguments and result paths are preserved.
+Updated runner tests retain validation and repeated-output coverage.
+Python regression suite: 45 tests, 43 passed and 2 optional tests skipped.
 
-- CTD dependency installation failed twice because connections to
-  `files.pythonhosted.org` were reset while downloading OpenCV, with the normal
-  resolver and an alternate download route. The existing environment lacks OpenCV.
-- Real CTD inference therefore remains unverified; finish installing
-  `requirements-ctd.txt` when package downloads work and run the README command.
-- MAGI loading/inference was not rerun in this change. Its prediction methods were
-  preserved and exercised with a substitute model in the existing test.
-- No accuracy comparison, GPU test, OCR benchmark, or verified reading-order result
-  is claimed. The new tests validate integration, not neural-model quality.
+## Browse restoration — 2026-10-18
 
-The checked-in code does not include model weights or copied upstream implementation.
-The source and weights downloaded here live under ignored `vendor/` and `weights/`.
+Restored the original browse, manga details, reader, request form, sample catalog,
+and their complete styles from Git at the user's request. This supersedes the
+earlier cleanup note about removing those pages. Component organization and the
+optional detector removal remain in place.

@@ -7,7 +7,7 @@ The earlier Windows speech prototype has been replaced with the reviewed
 
 ## Start locally
 
-1. Install the Python dependencies described in `../AUDIO_WORKFLOW.md`.
+1. Install the Python dependencies described in `../docs/AUDIO_WORKFLOW.md`.
 2. From this directory run `npm ci`, then `npm run dev`.
 3. Open http://127.0.0.1:3000. For a production build, run `npm run build` and
    `npm start` instead.
@@ -86,3 +86,14 @@ For the optional HTTP integration check, start the production server and set
 root. It creates a labeled `web_integration_test` project with synthetic audio,
 and exercises upload, jobs, export, byte-range playback and downloads without
 browser automation or Gemini calls.
+
+## Source layout and checks
+
+`app/` contains the studio page and API routes, `components/` contains the review
+workspaces and loading UI, `lib/` contains shared logic, and `tests/` contains
+the frontend regression tests. Run `npm test`, `npm run typecheck`, and
+`npm run build` from this directory.
+
+The catalog at `/browse`, manga details at `/manga/[id]`, reader at
+`/read/[mangaId]/[chapterId]`, and request form at `/request` use the sample catalog
+in `app/data/manga.ts`. The audio studio remains at `/`.

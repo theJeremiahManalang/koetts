@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const ts = require("typescript");
 const api = {};
-const compiled = ts.transpileModule(fs.readFileSync(require.resolve("./source-order.ts"), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+const compiled = ts.transpileModule(fs.readFileSync(require.resolve("../lib/source-order.ts"), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 new Function("exports", compiled)(api);
 const source = (id, scene, group, order) => ({ source_id: id, scene_id: scene, turn_group: group, order, speaker_id: "A", delivery: "speech", emotion: "neutral", style: "", pacing: "", include: true });
 
