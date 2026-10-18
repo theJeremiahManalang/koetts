@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "cloud-run-basics": {
+      "source": "google/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloud/cloud-run-basics/SKILL.md",
+      "computedHash": "bf911e2a1ac860a5264d753ca01254e1186c7a33c1163263e6c0c2549dd0f9bd"
+    }
+  }
+}
