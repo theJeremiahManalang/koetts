@@ -1,18 +1,21 @@
 # Firebase App Hosting setup
 
-The local deployment configuration is initialized. No Firebase project is linked,
-no backend is provisioned, and nothing has been deployed.
+The checkout is linked to Firebase project `koetts-9bf7f` (KoeTTS). The App
+Hosting backend is `my-web-app` in `us-east4`. Deployments use local source,
+not automatic GitHub rollouts.
+
+Public URL: https://my-web-app--koetts-9bf7f.us-east4.hosted.app
 
 ## Configuration
 
-- `firebase.json` targets the Next.js app in `web/` with the proposed backend ID
-  `koetts` for KoeTTS. Change this ID if using a differently named backend.
+- `firebase.json` targets the Next.js app in `web/` with backend ID
+  `my-web-app` for KoeTTS. Change this ID if using a differently named backend.
 - `web/apphosting.yaml` configures the website runtime: 1 CPU, 512 MiB RAM,
   zero minimum instances, two maximum instances, and concurrency of 40.
 - Local dependencies, generated output, project data, model weights, assistant
   settings, and environment files are excluded from source uploads.
-- No credentials or provider secrets are included. There is intentionally no
-  `.firebaserc` until the actual Firebase project is selected.
+- No credentials or provider secrets are included. `.firebaserc` records the
+  selected Firebase project; it contains no credentials.
 
 The instance limit controls serving capacity; it is not a billing cap. Builds,
 storage, traffic, and other services may still incur charges on Blaze.
@@ -28,7 +31,7 @@ npx --yes firebase-tools@latest init apphosting --project YOUR_PROJECT_ID
 ```
 
 Select the existing Blaze project. Select an existing App Hosting backend or
-create one named `koetts`, choose a supported region, and set the
+create one named `my-web-app`, choose a supported region, and set the
 application root to `web`. Choose a Node.js runtime supported by both App Hosting
 and the installed Next.js version. Keep the checked-in runtime settings when
 prompted about overwriting `web/apphosting.yaml` and review any generated changes.
@@ -37,21 +40,21 @@ associate this checkout with the real project.
 
 GitHub integration is optional. No automatic deployment workflow is installed.
 
-## Before the first rollout
+## Frontend deployment mode
 
-This setup adds configuration only. It does not make the existing local studio
-ready for public operation:
+App Hosting sets `MANGA_FRONTEND_ONLY=1` at build time and runtime. In this
+mode, `/` redirects to `/browse`, and all workflow, extraction, and asset handlers
+return HTTP 503 before reading uploads, accessing project files, or starting Python.
+The local studio remains available at `/` when this variable is unset.
 
-- The homepage currently opens the studio, which depends on local Python workers.
-- Workflow and asset routes enforce localhost access.
-- Python dependencies and model assets are not supplied by this Node.js setup.
-- Projects and background progress currently rely on local files and process locks.
-- The request form stores requests in the visitor's browser, not a shared database.
+The deployed catalog and reader use sample data and placeholder artwork. The
+request form stores requests only in the visitor's browser; it does not submit
+requests to an operator or shared database. No Python processing or Gemini calls
+are provided by this frontend deployment.
 
-For a website-only release, prepare the public entry page and disable unavailable
-processing endpoints before deployment. For an operational studio, first add a
-deployed processing backend, durable storage, and authentication/authorization.
-Do not simply remove the localhost checks to expose the current studio.
+For an operational hosted studio, first add a deployed processing backend,
+durable storage, and authentication/authorization. Keep frontend-only mode enabled
+until that integration is ready.
 
 Validate the production website before rollout:
 
@@ -77,7 +80,7 @@ After cloud initialization and the application readiness checks above, deploy
 only the intended App Hosting backend from the repository root:
 
 ```powershell
-npx --yes firebase-tools@latest deploy --only apphosting:koetts --project YOUR_PROJECT_ID
+npx --yes firebase-tools@latest deploy --only apphosting:my-web-app --project koetts-9bf7f
 ```
 
 If you changed the backend ID, update both the command and `firebase.json`.

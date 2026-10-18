@@ -4,6 +4,7 @@ import { dataRoot, validId, sameOrigin } from "../../../lib/workflow";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
+  if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   try {
     sameOrigin(request);
     const url = new URL(request.url), project = validId(url.searchParams.get("project") || "");
