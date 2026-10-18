@@ -2,148 +2,30 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { mangas } from "../../data/manga";
+import { CatalogHeader } from "../../../components/catalog-header";
 
 export default function MangaDetailsPage() {
   const params = useParams();
+  const manga = mangas.find(item => item.id === params.id);
+  const [newestFirst, setNewestFirst] = useState(false);
+  const [audioOnly, setAudioOnly] = useState(false);
+  const [audioNotice, setAudioNotice] = useState("");
 
-  const manga = mangas.find(
-    (item) => item.id === params.id
-  );
+  if (!manga) return <div className="catalog-shell"><CatalogHeader /><main className="koe-detail-page"><div className="catalog-empty"><p className="eyebrow">THE COLLECTION</p><h1>Story not found</h1><p>This manga is not in the current collection.</p><Link href="/browse" className="button primary">Back to the library →</Link></div></main></div>;
 
-  if (!manga) {
-    return (
-      <main className="not-found">
-        <h1>Manga not found</h1>
+  const readyCount = manga.chapters.filter(chapter => chapter.audioStatus === "ready").length;
+  const firstChapter = manga.chapters[0];
+  const chapters = manga.chapters.filter(chapter => !audioOnly || chapter.audioStatus === "ready").sort((a, b) => newestFirst ? b.number - a.number : a.number - b.number);
+  const requestLink = (number?: number) => `/request?manga=${encodeURIComponent(manga.title)}${number === undefined ? "" : `&chapter=${number}`}`;
 
-        <Link href="/browse">
-          ← Return to Browse
-        </Link>
-      </main>
-    );
-  }
-
-  return (
-    <main className="manga-details-page">
-      <Link href="/browse" className="back-link">
-        ← Browse
-      </Link>
-
-      <section className="manga-hero">
-        <div className="detail-cover">
-          {manga.title.charAt(0)}
-        </div>
-
-        <div className="manga-info">
-          <p className="manga-status">
-            {manga.status}
-          </p>
-
-          <h1>{manga.title}</h1>
-
-          <div className="genre-list">
-            {manga.genres.map((genre) => (
-              <span key={genre}>{genre}</span>
-            ))}
-          </div>
-
-          <p className="detail-description">
-            {manga.description}
-          </p>
-
-          <Link
-            href={`/read/${manga.id}/${manga.chapters[0].id}`}
-            className="primary-action"
-          >
-            Start Reading
-          </Link>
-        </div>
-      </section>
-
-      <section className="chapter-section">
-        <div className="section-heading">
-          <div>
-            <p className="browse-eyebrow">
-              Chapters
-            </p>
-
-            <h2>Chapter List</h2>
-          </div>
-
-          <span>
-            {manga.chapters.length} chapters
-          </span>
-        </div>
-
-        <div className="chapter-list">
-          {manga.chapters.map((chapter) => (
-            <article
-              className="chapter-row"
-              key={chapter.id}
-            >
-              <div>
-                <p className="chapter-number">
-                  Chapter {chapter.number}
-                </p>
-
-                <h3>{chapter.title}</h3>
-
-                {chapter.audioStatus === "ready" && (
-                  <span className="audio-ready">
-                    ✓ Audiobook Ready
-                  </span>
-                )}
-
-                {chapter.audioStatus ===
-                  "processing" && (
-                  <span className="audio-processing">
-                    Processing Audiobook
-                  </span>
-                )}
-              </div>
-
-              <div className="chapter-actions">
-                <Link
-                  href={`/read/${manga.id}/${chapter.id}`}
-                  className="read-button"
-                >
-                  Read
-                </Link>
-
-                {chapter.audioStatus ===
-                "none" ? (
-                  <Link
-                    href={`/request?manga=${encodeURIComponent(
-                      manga.title
-                    )}&chapter=${encodeURIComponent(
-                      `Chapter ${chapter.number} - ${chapter.title}`
-                    )}`}
-                    className="request-audio-button"
-                  >
-                    Request Audiobook
-                  </Link>
-                ) : chapter.audioStatus ===
-                  "ready" ? (
-                  <button
-                    type="button"
-                    className="listen-button"
-                  >
-                    ▶ Listen
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    className="processing-button"
-                  >
-                    Processing
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-    </main>
-  );
+  return <div className="catalog-shell"><CatalogHeader /><main className="koe-detail-page"><nav className="koe-detail-breadcrumb" aria-label="Breadcrumb"><Link href="/browse">Library</Link><span aria-hidden="true">/</span><span aria-current="page">{manga.title}</span></nav>
+    <section className="koe-detail-hero" aria-labelledby="manga-title"><div className={`catalog-cover koe-detail-cover cover-${manga.id}`}><span className="cover-edition">KoeTTS / {manga.genres[0]}</span><span className="cover-orbit" aria-hidden="true" /><strong>{manga.title}</strong><span className="cover-bottom">{manga.status}<span aria-hidden="true">▤</span></span></div><div className="koe-detail-info"><p className="eyebrow">A STORY IN EVERY PANEL</p><h1 id="manga-title">{manga.title}</h1><div className="koe-detail-genres">{manga.genres.map(genre => <span key={genre}>{genre}</span>)}</div><p className="koe-detail-description">{manga.description}</p><dl className="koe-detail-stats"><div><dt>Status</dt><dd><span className="catalog-status" />{manga.status}</dd></div><div><dt>Chapters</dt><dd>{manga.chapters.length}<span> to explore</span></dd></div><div><dt>Audio ready</dt><dd>{readyCount}<span> {readyCount === 1 ? "chapter" : "chapters"}</span></dd></div></dl><div className="koe-detail-actions">{firstChapter && <Link href={`/read/${manga.id}/${firstChapter.id}`} className="button primary">Start reading <span aria-hidden="true">→</span></Link>}<Link href={requestLink()} className="button">Request audio <span aria-hidden="true">↗</span></Link></div><p className="koe-detail-caption">Read at your own pace. Experience the story your way.</p></div></section>
+    <section className="koe-chapters" aria-labelledby="chapters-heading"><div className="koe-chapter-heading"><div><p className="eyebrow">ONE CHAPTER AT A TIME</p><h2 id="chapters-heading">Explore the story <span className="catalog-count">{manga.chapters.length}</span></h2></div><button className="button small" onClick={() => setNewestFirst(!newestFirst)} aria-label={`Chapter order: ${newestFirst ? "newest" : "oldest"} first. Change order.`}>{newestFirst ? "Newest first" : "Oldest first"} <span aria-hidden="true">↕</span></button></div><div className="koe-chapter-filters" role="group" aria-label="Filter chapters"><button aria-pressed={!audioOnly} onClick={() => setAudioOnly(false)}>All chapters <span>{manga.chapters.length}</span></button><button aria-pressed={audioOnly} onClick={() => setAudioOnly(true)}>Audio ready <span>{readyCount}</span></button></div>
+    {audioNotice && <div className="koe-audio-notice notice" role="status"><p>{audioNotice}</p><button type="button" className="button small" onClick={() => setAudioNotice("")}>Dismiss</button></div>}
+    <div className="koe-chapter-list">{chapters.map(chapter => <article key={chapter.id} className="koe-chapter-row"><span className="koe-chapter-index" aria-hidden="true">{String(chapter.number).padStart(2, "0")}</span><div className="koe-chapter-name"><span className="eyebrow">CHAPTER {chapter.number}</span><h3><Link href={`/read/${manga.id}/${chapter.id}`}>{chapter.title}</Link></h3></div><span className={`koe-audio-status ${chapter.audioStatus}`}><span aria-hidden="true">{chapter.audioStatus === "ready" ? "♫" : chapter.audioStatus === "processing" ? "◷" : "○"}</span>{chapter.audioStatus === "ready" ? "Audio ready" : chapter.audioStatus === "processing" ? "Audio processing" : "No audio yet"}</span><div className="koe-chapter-actions"><Link className="button" href={`/read/${manga.id}/${chapter.id}`} aria-label={`Read chapter ${chapter.number}: ${chapter.title}`}>Read <span aria-hidden="true">↗</span></Link>{chapter.audioStatus === "ready" ? <button className="button" onClick={() => setAudioNotice(`Chapter ${chapter.number}: ${chapter.title} is marked as audio ready, but a playable audio file has not been connected yet.`)} aria-label={`Listen to chapter ${chapter.number}: ${chapter.title}`}>Listen <span aria-hidden="true">♫</span></button> : chapter.audioStatus === "processing" ? <button className="button" disabled>Processing</button> : <Link className="button" href={requestLink(chapter.number)} aria-label={`Request audio for chapter ${chapter.number}: ${chapter.title}`}>Request audio</Link>}</div></article>)}</div>
+    {chapters.length === 0 && <div className="catalog-empty"><h3>No audio-ready chapters yet</h3><p>You can read the story or request an audiobook version.</p><button className="button" onClick={() => setAudioOnly(false)}>Show all chapters</button></div>}</section>
+    <aside className="catalog-callout"><div><span className="eyebrow">STORIES FOR EVERYONE</span><h2>Some stories are meant to be heard, too.</h2><p>Request an accessible narrated version of your next chapter.</p></div><Link href={requestLink()} className="button">Request an audiobook ↗</Link></aside><footer className="catalog-footer"><span>KoeTTS · Read. Listen. Imagine.</span><Link href="/browse">Discover more stories ↗</Link></footer>
+  </main></div>;
 }
