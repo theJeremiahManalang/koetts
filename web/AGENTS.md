@@ -1,3 +1,20 @@
+# Web agent guide
+
+Read the repository `AGENTS.md` for task routing and context handoff.
+
+The active studio is `app/page.tsx` with workspaces in `components/`. Catalog,
+reader, and request pages use demo data; they are separate from studio projects.
+Trace imports before changing similarly named files under `app/` or `lib/`.
+`npm test` selects tests in `tests/` through `package.json`.
+
+For API routes, Python transport, polling, or review state, read
+`../.agents/skills/manga-workflow/SKILL.md`. Keep shared types and worker snapshots
+aligned. Preserve drafts on failed mutations and stale-state rejection.
+
+For frontend-only hosting, retain processing guards in all three API routes and
+the root-page redirect. Read `../docs/APP_HOSTING.md` before changing that boundary.
+Keep provider credentials on the server.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
