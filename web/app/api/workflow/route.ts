@@ -21,6 +21,7 @@ async function limitedRequest(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   try {
     sameOrigin(request);
     const url = new URL(request.url);
@@ -40,6 +41,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   let staging: string | undefined;
   try {
     sameOrigin(request);

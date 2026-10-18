@@ -6,3 +6,9 @@ runConfig:
   minInstances: 0
   maxInstances: 2
   concurrency: 40
+env:
+  - variable: MANGA_FRONTEND_ONLY
+    value: "1"
+    availability:
+      - BUILD
+      - RUNTIME

@@ -1,7 +1,7 @@
 {
   "apphosting": [
     {
-      "backendId": "koetts",
+      "backendId": "my-web-app",
       "rootDir": "web",
       "ignore": [
         "**/node_modules/**",
