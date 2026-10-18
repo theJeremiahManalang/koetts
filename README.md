@@ -1,4 +1,17 @@
-# Learn MagiV3 by running it
+# Manga audiobook backend and MagiV3 starter
+
+The `dev-test-1` integration adds the supplied `manga_tts` package and an image-to-audio
+workflow. Start with [AUDIO_WORKFLOW.md](AUDIO_WORKFLOW.md) for extraction, cast review,
+script approval, Gemini generation, take selection, WAV/MP3 export and recovery.
+The original MagiV3 starter remains available below and through `run.py`.
+
+For the frontend, see [web/README.md](web/README.md). It uses the
+`character-analysis-web` reader design with the new review and audio backend.
+
+The backend intentionally requires review before speech generation. Model predictions
+are proposals, not guaranteed OCR, reading order, or character identity.
+
+## Original MagiV3 starter
 
 ## Web proof of concept
 
@@ -155,7 +168,8 @@ The three result formats were checked against the [upstream implementation](http
 8. `tests/test_project.py`: lightweight checks that require Pillow but no model download.
 9. `VALIDATION.md`: what was and was not tested during preparation.
 
-To run the lightweight checks after installing dependencies:
+To run all checks, install `requirements-audio.txt` as well as the dependencies above.
+The added audio integration tests use synthetic predictions/audio and make no API calls:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v

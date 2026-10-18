@@ -1,27 +1,88 @@
-# Manga text web proof of concept
+# Manga Reader audio workspace
 
-Local Next.js App Router + TypeScript + Tailwind CSS interface for the existing MAGI runner.
+The UI is adapted from `character-analysis-web`: same paper/ink/sage palette,
+header, image viewer, zoom controls, split reader layout and character crops.
+The earlier Windows speech prototype has been replaced with the reviewed
+`manga_tts` workflow on `dev-test-1`.
 
-From the repository root, install the Python dependencies using the main README first. Then:
+## Start locally
 
-```powershell
-cd web
-npm install
-npm run dev
-```
+1. Install the Python dependencies described in `../AUDIO_WORKFLOW.md`.
+2. From this directory run `npm ci`, then `npm run dev`.
+3. Open http://127.0.0.1:3000. For a production build, run `npm run build` and
+   `npm start` instead.
 
-Open http://127.0.0.1:3000. Upload a PNG, JPEG or WebP (10 MB maximum, 25 megapixels maximum), then click **MAGI v3 · Extract text**. Nothing runs on upload. The API runs real MAGI OCR, returns `{ "texts": ["..."] }`, and the page displays only the transcriptions. CTD is not offered as an OCR model because it only detects regions.
+The server uses the repository's `.venv` Python if present. Otherwise it uses
+`python`; set `PYTHON_EXECUTABLE` to choose a different interpreter.
+Set `GEMINI_API_KEY` in the server environment before starting Next.js for new
+planning or audio. Keys are never entered in the browser or sent to it. MagiV3
+extraction needs its model dependencies and weights; first loading may download
+the pinned model. Restoring/reviewing existing output requires neither Magi nor
+new provider calls.
 
-The server uses the repository's `.venv` Python automatically. Override with `PYTHON_EXECUTABLE` in `web/.env.local` if needed. No API key is needed. The first extraction downloads the pinned model; each request loads it in a fresh process. One extraction runs at a time, with a 15-minute timeout. Uploaded files are temporary and removed after processing. Text order is the model's output order.
+## Workflow
 
-This is a local proof of concept: run it on a machine with the Python environment and sufficient memory for MAGI. It is not a static website or a serverless deployment. Keep the server local; there is no authentication or shared job queue.
+- **Upload:** choose ordered images, a chapter-analysis ZIP, or a saved project ZIP.
+  Image sequence can be rearranged before extraction. Optional cast ZIP imports
+  named references. Uploads are limited to 128 MB total; images to 10 files/10 MB each.
+- **Cast:** create a character directly from a detected panel crop (choose a name
+  and voice; no ZIP or API key needed), or import references. Creation saves and
+  assigns the selected appearance immediately; save pending edits first. Use the
+  new character in other appearance dropdowns, reject false detections, edit
+  Gemini voices/pronunciation/acting, and explicitly approve the cast.
+- **AI proposal:** generate a proposal, inspect/edit its JSON, and explicitly load
+  it. Loading clears approvals. Existing saved proposals are accessible without a key.
+- **Source & order:** correct text, include/exclude sources, move them, assign
+  scenes and groups. Show/highlight sources against page evidence. Applying rebuilds
+  dialogue turns, so finish this before final script edits.
+- **Script approval:** edit exact wording/delivery, insert narration linked to
+  evidence, set intentional silence, and approve each scene independently.
+- **Audio & export:** select approved scenes, inspect requests, render/reuse takes,
+  audition them, choose a take or regenerate one segment, export compiled MP3/WAV,
+  and download manifests/timeline/script or a resumable project ZIP.
 
-Checks: `npm run typecheck` and `npm run build`.
+Use **Select all** or individual scene checkboxes to choose the compilation. After
+rendering the selected scenes, **Compile selected scenes to MP3** combines their
+chosen takes in chapter order into one file. **Download compiled MP3** saves it.
+The audio dependencies include an MP3 encoder; a system FFmpeg is also supported.
 
-Verified locally: production build, TypeScript check, all 11 Python tests, and a
-real sample-image upload returning HTTP 200 with nine transcriptions on CPU.
-Missing-image and unsupported-model requests return 400; overlapping requests
-return 429. The initial page was visually checked in the browser. Automated
-browser file selection was unavailable, so the upload was verified over HTTP.
+Changes remain local to the form until Apply. Leaving a dirty section asks before
+discarding edits. Server mutations compare the project fingerprint, rejecting stale
+edits from other tabs. Failed operations preserve drafts; Reload saved state recovers
+completed segments after an interrupted render. Export files are explicitly labeled
+as the last export, which may predate later edits.
 
-Framework references: [Next.js setup](https://nextjs.org/docs/app/getting-started/installation), [Tailwind CSS](https://tailwindcss.com/docs/installation/framework-guides/nextjs).
+## Storage and execution
+
+Projects live in `results/web/projects/<id>/`; jobs, staged uploads and downloads
+live in sibling directories. Browser storage contains only the active project/job
+IDs, not scripts or credentials. Saved-project selection works after refresh.
+Uploaded staging files are removed after the worker finishes.
+
+Next routes start Python workers and immediately return job IDs. The browser polls
+persisted progress and reconnects after refresh. Workers use the same workspace
+lock as the CLI and checkpoint audio per segment. Two workers may run at once;
+only one writer may own a project. Do not use an external router writer on the same
+workspace concurrently. A terminated worker may leave a lock; confirm the recorded
+process is no longer running before removing it. If the whole server stops abruptly,
+job progress can remain unfinished; reload saved state after resolving the lock.
+
+This is a **local-only application**, bound to loopback with origin checks. It has
+no user authentication, cloud queue, or multi-user isolation. Do not expose it to a
+network or deploy these routes as serverless functions. Paid operations are explicit,
+but provider retries can still incur duplicate costs after uncertain timeouts.
+
+## Checks
+
+`npm run typecheck` and `npm run build` validate the frontend. From the repository
+root, `python -m unittest discover -s tests -v` checks backend and worker contracts.
+The web-worker tests cover stale edits, sanitized validation failures, restore,
+inspection, rendering with an injected renderer, export and bundle creation.
+Live visual/browser checks and provider quality evaluation remain separate checks.
+
+For the optional HTTP integration check, start the production server and set
+`MANGA_WEB_TEST_URL=http://127.0.0.1:3001` (adjust the port). Run
+`python -m unittest discover -s tests -p test_web_http.py -v` from the repository
+root. It creates a labeled `web_integration_test` project with synthetic audio,
+and exercises upload, jobs, export, byte-range playback and downloads without
+browser automation or Gemini calls.
