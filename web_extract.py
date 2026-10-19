@@ -6,6 +6,7 @@ import sys
 
 def extract_text(path):
     from PIL import Image, ImageOps
+
     from runners import create_runner
 
     with Image.open(path) as source:

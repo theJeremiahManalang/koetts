@@ -1,8 +1,9 @@
 """Run inference on an image or folder; use python run.py --help."""
 
 import argparse
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
+
 from runners import MODEL_NAMES, create_runner, validate_options
 
 
@@ -16,7 +17,7 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("results"))
     args = parser.parse_args()
     # Validate filenames/captions before spending time loading the model.
-    from files import image_paths, read_captions, load_image, write_json, save_overlay
+    from files import image_paths, load_image, read_captions, save_overlay, write_json
     try:
         validate_options(args.model, args.task, args.captions)
         paths = image_paths(args.input)
@@ -29,7 +30,7 @@ def main():
     except (ValueError, OSError, ImportError, RuntimeError) as exc:
         parser.error(str(exc))
     # A separate run folder preserves results from earlier invocations.
-    output = args.output / args.model / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    output = args.output / args.model / datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     output.mkdir(parents=True, exist_ok=False)
     # Load the model only once, but process one image at a time to limit memory.
     for index, path in enumerate(paths):

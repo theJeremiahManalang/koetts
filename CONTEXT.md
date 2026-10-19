@@ -1,23 +1,29 @@
 # Task checkpoint
 
-Updated 19 October 2026. Assignment: prepare current architecture and S0 changes on
-`feat/architecture-alignment` for a pull request to `main`.
+Updated 19 October 2026. Assignment: clear conflicts on PR #9 by syncing current
+`main` into `feat/architecture-alignment`. Keep the pull request open and unmerged.
 
-- Approval: user approved preserving current work, merging latest `origin/main`,
-  resolving conflicts in favor of current changes, committing, pushing, and updating
-  the pull request.
-- Decision and outcome: merged `origin/main` at `e842deb` into the feature branch
-  without rewriting history. Merge had no conflicts. Applied the safety stash,
-  committed all current tracked and untracked work, pushed it, then dropped the stash.
-- Changes: agent guidance and skills, glossary, architecture alignment evidence and
-  prompt updates, S0 process recovery and HTTP verification harnesses, and web setup
-  documentation. Existing reader and studio changes from `main` remain included.
-- Checks: `git diff --check` passed before commit. Test suites were not run during
-  PR preparation. Existing S0 evidence and limitations are recorded in
-  `docs/alignment-status.md`.
-- PR: existing [PR #8](https://github.com/theJeremiahManalang/koetts/pull/8) targets
-  `main`; pushed branch updates are included. GitHub reports it open and mergeable.
-  Updating its title and description through the GitHub integration returned HTTP
-  403 (`Resource not accessible by integration`), so existing PR metadata remains.
-- Next action: review and merge PR #8. Update PR title or description with an account
-  that has pull request write access if needed.
+- Approval: user approved updating the feature branch from `main`, resolving the
+  conflicts, and pushing the feature branch so PR #9 has no conflicts. No merge into
+  `main` is authorized.
+- Baseline: `origin/main` at `ad672f970130cab219304a3127e79710dad178ed`; feature
+  branch before sync at `ad4549d41086901edbaacc157f9d2fc9848131d9`.
+- Resolution: conflicts in `docs/alignment-status.md`, `docs/architecture.md`,
+  `docs/target-design.md`, `tests/test_worker_process.py`,
+  `tests/verify_local_http.py`, and `tests/worker_process.py` retain the feature
+  branch's S1 evidence and harness changes. `tests/test_web_http.py` auto-merged.
+  `CONTEXT.md` now records this assignment. The result preserves S1 decisions,
+  acceptance evidence, and current main's S0 history.
+- Verification: `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -v`
+  passed (59 tests: 57 passed, two optional skips for the missing external sample
+  and local web server). `npm test` passed (8 tests), `npm run typecheck` passed,
+  and `npm run build` passed with Next.js 16.4.0 and 11 routes.
+  `git diff --check --cached` passed; no conflict markers remain in the resolved
+  files.
+- PR: [PR #9](https://github.com/theJeremiahManalang/koetts/pull/9) remains open
+  against `main`.
+- Review: Standards found zero violations. Spec review found no missing or incorrect
+  S1 behavior, and flagged `e44e4c8` for import sorting across 28 files plus
+  unrelated `run.py` and storage exception changes; their need is not documented.
+- Next action: push the feature branch and confirm GitHub reports the PR as
+  conflict-free. Leave PR #9 open.

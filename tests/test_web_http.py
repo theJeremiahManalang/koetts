@@ -9,10 +9,11 @@ import time
 import unittest
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse, urlencode
 import uuid
+from urllib.parse import urlencode, urlparse
 
 import test_audio_pipeline as fixtures
+
 from manga_tts.schemas import RenderCommand
 
 

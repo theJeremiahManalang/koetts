@@ -1,9 +1,12 @@
 """Runtime configuration and protocol constants. Importing never reads secrets or creates clients."""
 from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+
 from .schemas import Settings
 
 PathLike = str | os.PathLike[str]

@@ -5,6 +5,7 @@ import unittest
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+
 from PIL import Image
 
 from files import image_paths, load_image, read_captions, save_overlay, write_json

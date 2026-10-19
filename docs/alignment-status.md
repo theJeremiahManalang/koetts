@@ -8,10 +8,13 @@ inherited from the historical baseline. No runtime API, schema, engine, dependen
 manifest, lockfile, build-tool selection, or cloud configuration changed.
 
 All S0 acceptance criteria passed after resolving the local verification environment.
-Initial Python and build failures are retained below. S1 is the next eligible scope;
-its edit ownership, stale-worker promotion, and fence lifecycle decision remains
-unresolved in `target-design.md` and must be settled before dependent implementation.
-No later scope was implemented.
+Initial Python and build failures are retained below.
+
+### State at the S0 checkpoint
+
+S1 was the next eligible scope at that checkpoint; its edit ownership, stale-worker
+promotion, and fence lifecycle decision was unresolved in `target-design.md`.
+No later scope had been implemented at the time of this S0 report.
 
 ### Requirement mapping
 
@@ -201,3 +204,74 @@ There are no remaining S0 acceptance blockers. Missing default host Python and
 internal-port restrictions remain environmental conditions handled by explicit
 interpreter selection, permitted execution, and fresh build artifacts. Do not
 weaken runtime guards or infer future-scope acceptance from these local tests.
+
+## S1 — Complete, 19 October 2026
+
+Assignment: add a durable revision and artifact persistence seam while keeping the
+local filesystem studio as the runtime default. No Project v2 schema migration,
+cloud adapter, dispatcher, deployment, publication, or paid provider call was added.
+
+### Decision and changed behavior
+
+- Project writes have one exclusive owner. Each handoff increments a nonreused
+  fence; commits require the active owner, fence, and expected parent revision.
+  Competing edits return typed conflicts. An interrupted owner remains fenced until
+  recovery confirms the worker stopped. S1 adds no timeout or automatic takeover;
+  lease expiry and distributed reconciliation remain S2 decisions.
+- `manga_tts.persistence` defines artifact/revision store protocols, immutable
+  manifest/revision records, and in-memory test adapters. Artifact files stream
+  through exact object generations and SHA-256 checks before pointer promotion.
+  The current project hash remains the web expected-revision value; durable IDs are
+  separate.
+- `PipelineRouter` accepts an optional keyword-only writer session. Segment
+  checkpoints advance the durable pointer before notification. Restore verifies a
+  full manifest in staging before replacing the workspace. Cast reference overlays
+  stay staged until pointer commit. If pointer promotion succeeds but local
+  materialization fails, the worker reports `checkpoint_materialization_pending`;
+  the accepted revision must be reloaded before another commit.
+- `docs/target-design.md` records the ownership decision. `docs/architecture.md`
+  describes the persistence contract and its unimplemented cloud adapters.
+
+### Acceptance evidence
+
+| Requirement | Evidence | Result |
+| --- | --- | --- |
+| Competing commits have one winner; stale revisions/fences do not move the pointer | `test_competing_commits_have_one_winner_and_stale_pointer_stays_unchanged`, `test_writer_ownership_blocks_edits_and_stale_fence_cannot_commit_after_recovery`, and `test_router_reports_stale_fence_as_typed_conflict` | Passed |
+| Upload, verification, or pointer failure preserves the prior revision | `test_uploaded_artifacts_do_not_promote_when_pointer_commit_fails`, `test_artifact_verification_failure_keeps_prior_revision_current`, `test_workspace_overlay_waits_for_pointer_commit`, and `test_failed_cast_import_does_not_overwrite_current_workspace_assets` | Passed |
+| Checkpoint failure is visible; restart restores accepted state and referenced audio | `test_checkpoint_failure_does_not_acknowledge_or_promote_audio`, `test_router_checkpoint_survives_new_writer_and_reuses_accepted_audio`, and `test_failed_restore_keeps_existing_workspace_intact` | Passed |
+| Existing project-hash conflicts return a machine-readable result; metadata uses the persistence seam | `test_stale_edits_fail_without_changing_project` and `test_transport_metadata_advances_the_same_revision_pointer` | Passed |
+| Post-pointer local refresh failure is explicit and prevents a later stale commit | `test_post_commit_materialization_failure_is_reported_as_accepted_checkpoint` | Passed |
+| Local approval, hash, recovery, CLI, and bundle behavior remains compatible | Full Python discovery and existing audio/process/web workflow tests below | Passed |
+
+### Fresh verification
+
+Python 3.11.15 came from `/tmp/manga-s0-venv`; Node was v24.18.0 and npm 11.16.0.
+
+| Command / working directory | Outcome |
+| --- | --- |
+| `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -v` / repository root | Exit 0; 59 tests run, 57 passed, two optional skips |
+| `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -p 'test_persistence.py' -v` / repository root | Exit 0; 13 passed |
+| Ruff 0.16.7 `check` and `check --select I` on `manga_tts/persistence.py`, `manga_tts/router.py`, `manga_tts/storage.py`, `web_workflow.py`, `tests/test_persistence.py`, and `tests/test_web_workflow.py` | Exit 0; both checks reported all checks passed |
+| Pyright 1.1.414 / same six S1 Python files | Exit 0; zero errors, warnings, or informationals using Python 3.11.15 and basic checking mode. Temporary config removed after the check. |
+| `npm test` / `web/` | Exit 0; eight assertions passed |
+| `npm run typecheck` / `web/` | Exit 0 |
+| `npm run build` / `web/` | Exit 0; Next.js 16.4.0 Turbopack production build completed and listed all 11 routes |
+| `git diff --check` / repository root | Exit 0; no whitespace errors |
+
+The two full-suite skips were expected: no external `MANGA_TTS_SAMPLE_PROJECT` and
+no `MANGA_WEB_TEST_URL`. The focused worker recovery suite passed separately (one
+test); audio pipeline and web workflow suites passed separately (15 and 14 tests).
+No model download, live MAGI inference, Gemini synthesis, or cloud operation ran.
+
+The repo-wide Ruff scan still reports four out-of-scope findings: `files.py`
+(`TRY004`), `magi.py` (`C408`), `tests/test_audio_pipeline.py` (`SIM117`), and
+`tests/test_cast_speakers.py` (`F841`). The six S1 Python files listed in the table
+pass both default Ruff rules and import sorting.
+
+### Limits and next scope
+
+Only in-memory adapters validate the application contract; Firestore/GCS transaction,
+object-generation, and service-identity behavior remain unverified and belong to S5.
+The local studio still uses filesystem persistence by default. S2 remains next after
+resolving its distributed stage-capacity, retry-authority, timeout, and reconciliation
+policy in `docs/target-design.md`.
