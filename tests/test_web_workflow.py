@@ -209,6 +209,7 @@ class WebWorkflowTests(unittest.TestCase):
         before = (self.workspace / "project.json").read_bytes()
         state = self.job("settings", {}, revision="outdated")
         self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["failure_code"], "revision_conflict")
         self.assertIn("another session", state["message"])
         self.assertEqual((self.workspace / "project.json").read_bytes(), before)
 

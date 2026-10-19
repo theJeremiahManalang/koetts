@@ -54,11 +54,20 @@ The imported cloud design/setup checklist are unavailable. Record resolutions he
 before implementing dependent behavior; recover old inputs only if useful, rather
 than treating their filenames as prerequisites.
 
+### Resolved for S1 — edit ownership and fencing
+
+Project writes use exclusive ownership. Competing edits receive a typed conflict
+until the current worker reaches a known terminal result and releases ownership.
+Each ownership handoff increments a monotonic fence that is never reused. A revision
+commit requires the active owner, fence, and expected parent revision. An interrupted
+worker keeps its ownership fenced until recovery confirms that execution stopped;
+there is no S1 timeout or automatic takeover policy. S2 still owns lease expiry and
+distributed reconciliation policy.
+
 | Decision or measurement | Must be resolved before |
 | --- | --- |
 | Distributed stage capacities, retry authority/ceiling, timeout and lease reconciliation policy | S2 production scheduling behavior |
 | Request deduplication identity, chapter/configuration key, lifecycle/status rules | S4 request persistence |
-| Edit ownership, stale-worker promotion, and fence lifecycle | S1 shared persistence contracts |
 | Trusted admin provisioning and user/service identity transport | S3 authorization implementation |
 | Dispatcher choice; Workflows/Eventarc/scheduler use; bucket layout | S5 infrastructure integration |
 | Retention periods, reference tracking, deletion and recovery policy | S5 cleanup implementation |

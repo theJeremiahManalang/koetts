@@ -17,10 +17,30 @@ The engine owns validated applied state, approval validity, takes, and export.
 MAGI extraction preserves evidence; Gemini planning and synthesis are provider
 adapters. See the [audio workflow](AUDIO_WORKFLOW.md) for domain semantics.
 
-Persistence is local under `results/web/`: projects contain state/assets/takes;
-sibling directories contain jobs, uploads, and bundles. CLI/web use workspace
-writer locks and expected-state fingerprints. Node concurrency limits are process
-local. These mechanisms do not provide distributed scheduling or cloud durability.
+Persistence defaults to local files under `results/web/`: projects contain
+state/assets/takes; sibling directories contain jobs, uploads, and bundles. CLI/web
+use workspace writer locks and expected-state fingerprints. S1 adds the
+`manga_tts.persistence.ProjectPersistence` contract; `PipelineRouter` can receive
+an acquired `ProjectWriter` session. Artifact adapters stream files by immutable
+object identity and exact generation, with a SHA-256 checksum. A revision records
+its ID, parent, manifest reference/checksum, project hash, and fence. The revision
+store atomically moves the current pointer only when expected parent, active owner,
+and fence match. Load verifies the complete manifest into a staged workspace before
+replacing the local view. A pre-pointer failure leaves the old revision current;
+uploaded artifacts may remain unreferenced for later collection.
+
+If pointer promotion succeeds but local materialization fails, the router reports
+`checkpoint_materialization_pending`; the revision remains accepted, and another
+commit requires reloading that revision first.
+
+The in-memory adapters exist for local contract tests only. No Firestore/GCS adapter,
+distributed scheduler, or cloud durability is implemented. Node concurrency limits
+remain process local.
+
+The web worker reports stale project-hash rejection with a machine-readable
+`failure_code`. Server-owned project metadata uses the router commit seam, alongside
+engine mutations. The project-hash value in snapshots remains the expected-state
+contract; durable revision IDs are separate.
 
 The bridge in `web/lib/python.ts` selects `PYTHON_EXECUTABLE`, then the repository
 virtual environment, then `python`. Check interpreter availability before startup.
