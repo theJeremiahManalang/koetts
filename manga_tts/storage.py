@@ -243,7 +243,7 @@ def import_cast(p: dict[str, Any], root: PathLike, references_zip: PathLike) -> 
         refs = c.get("references", [])
         is_generic = c.get("is_generic", False)
         if not isinstance(is_generic, bool):
-            raise ValueError("is_generic must be a boolean")
+            raise TypeError("is_generic must be a boolean")
         if not refs and not is_generic:
             raise ValueError(f"{sid} needs at least one reference image")
         for ref in refs:
@@ -278,7 +278,7 @@ def load_project(root: PathLike) -> dict[str, Any]:
     Raises ValueError for an unsupported version; JSON and filesystem errors propagate."""
     p = read_json(Path(root) / "project.json")
     if not isinstance(p, dict):
-        raise ValueError("project: expected object")
+        raise TypeError("project: expected object")
     if p.get("version") == 1:
         validate_contract(p, ProjectV1, "legacy project")
         p.update(version=VERSION, cast_approval=None, approvals={}, selected_takes={}, proposal=None)

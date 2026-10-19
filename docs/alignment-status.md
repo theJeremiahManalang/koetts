@@ -251,6 +251,8 @@ Python 3.11.15 came from `/tmp/manga-s0-venv`; Node was v24.18.0 and npm 11.16.0
 | --- | --- |
 | `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -v` / repository root | Exit 0; 59 tests run, 57 passed, two optional skips |
 | `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -p 'test_persistence.py' -v` / repository root | Exit 0; 13 passed |
+| Ruff 0.16.7 `check` and `check --select I` on `manga_tts/persistence.py`, `manga_tts/router.py`, `manga_tts/storage.py`, `web_workflow.py`, `tests/test_persistence.py`, and `tests/test_web_workflow.py` | Exit 0; both checks reported all checks passed |
+| Pyright 1.1.414 / same six S1 Python files | Exit 0; zero errors, warnings, or informationals using Python 3.11.15 and basic checking mode. Temporary config removed after the check. |
 | `npm test` / `web/` | Exit 0; eight assertions passed |
 | `npm run typecheck` / `web/` | Exit 0 |
 | `npm run build` / `web/` | Exit 0; Next.js 16.4.0 Turbopack production build completed and listed all 11 routes |
@@ -260,6 +262,11 @@ The two full-suite skips were expected: no external `MANGA_TTS_SAMPLE_PROJECT` a
 no `MANGA_WEB_TEST_URL`. The focused worker recovery suite passed separately (one
 test); audio pipeline and web workflow suites passed separately (15 and 14 tests).
 No model download, live MAGI inference, Gemini synthesis, or cloud operation ran.
+
+The repo-wide Ruff scan still reports four out-of-scope findings: `files.py`
+(`TRY004`), `magi.py` (`C408`), `tests/test_audio_pipeline.py` (`SIM117`), and
+`tests/test_cast_speakers.py` (`F841`). The six S1 Python files listed in the table
+pass both default Ruff rules and import sorting.
 
 ### Limits and next scope
 

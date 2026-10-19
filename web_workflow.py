@@ -177,7 +177,7 @@ def run_job(job):
     except (ValueError, FileNotFoundError) as exc:
         # Only local workflow errors; provider errors are sanitized by the router.
         update(str(exc)[:400], "failed")
-    except Exception:
+    except Exception:  # noqa: BLE001 - persist a safe terminal job result for unknown failures.
         update("Operation failed. Check dependencies and workspace access. Completed audio is retained.", "failed")
     finally:
         # Uploaded staging files are not needed once imported. Use only the fixed job directory.

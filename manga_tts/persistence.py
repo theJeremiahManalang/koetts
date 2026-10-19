@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, Self
 
 from .schemas import Project, ProjectV1
 from .storage import digest, load_project, read_json, write_json
@@ -285,7 +285,7 @@ def _read_manifest(artifacts: ArtifactStore, artifact: ArtifactRef) -> ProjectMa
             raise ValueError("Unsupported project manifest version")
         raw_entries = value.get("entries")
         if not isinstance(raw_entries, dict):
-            raise ValueError("Project manifest entries are invalid")
+            raise TypeError("Project manifest entries must be an object")
         entries = {}
         for path, raw in raw_entries.items():
             _validate_relative_path(path)
@@ -361,7 +361,7 @@ class ProjectWriter:
         """Whether the last committed revision still needs a local workspace refresh."""
         return self._materialization_pending
 
-    def __enter__(self) -> ProjectWriter:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -396,7 +396,7 @@ class ProjectWriter:
                 "Reload the accepted revision before committing another change.",
             )
         if not isinstance(project, dict):
-            raise ValueError("Project state must be an object")
+            raise TypeError("Project state must be an object")
         if project.get("version") == 1:
             ProjectV1.model_validate(project)
         else:

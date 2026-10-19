@@ -59,7 +59,7 @@ def operation(stage: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                 raise
             except PersistenceConflict as exc:
                 raise WorkflowError(Failure(code=exc.code, stage="persistence", message=str(exc))) from None
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - sanitize unexpected failures at the public seam.
                 fields: list[str] = []
                 code, message, retryable = "operation_failed", f"The {stage} operation failed. Check inputs, approvals and workspace files.", False
                 if isinstance(exc, ValidationError):
@@ -168,7 +168,7 @@ class PipelineRouter:
         for callback in list(self._listeners):
             try:
                 callback(self._revision)
-            except Exception:
+            except Exception:  # noqa: BLE001 - observer failures must not undo saved state.
                 # A presentation failure must not roll back an already saved command.
                 LOGGER.warning("observer_failed", extra={"stage": "notification", "outcome": "failed"})
 
@@ -441,9 +441,10 @@ class PipelineRouter:
             # Even client creation is deferred until a missing non-silence segment.
             return self._get_renderer()(request)
         for scene in scenes:
-            own_ids = {seg["segment_id"] for seg in planned if seg["scene_id"] == scene["scene_id"]}
-            def report(status: str, segment_id: str) -> None:
-                self._event(progress, "render", status, "Segment " + status, scene["scene_id"], segment_id)
+            scene_id = scene["scene_id"]
+            own_ids = {seg["segment_id"] for seg in planned if seg["scene_id"] == scene_id}
+            def report(status: str, segment_id: str, scene_id: str = scene_id) -> None:
+                self._event(progress, "render", status, "Segment " + status, scene_id, segment_id)
             tts.render_scene(candidate, self.root, scene, render,
                 regenerate=[sid for sid in command.regenerate if sid in own_ids], checkpoint=self._commit,
                 progress=report)

@@ -19,9 +19,16 @@ from manga_tts.persistence import (
     InMemoryRevisionStore,
     PersistenceConflict,
     ProjectPersistence,
+    ProjectRevision,
 )
 from manga_tts.schemas import WorkflowError
 from manga_tts.storage import read_json, write_json
+
+
+def require_revision(revision: ProjectRevision | None) -> ProjectRevision:
+    if revision is None:
+        raise AssertionError("Expected a current project revision")
+    return revision
 
 
 class BarrierArtifactStore(InMemoryArtifactStore):
@@ -29,7 +36,7 @@ class BarrierArtifactStore(InMemoryArtifactStore):
 
     def __init__(self):
         super().__init__()
-        self.barrier = None
+        self.barrier: threading.Barrier | None = None
         self.local = threading.local()
 
     def put(self, content: bytes):
@@ -54,7 +61,7 @@ class FailingRevisionStore(InMemoryRevisionStore):
 class FailingReadArtifactStore(InMemoryArtifactStore):
     def __init__(self):
         super().__init__()
-        self.fail_copy_at = None
+        self.fail_copy_at: int | None = None
         self.copy_count = 0
 
     def copy_to(self, artifact, destination):
@@ -112,7 +119,7 @@ class ProjectPersistenceTests(unittest.TestCase):
 
         restored_root = Path(self.temp.name) / "restored"
         reader = self.persistence.acquire("chapter", "reader-1")
-        loaded = reader.load(restored_root)
+        loaded = require_revision(reader.load(restored_root))
         self.assertEqual(loaded.revision_id, second.revision_id)
         self.assertEqual(read_json(restored_root / "project.json")["title"], "Second")
         self.assertEqual((restored_root / "input/page.png").read_bytes(), b"page-one")
@@ -121,8 +128,7 @@ class ProjectPersistenceTests(unittest.TestCase):
     def test_competing_commits_have_one_winner_and_stale_pointer_stays_unchanged(self):
         seed = self.persistence.acquire("chapter", "seed")
         seed.commit(self.root, self.state, expected_revision_id=None)
-        initial = self.persistence.current("chapter")
-        self.assertIsNotNone(initial)
+        require_revision(self.persistence.current("chapter"))
         seed.release()
 
         artifacts = BarrierArtifactStore()
@@ -149,8 +155,10 @@ class ProjectPersistenceTests(unittest.TestCase):
         conflicts = [value for value in outcomes if isinstance(value, PersistenceConflict)]
         self.assertEqual(len(conflicts), 1)
         self.assertEqual(conflicts[0].code, "revision_conflict")
-        current = persistence.current("chapter")
-        self.assertEqual(current.revision_id, next(value.revision_id for value in outcomes if not isinstance(value, Exception)))
+        winners = [value for value in outcomes if isinstance(value, ProjectRevision)]
+        current = require_revision(persistence.current("chapter"))
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(current.revision_id, winners[0].revision_id)
         writer.release()
 
     def test_uploaded_artifacts_do_not_promote_when_pointer_commit_fails(self):
@@ -166,7 +174,7 @@ class ProjectPersistenceTests(unittest.TestCase):
             writer.commit(self.root, {**self.state, "title": "Uncommitted"},
                           expected_revision_id=first.revision_id)
 
-        self.assertEqual(persistence.current("chapter").revision_id, first.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, first.revision_id)
         self.assertEqual((self.root / "project.json").read_bytes(), old_project)
         self.assertGreater(self.artifacts.count, artifact_count)
         writer.release()
@@ -183,7 +191,7 @@ class ProjectPersistenceTests(unittest.TestCase):
             writer.commit(self.root, {**self.state, "title": "Corrupt"},
                           expected_revision_id=first.revision_id)
 
-        self.assertEqual(persistence.current("chapter").revision_id, first.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, first.revision_id)
         self.assertEqual((self.root / "project.json").read_bytes(), old_project)
         writer.release()
 
@@ -203,7 +211,7 @@ class ProjectPersistenceTests(unittest.TestCase):
             writer.commit(self.root, self.state, first.revision_id,
                           workspace_overlays={"references": overlay})
 
-        self.assertEqual(persistence.current("chapter").revision_id, first.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, first.revision_id)
         self.assertEqual((self.root / "references/old.png").read_bytes(), b"old reference")
         self.assertFalse((self.root / "references/new.png").exists())
         writer.release()
@@ -274,7 +282,7 @@ class PipelinePersistenceTests(unittest.TestCase):
         )
         router.load_project()
         router.render_selected(schemas.RenderCommand(scene_ids=["scene_001"]))
-        accepted = persistence.current("chapter")
+        accepted = require_revision(persistence.current("chapter"))
         take = next(iter(router.project.takes.values()))[0]
         audio_path = self.root / take.path
         audio_hash = hashlib.sha256(audio_path.read_bytes()).hexdigest()
@@ -290,7 +298,7 @@ class PipelinePersistenceTests(unittest.TestCase):
             persistence=next_writer,
         )
         loaded = resumed.load_project()
-        self.assertEqual(persistence.current("chapter").revision_id, accepted.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, accepted.revision_id)
         self.assertEqual(sum(map(len, loaded.takes.values())), 2)
         resumed.render_selected(schemas.RenderCommand(scene_ids=["scene_001"]))
         self.assertEqual(hashlib.sha256(audio_path.read_bytes()).hexdigest(), audio_hash)
@@ -308,14 +316,14 @@ class PipelinePersistenceTests(unittest.TestCase):
             persistence=writer,
         )
         router.load_project()
-        current = persistence.current("chapter")
+        current = require_revision(persistence.current("chapter"))
         project_bytes = (self.root / "project.json").read_bytes()
         revisions.fail_next_commit = True
 
         with self.assertRaises(WorkflowError):
             router.render_selected(schemas.RenderCommand(scene_ids=["scene_001"]))
 
-        self.assertEqual(persistence.current("chapter").revision_id, current.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, current.revision_id)
         self.assertEqual((self.root / "project.json").read_bytes(), project_bytes)
         writer.release()
         recovered = persistence.acquire("chapter", "worker-2")
@@ -329,7 +337,7 @@ class PipelinePersistenceTests(unittest.TestCase):
         writer = persistence.acquire("chapter", "worker-1")
         router = PipelineRouter(PipelineConfig(workspace=self.root), persistence=writer)
         router.load_project()
-        current = persistence.current("chapter")
+        current = require_revision(persistence.current("chapter"))
         cast_manifest = {"characters": [{"speaker_id": "D", "name": "D", "is_generic": True}]}
         pack = Path(self.fixture.root) / "replacement-cast.zip"
         with zipfile.ZipFile(pack, "w") as archive:
@@ -341,7 +349,7 @@ class PipelinePersistenceTests(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             router.import_cast(pack)
 
-        self.assertEqual(persistence.current("chapter").revision_id, current.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, current.revision_id)
         self.assertEqual((self.root / "references/cast.json").read_bytes(), old_manifest)
         self.assertFalse((self.root / "references/new-reference.bin").exists())
         writer.release()
@@ -358,11 +366,11 @@ class PipelinePersistenceTests(unittest.TestCase):
         current_writer = persistence.acquire("chapter", "worker-2")
         current_router = PipelineRouter(PipelineConfig(workspace=self.root), persistence=current_writer)
         current_router.load_project()
-        before = persistence.current("chapter")
+        before = require_revision(persistence.current("chapter"))
         with self.assertRaises(WorkflowError) as conflict:
             stale_router.update_metadata({"title": "Stale worker"})
         self.assertEqual(conflict.exception.detail.code, "stale_fence")
-        self.assertEqual(persistence.current("chapter").revision_id, before.revision_id)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, before.revision_id)
         current_writer.release()
 
     def test_transport_metadata_advances_the_same_revision_pointer(self):
@@ -370,11 +378,11 @@ class PipelinePersistenceTests(unittest.TestCase):
         writer = persistence.acquire("chapter", "worker-1")
         router = PipelineRouter(PipelineConfig(workspace=self.root), persistence=writer)
         router.load_project()
-        before = persistence.current("chapter")
+        before = require_revision(persistence.current("chapter"))
 
         updated = router.update_metadata({"title": "Durable title"})
 
-        current = persistence.current("chapter")
+        current = require_revision(persistence.current("chapter"))
         self.assertNotEqual(current.revision_id, before.revision_id)
         self.assertEqual(current.parent_revision_id, before.revision_id)
         self.assertEqual(current.project_hash, hashlib.sha256(
@@ -387,23 +395,25 @@ class PipelinePersistenceTests(unittest.TestCase):
         writer = persistence.acquire("chapter", "worker-1")
         router = PipelineRouter(PipelineConfig(workspace=self.root), persistence=writer)
         router.load_project()
-        before = persistence.current("chapter")
+        before = require_revision(persistence.current("chapter"))
 
-        with patch("manga_tts.persistence.ProjectWriter._replace_workspace",
-                   side_effect=OSError("local volume unavailable")):
-            with self.assertRaises(WorkflowError) as result:
-                router.update_metadata({"title": "Accepted revision"})
+        with (
+            patch("manga_tts.persistence.ProjectWriter._replace_workspace",
+                  side_effect=OSError("local volume unavailable")),
+            self.assertRaises(WorkflowError) as result,
+        ):
+            router.update_metadata({"title": "Accepted revision"})
 
         self.assertEqual(result.exception.detail.code, "checkpoint_materialization_pending")
-        current = persistence.current("chapter")
+        current = require_revision(persistence.current("chapter"))
         self.assertNotEqual(current.revision_id, before.revision_id)
         self.assertEqual(current.parent_revision_id, before.revision_id)
         self.assertTrue(writer.materialization_pending)
         with self.assertRaises(PersistenceConflict) as blocked:
             writer.commit(self.root, schemas.dump(router.project), current.revision_id)
         self.assertEqual(blocked.exception.code, "workspace_refresh_required")
-        self.assertEqual(persistence.current("chapter").revision_id, current.revision_id)
-        restored = writer.load(self.root)
+        self.assertEqual(require_revision(persistence.current("chapter")).revision_id, current.revision_id)
+        restored = require_revision(writer.load(self.root))
         self.assertEqual(restored.revision_id, current.revision_id)
         self.assertEqual(read_json(self.root / "project.json")["title"], "Accepted revision")
         writer.release()
