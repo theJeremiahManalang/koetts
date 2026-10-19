@@ -1,30 +1,16 @@
-# Active task context
+# Task checkpoint
 
-Updated 19 October 2026.
+Updated 19 October 2026. Assignment: implement S0 baseline verification, including
+real process interruption/recovery and isolated production HTTP verification.
 
-## Assignment and decisions
-
-Consolidate project documentation and agent context after the confirmed alignment
-interview. Documentation/harness only; runtime implementation is outside this task.
-Accepted product, access boundaries, target stack, and unresolved inputs are recorded
-in `docs/target-design.md`. Document authority is indexed by `docs/README.md`.
-Project skills stay in `.agents/skills/`; other agent docs stay in `docs/`, except
-`AGENTS.md` and `CONTEXT.md`.
-
-## Work and verification
-
-Consolidated current architecture, target design, and scope invocation. Preserved
-historical handoff/prompts/walkthrough in `docs/archive/`; removed the root audio
-workflow duplicate after confirming differences were only obsolete setup links.
-Repaired instruction routing and baseline links. No runtime changes, provider calls,
-cloud mutations, dependency installation, or application test execution.
-Verification: local Markdown links resolve across 28 documents; manga-workflow
-skill format validation passes; `git diff --check` passes. Historical application
-checks remain historical. Existing user changes were preserved.
-
-## Next action
-
-Assign S0 explicitly to reproduce baseline checks and stabilize local execution.
-S0 is not started or completed. No `docs/alignment-status.md` exists yet; create it
-when recording implementation-scope evidence. Resolve dependent open decisions
-before later production behavior; do not infer cloud policy from archived documents.
+- Accepted boundary: S0 only; preserve local studio, reader demo, engine contracts,
+  supplied samples/results, and pre-existing `AGENTS.md` / `docs/agents/` edits.
+- Added process recovery and disposable HTTP harnesses under `tests/`; extended
+  HTTP stale-revision coverage. Updated startup/documentation authority and glossary.
+- Exact commands, outcomes, environment recovery, changed boundaries, and limitations
+  are recorded in `docs/alignment-status.md`; use that acceptance evidence directly.
+- Runtime source/configuration and dependency manifests remain unchanged. No paid
+  generation, model downloads, human production approvals, or deployment occurred.
+- S0 is complete. No remaining S0 blockers. S1 is next eligible, but requires a new
+  assignment and resolution of edit ownership, stale-worker promotion, and fencing
+  policy in `docs/target-design.md` before dependent implementation.

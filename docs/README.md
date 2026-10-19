@@ -7,6 +7,8 @@ files hold different kinds of context; a future design is not runtime evidence.
 
 | Need | Authoritative document |
 | --- | --- |
+| Substantial new task or material scope change | [prompt approval](agents/prompt-approval.md) |
+| Writing agent instructions or skills | [project writing-for-agents skill](../.agents/skills/writing-for-agents/SKILL.md) |
 | Current architecture and code seams | [architecture.md](architecture.md) |
 | Accepted release scope, target architecture, unresolved decisions | [target-design.md](target-design.md) |
 | Implementation scopes and acceptance checks | [architecture-alignment-plan.md](architecture-alignment-plan.md) |
@@ -19,9 +21,12 @@ files hold different kinds of context; a future design is not runtime evidence.
 
 [AGENTS.md](../AGENTS.md) routes agents to conditional context. Project skills live
 under `.agents/skills/`; they contain reusable procedures, not roadmap status.
+For harness validation evidence and measured reading costs, consult
+[the prompt-approval validation record](agents/prompt-approval-validation.md).
 [CONTEXT.md](../CONTEXT.md) records the active assignment and handoff only.
-Migration acceptance evidence belongs in `alignment-status.md` when S0 begins;
-that report does not exist yet. Avoid treating its absence as a completed S0.
+Migration acceptance evidence belongs in [alignment-status.md](alignment-status.md).
+Use its recorded source boundaries, commands, outcomes, and limitations to assess
+scope prerequisites; historical reports alone do not establish completion.
 
 ## Historical material
 
