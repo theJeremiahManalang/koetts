@@ -7,6 +7,12 @@ import Link from "next/link";
 export default function RequestMangaPage() {
   const searchParams = useSearchParams();
 
+  const mangaId =
+  searchParams.get("mangaId") || "";
+
+  const chapterId =
+  searchParams.get("chapterId") || "";  
+
   const selectedManga =
     searchParams.get("manga") || "";
 
