@@ -2,16 +2,16 @@
 import contextlib
 import io
 import json
-from pathlib import Path
 import tempfile
-from types import SimpleNamespace
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
 
-from runners import validate_options
 import run
+from runners import validate_options
 
 
 class RunnerTests(unittest.TestCase):

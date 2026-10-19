@@ -2,13 +2,14 @@
 import json
 import shutil
 import unittest
-from unittest.mock import patch
 import uuid
+from unittest.mock import patch
 
+import test_audio_pipeline as fixtures
+
+import web_workflow
 from manga_tts import PipelineConfig, PipelineRouter
 from manga_tts.storage import read_json, write_json
-import test_audio_pipeline as fixtures
-import web_workflow
 
 
 class WebWorkflowTests(unittest.TestCase):

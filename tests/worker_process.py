@@ -1,13 +1,14 @@
 """Subprocess harness for real worker execution with offline audio only."""
 import json
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 from unittest.mock import patch
+
+from test_audio_pipeline import wav_bytes
 
 import web_workflow
 from manga_tts import PipelineRouter
-from test_audio_pipeline import wav_bytes
 
 
 def main():

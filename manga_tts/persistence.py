@@ -7,16 +7,17 @@ to its filesystem persistence in :mod:`manga_tts.storage`.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
-from pathlib import Path, PurePosixPath
 import shutil
 import tempfile
 import threading
 import uuid
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Mapping, Protocol
+from typing import Protocol
 
 from .schemas import Project, ProjectV1
 from .storage import digest, load_project, read_json, write_json
@@ -232,7 +233,7 @@ class ProjectPersistence:
         self._artifacts = artifacts
         self._revisions = revisions
 
-    def acquire(self, project_id: str, owner_id: str) -> "ProjectWriter":
+    def acquire(self, project_id: str, owner_id: str) -> ProjectWriter:
         """Acquire exclusive project ownership; an interrupted owner stays fenced."""
         fence = self._revisions.acquire(project_id, owner_id)
         return ProjectWriter(self._artifacts, self._revisions, fence)
@@ -360,7 +361,7 @@ class ProjectWriter:
         """Whether the last committed revision still needs a local workspace refresh."""
         return self._materialization_pending
 
-    def __enter__(self) -> "ProjectWriter":
+    def __enter__(self) -> ProjectWriter:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:

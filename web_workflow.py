@@ -1,12 +1,12 @@
 """Local Next.js bridge for reviewed Manga-TTS jobs. Never trusts client paths."""
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 from manga_tts import PipelineConfig, PipelineRouter, schemas, tts
 from manga_tts.cli import workspace_lock

@@ -2,11 +2,11 @@
 import copy
 import io
 import json
-from pathlib import Path
 import tempfile
 import unittest
 import wave
 import zipfile
+from pathlib import Path
 
 from PIL import Image
 
@@ -98,6 +98,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_compiled_mp3_exports_all_or_specific_scenes_in_chapter_order(self):
         import subprocess
+
         from imageio_ffmpeg import get_ffmpeg_exe
         self.approve()
         draft = review_document(self.router.project, "sources")

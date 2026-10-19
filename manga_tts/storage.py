@@ -1,16 +1,26 @@
 """Storage stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
+
 import copy
 import hashlib
 import json
-from pathlib import Path, PurePosixPath
 import re
-import zipfile
 import tempfile
+import zipfile
+from pathlib import Path, PurePosixPath
 from typing import Any
-from .config import VERSION, UNKNOWN, NARRATOR, VOICES, DEFAULT_PROJECT_SETTINGS, MAX_ARCHIVE_BYTES, MIN_OCR_IOU, PathLike
-from .schemas import Project, ProjectV1, ChapterInput, CastManifest, validate_contract
 
+from .config import (
+    DEFAULT_PROJECT_SETTINGS,
+    MAX_ARCHIVE_BYTES,
+    MIN_OCR_IOU,
+    NARRATOR,
+    UNKNOWN,
+    VERSION,
+    VOICES,
+    PathLike,
+)
+from .schemas import CastManifest, ChapterInput, Project, ProjectV1, validate_contract
 
 
 def digest(value: Any) -> str:

@@ -1,16 +1,20 @@
 """Resolution stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
+
 import copy
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-from .config import PathLike, TEXT_POLICY_VERSION, CACHE_REVISION, DEFAULT_MAX_RETRIES
-from .schemas import Project, validate_contract
+from typing import Any
+
 from .cleaner import normalize_planning_data, normalize_text
-from .storage import asset, digest, read_json, write_json
+from .config import CACHE_REVISION, DEFAULT_MAX_RETRIES, TEXT_POLICY_VERSION, PathLike
+from .gemini import LOGGER, retry_api
+from .schemas import Project, validate_contract
 from .script import apply_proposal
-from .gemini import retry_api, LOGGER
+from .storage import asset, digest, read_json, write_json
+
 PLAN_SCHEMA = {
     "type": "object", "properties": {
         "appearances": {"type": "array", "items": {"type": "object", "properties": {
@@ -108,8 +112,8 @@ def propose_plan(p: dict[str, Any], root: PathLike, client: Any, progress: Calla
         proposal = read_json(path)
         apply_proposal(copy.deepcopy(p), proposal)
     else:
-        from PIL import Image
         from google.genai import types
+        from PIL import Image
         report("Preparing page images, cast references and appearance crops…")
         contents = [PLAN_PROMPT, json.dumps(data, ensure_ascii=False)]
         def attach(label, path, size):

@@ -5,7 +5,6 @@ Use the audio environment's interpreter. Default mode builds and starts producti
 """
 import argparse
 import os
-from pathlib import Path
 import shutil
 import signal
 import socket
@@ -15,6 +14,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

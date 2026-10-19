@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from unittest.mock import patch
+
+import test_audio_pipeline as fixtures
 
 from manga_tts import PipelineConfig, PipelineRouter, schemas
 from manga_tts.persistence import (
@@ -18,9 +20,8 @@ from manga_tts.persistence import (
     PersistenceConflict,
     ProjectPersistence,
 )
-from manga_tts.storage import read_json, write_json
 from manga_tts.schemas import WorkflowError
-import test_audio_pipeline as fixtures
+from manga_tts.storage import read_json, write_json
 
 
 class BarrierArtifactStore(InMemoryArtifactStore):
