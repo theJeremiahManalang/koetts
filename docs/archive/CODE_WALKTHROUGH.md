@@ -1,8 +1,8 @@
-> Historical walkthrough of the original OCR proof of concept. For the current studio workflow, see [AUDIO_WORKFLOW.md](AUDIO_WORKFLOW.md).
+> Historical walkthrough of the original OCR proof of concept. For the current studio workflow, see [AUDIO_WORKFLOW.md](../AUDIO_WORKFLOW.md).
 
 # Manga text: file guide and request walkthrough
 
-This guide describes the current implementation. Start with the numbered flow,
+This guide describes the original OCR proof of concept, not the current studio. Start with the numbered flow,
 then use the file guide to find the code you want to change.
 
 ## 1. The complete path

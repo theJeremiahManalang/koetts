@@ -1,6 +1,6 @@
 # Architecture alignment implementation plan
 
-Updated 19 October 2026. Read [the handoff](architecture-handoff.md) first. This plan applies to the existing app in [the supplied baseline](current-app-baseline.md), not a new web application.
+Updated 19 October 2026. Read [current architecture](architecture.md) and [the accepted target](target-design.md) first. This plan applies to the existing app in [the supplied baseline](current-app-baseline.md), not a new web application.
 
 ## Scope selection
 
@@ -16,6 +16,10 @@ Execute one selected scope per implementation assignment. Stop at that scope's a
 | S5 | Cloud adapters, deployment integration and operational recovery evidence | S1–S4; cloud inputs |
 
 Recommended order: S0, S1, S2, S3, S4, S5. S1–S4 can develop locally with injected identities/providers. Keep hosted processing disabled until S3 access controls and S5 service integration are verified. No scope is complete merely because scaffolding exists.
+
+Before implementing a dependent contract, resolve its open decision in
+[target-design.md](target-design.md). Local fakes can support independent work,
+but cannot establish unresolved production policy.
 
 ## S0 — Stabilize and verify the existing app
 
@@ -55,7 +59,7 @@ Likely boundaries: `web/lib/workflow.ts`, workflow route, `web_workflow.py`, wor
 
 Separate the current local subprocess executor from a durable execution adapter. Keep local execution available. API enqueue returns an operation ID only after persistence. Define operation states and legal transitions, pinned revision/source/configuration, dedupe key, attempt count, fence, lease, external execution identity, progress and checkpoint/output pointers.
 
-Use transactional global slots for MAGI and pipeline stages. Workers accept operation ID/fence and resolve trusted parameters server-side. Adapt existing extraction/planning/render/export rather than rewriting them. Planning persists an unapplied proposal; rendering preflights approvals; export synthesizes nothing. Add reconciliation for dispatch crashes, stale leases, unfinished jobs and uncertain outcomes. Enforce the cloud design's retry ceiling under one authority.
+Use transactional global slots for MAGI and pipeline stages. Workers accept operation ID/fence and resolve trusted parameters server-side. Adapt existing extraction/planning/render/export rather than rewriting them. Planning persists an unapplied proposal; rendering preflights approvals; export synthesizes nothing. Add reconciliation for dispatch crashes, stale leases, unfinished jobs and uncertain outcomes. Resolve the S2 policy decisions in `target-design.md` before implementing production scheduling; enforce the accepted retry ceiling under one authority.
 
 Acceptance:
 
@@ -87,7 +91,7 @@ Excluded: catalog/request fulfillment, public rollout and replacing the studio U
 
 Likely boundaries: existing browse/manga/read/request routes, new missing requests route, persisted catalog/request/publication services and audio review UI.
 
-Replace hardcoded statuses and browser-only requests with persisted chapter/configuration identities, deduplicated requests, reader-safe status and admin approval/fulfillment. Use an explicit source adapter/fixture until the external manga API contract exists. Implement `/requests` or update navigation to the actual supported route.
+Replace hardcoded statuses and browser-only requests with persisted chapter/configuration identities, deduplicated requests, reader-safe status and admin approval/fulfillment. Readers submit manga/chapter references; admins supply authorized source images. Use explicit source fixtures/adapters; automated scraping and external catalog integration are deferred. Readers see shared published catalog/audio and their own requests. Implement `/requests` or update navigation to the actual supported route.
 
 Add an explicit persisted admin audio-review decision bound to exact export version, revision, settings and artifact checksums. The app records a review decision, not a claim that it can prove a human listened. Publish only that reviewed export through an atomic pointer commit; link publication to request fulfillment and catalog status. Keep old published audio during replacement work/failure.
 
@@ -104,9 +108,9 @@ Excluded: translation, word alignment, shared manga-wide cast and unrelated visu
 
 ## S5 — Real cloud integration and deployment evidence
 
-Use [the setup checklist](gcp-firebase-setup-checklist.md), verifying current official platform documentation before implementation. Add real Firestore/GCS adapters, Cloud Run API/worker containers, execution workflow, event ingestion and scheduled reconciliation. Current ingest examples alone do not dispatch jobs. Bind configuration to the existing Next app root and actual Firebase backend; resolve the reported backend-ID documentation drift from verified configuration.
+Resolve S5 inputs listed in `target-design.md` and verify current official platform documentation before infrastructure implementation. Add real Firestore/GCS adapters, Cloud Run API/worker containers, execution workflow, event ingestion and scheduled reconciliation. Bind configuration to the existing Next app root and actual Firebase backend; verify backend identity against configuration and deployed state.
 
-Package the existing MAGI runtime and measure representative input before sizing. Validate archive/object identities and preserve required review evidence before exact-generation ingest deletion. Implement reference-aware retention per the cloud design. Establish actual origins/CORS, URL refresh/seeking and secret injection. Keep deployment/paid-generation execution distinct from local preparation and obtain any missing execution authorization before those steps.
+Package the existing MAGI runtime and measure representative input before sizing. Validate archive/object identities and preserve required review evidence before exact-generation ingest deletion. Implement reference-aware retention under the resolved retention policy. Establish actual origins/CORS, URL refresh/seeking and secret injection. Keep deployment/paid-generation execution distinct from local preparation and obtain any missing execution authorization before those steps.
 
 Acceptance:
 

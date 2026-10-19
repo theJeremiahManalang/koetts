@@ -8,12 +8,21 @@ The earlier Windows speech prototype has been replaced with the reviewed
 ## Start locally
 
 1. Install the Python dependencies described in `../docs/AUDIO_WORKFLOW.md`.
-2. From this directory run `npm ci`, then `npm run dev`.
+2. Select a Python 3.11+ environment with the audio dependencies installed. From
+   this directory run `npm ci`, then start Next with that interpreter explicitly:
+
+   ```bash
+   PYTHON_EXECUTABLE=/absolute/path/to/environment/bin/python npm run dev
+   ```
 3. Open http://127.0.0.1:3000. For a production build, run `npm run build` and
    `npm start` instead.
 
-The server uses the repository's `.venv` Python if present. Otherwise it uses
-`python`; set `PYTHON_EXECUTABLE` to choose a different interpreter.
+For production startup, use the same explicit interpreter with `npm start`.
+`PYTHON_EXECUTABLE` takes precedence over the repository's `.venv` Python and the
+final `python` fallback. A host with only `python3` must select a compatible
+interpreter explicitly; installing Node dependencies does not install Python
+dependencies. Both the workflow worker and legacy extraction route use this
+selection order.
 Set `GEMINI_API_KEY` in the server environment before starting Next.js for new
 planning or audio. Keys are never entered in the browser or sent to it. MagiV3
 extraction needs its model dependencies and weights; first loading may download
@@ -74,11 +83,38 @@ but provider retries can still incur duplicate costs after uncertain timeouts.
 
 ## Checks
 
-`npm run typecheck` and `npm run build` validate the frontend. From the repository
-root, `python -m unittest discover -s tests -v` checks backend and worker contracts.
+`npm test`, `npm run typecheck`, and `npm run build` validate the frontend. From
+the repository root, run
+`/absolute/path/to/environment/bin/python -m unittest discover -s tests -v`
+to check backend and worker contracts.
 The web-worker tests cover stale edits, sanitized validation failures, restore,
 inspection, rendering with an injected renderer, export and bundle creation.
+The process recovery test also kills a real worker after its first segment is
+saved, checks writer exclusion and stale-edit rejection, and verifies restart
+reuse and bundle restoration. It uses only temporary projects and synthetic audio.
 Live visual/browser checks and provider quality evaluation remain separate checks.
+
+For a disposable production HTTP check, first install `web/node_modules`, then
+run from the repository root:
+
+```bash
+/absolute/path/to/environment/bin/python tests/verify_local_http.py
+```
+
+This copies runtime source and Node dependencies into a temporary directory,
+builds and starts the studio with an explicit interpreter, runs the HTTP test,
+checks the existing reader routes, and separately builds/starts frontend-only
+mode to check its redirect and processing guards. It clears the Gemini key for
+its children, stops the servers, and removes the temporary runtime. Repository
+results and supplied samples remain untouched. Allow approximately 400 MB for the
+dependency copy, plus build output. Network access is not required after dependencies
+are installed; loopback binding and child processes must be permitted.
+
+The runner's `--dev` option verifies development transport separately; adding
+`--webpack` selects an explicit diagnostic fallback. Neither establishes a passing
+production build. If a restricted build fails on internal port binding, repeat
+with the required process permissions and a fresh build cache before changing
+runtime configuration. See `../docs/alignment-status.md` for exact S0 evidence.
 
 For the optional HTTP integration check, start the production server and set
 `MANGA_WEB_TEST_URL=http://127.0.0.1:3001` (adjust the port). Run
