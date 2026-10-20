@@ -1,5 +1,11 @@
 # Merge recovery notes
 
+Repair completed after explicit user approval on 21 October 2026. The server page
+gate and API import are restored; incoming operation recovery now lives in the
+authenticated client workspace. All 25 web tests, typecheck, and production build
+passed. See `CONTEXT.md` for exact commands and limits. The notes below record
+the original pre-resolution state.
+
 Recorded 21 October 2026 before resolving conflicts on `dev-test-1`.
 The user requested preservation notes before potentially accepting incoming.
 Implementation and merge resolution have not been performed.

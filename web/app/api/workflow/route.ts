@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { requireAdmin } from "../../../lib/require-admin";
 import { mkdir, readdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import {

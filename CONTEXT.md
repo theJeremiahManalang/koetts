@@ -1,16 +1,30 @@
 # Task checkpoint
 
-## Active handoff: 21 October 2026 merge preservation
+## Active handoff: 21 October 2026 merge repair
 
-- Objective: preserve changes while the user resolves the merge from `main` into
-  `dev-test-1`. Preservation notes authorized; implementation not started.
-- Recovery sources, integration decisions, and affected paths:
-  [merge recovery notes](docs/merge-recovery-2026-10-21.md).
-- Changed in this task: that note and this checkpoint only.
-- Checks: Git status, combined conflict diff, commit IDs, and targeted source
-  inspection. Two unresolved paths were observed; no tests were run.
-- Next action: integrate authorization and incoming durable-operation behavior
-  together after approval. The previous task checkpoint below is historical.
+- Objective and approval: user explicitly approved restoring the admin-gated page,
+  integrating incoming operation retry/recovery into the authenticated workspace,
+  repairing the API import, and running web checks. Starting tree was clean after
+  merge commit `60bd75b`.
+- Changed: `web/app/page.tsx` restores the server authorization gate and
+  frontend-only `/browse` redirect. `web/app/studio-workspace.tsx` incorporates
+  incoming idempotency, pending-operation lookup, and reconciliation handling while
+  retaining Firebase authorization, the client admin gate, and KoeTTS branding.
+  `web/app/api/workflow/route.ts` restores the missing `requireAdmin` import.
+- Regression checks: `web/tests/studio-page.test.cjs` covers anonymous/non-admin
+  redirects, authorized rendering, and frontend-only short-circuiting.
+  `web/tests/workflow-route.test.cjs` mocks authorization for existing enqueue tests
+  and verifies GET/POST denial before processing.
+- Results from `web/`: `npm.cmd test` passed all 25 tests; `npm.cmd run typecheck`
+  passed; `npm.cmd run build` passed. `git diff --check` passed.
+  PowerShell blocked the initial `npm` script launcher; using `npm.cmd` succeeded
+  without changing execution policy. Build warned about an outside-repository lockfile.
+  Generated `web/next-env.d.ts` changes were reverted.
+- Limits: no Python source changed; Python tests and live Firebase/browser checks
+  were not run. No deployment or paid generation occurred.
+- Next action: user review/commit. No implementation blocker remains.
+  [Recovery notes](docs/merge-recovery-2026-10-21.md) preserve pre-resolution sources.
+  The earlier checkpoint below is historical.
 
 Updated 20 October 2026. S1/S2 review and remediation completed on
 `feat/architecture-alignment`, starting from `b7d4ff2`.
