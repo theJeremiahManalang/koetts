@@ -1,29 +1,59 @@
 # Task checkpoint
 
-Updated 19 October 2026. Assignment: clear conflicts on PR #9 by syncing current
-`main` into `feat/architecture-alignment`. Keep the pull request open and unmerged.
+Updated 20 October 2026. Completed S2, durable local operations and recoverable
+local workers, on `feat/architecture-alignment` from starting commit `a5e59a2`.
 
-- Approval: user approved updating the feature branch from `main`, resolving the
-  conflicts, and pushing the feature branch so PR #9 has no conflicts. No merge into
-  `main` is authorized.
-- Baseline: `origin/main` at `ad672f970130cab219304a3127e79710dad178ed`; feature
-  branch before sync at `ad4549d41086901edbaacc157f9d2fc9848131d9`.
-- Resolution: conflicts in `docs/alignment-status.md`, `docs/architecture.md`,
-  `docs/target-design.md`, `tests/test_worker_process.py`,
-  `tests/verify_local_http.py`, and `tests/worker_process.py` retain the feature
-  branch's S1 evidence and harness changes. `tests/test_web_http.py` auto-merged.
-  `CONTEXT.md` now records this assignment. The result preserves S1 decisions,
-  acceptance evidence, and current main's S0 history.
-- Verification: `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -v`
-  passed (59 tests: 57 passed, two optional skips for the missing external sample
-  and local web server). `npm test` passed (8 tests), `npm run typecheck` passed,
-  and `npm run build` passed with Next.js 16.4.0 and 11 routes.
-  `git diff --check --cached` passed; no conflict markers remain in the resolved
-  files.
-- PR: [PR #9](https://github.com/theJeremiahManalang/koetts/pull/9) remains open
-  against `main`.
-- Review: Standards found zero violations. Spec review found no missing or incorrect
-  S1 behavior, and flagged `e44e4c8` for import sorting across 28 files plus
-  unrelated `run.py` and storage exception changes; their need is not documented.
-- Next action: push the feature branch and confirm GitHub reports the PR as
-  conflict-free. Leave PR #9 open.
+- **Approval:** user approved the S2 prompt and implementation plan. Scope excludes
+  cloud storage/deployment, live or paid generation, publication, and new Node
+  dependencies.
+- **Decisions:** `docs/target-design.md` records same-host SQLite/WAL scheduling,
+  one local slot per MAGI/pipeline stage, per-project exclusivity, idempotency,
+  three store-owned attempts, one provider request per worker attempt, 30-minute
+  timeout, 15-second heartbeat, 60-second lease, process-identity recovery, and
+  operator reconciliation for uncertain provider outcomes. Upload bytes and
+  relevant existing visual evidence are fingerprinted at enqueue and verified before
+  worker execution. The browser retains multiple pending idempotency keys until the
+  corresponding operation is found. `GLOSSARY.md` records the lifecycle terms.
+- **Implementation:** `manga_tts/operations.py` owns persistence, claims, fences,
+  retries, leases, checkpoints, process reconciliation, and operator resolution.
+  `web_workflow.py` dispatches finite workers with operation ID/fence and loads
+  trusted parameters from SQLite. Provider callbacks and project locks preserve
+  existing engine behavior. The Next workflow route requires `Idempotency-Key`,
+  supports lookup by key, and falls back to old JSON job files for polling. The UI
+  stops polling and explains `reconciliation_required`. `requirements-audio.txt`
+  adds bounded `psutil` for local PID/create-time verification.
+- **Changed source/tests:** `manga_tts/operations.py`, `manga_tts/cli.py`,
+  `manga_tts/resolution.py`, `manga_tts/router.py`, `manga_tts/tts.py`,
+  `web_workflow.py`, `web/lib/workflow.ts`, `web/app/api/workflow/route.ts`,
+  `web/app/page.tsx`, `web/lib/types.ts`, `web/lib/idempotency.ts`,
+  `requirements-audio.txt`,
+  `tests/test_operations.py`, `tests/test_operation_worker_process.py`,
+  `tests/operation_worker_process.py`, `tests/test_web_workflow.py`,
+  `tests/test_web_http.py`, and `web/tests/idempotency.test.cjs`.
+- **Changed docs:** `docs/target-design.md`, `docs/architecture.md`,
+  `docs/AUDIO_WORKFLOW.md`, `docs/alignment-status.md`, `web/README.md`,
+  `GLOSSARY.md`, and this checkpoint.
+- **Review fixes already applied:** extract the shared SQLite claim transition,
+  remove the unused store protocol, pass `OperationClaim` through worker state
+  transitions, clear provider uncertainty after durable result checkpoint, resume
+  safe stopped work automatically, and make the operation store the sole retry
+  authority. Later review fixes consolidated the action registry and status types,
+  fixed multipart idempotency-key recovery after conflicts/lost responses, and
+  rejected changed upload or planning evidence before worker execution. Initial and
+  final review reports found no hard code standard breach or remaining
+  judgement-call smells. The Spec review found no remaining requirements gaps.
+  Findings for checkpoint resume, multipart and lost-response key recovery, source
+  image/crop/upload fingerprints, and changed-path inventory were fixed and rechecked.
+- **Checks passed:** focused Python suites `test_operations`, `test_web_workflow`,
+  and `test_operation_worker_process` (35 tests), plus `test_worker_process` (one
+  test); final full Python discovery (80 tests: 78 passed, two expected skips);
+  scoped Ruff and import sorting; scoped Pyright (zero diagnostics); `npm test` (10
+  passed); `npm run typecheck`; `npm run build` (Next.js 16.4.0);
+  `tests/verify_local_http.py` (studio HTTP integration and frontend-only guards);
+  and `git diff --check a5e59a2...HEAD`.
+- **Limits:** no Firestore, Cloud Run, live model/provider call, paid generation, or
+  publication work ran. SQLite/WAL is local-host only; tests do not claim power-loss
+  durability. `/tmp/manga-s2-venv` and `/tmp/manga-s2-pyrightconfig.json` are
+  temporary verification setup; no runtime dependency beyond `psutil` was added.
+- **Next action:** hand off S2 as complete. S3 is the next eligible scope in the
+  alignment plan. No push was requested.

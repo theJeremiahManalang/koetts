@@ -65,21 +65,41 @@ as the last export, which may predate later edits.
 
 Projects live in `results/web/projects/<id>/`; jobs, staged uploads and downloads
 live in sibling directories. Browser storage contains only the active project/job
-IDs, not scripts or credentials. Saved-project selection works after refresh.
-Uploaded staging files are removed after the worker finishes.
+IDs and pending idempotency intents with request fingerprints for enqueue recovery;
+it does not store scripts or credentials. It keeps multiple pending keys until their
+operations are found, so a different request cannot overwrite a key after a lost
+enqueue response. Saved-project selection works after refresh.
+Successful uploads are removed after import; uploads for interrupted work remain
+until the operation finishes.
 
-Next routes start Python workers and immediately return job IDs. The browser polls
-persisted progress and reconnects after refresh. Workers use the same workspace
-lock as the CLI and checkpoint audio per segment. Two workers may run at once;
-only one writer may own a project. Do not use an external router writer on the same
-workspace concurrently. A terminated worker may leave a lock; confirm the recorded
-process is no longer running before removing it. If the whole server stops abruptly,
-job progress can remain unfinished; reload saved state after resolving the lock.
+Next routes persist operations in `results/web/operations.sqlite3` before returning
+IDs. SQLite coordinates one MAGI slot and one pipeline slot across local processes;
+only one operation may own a project at a time. The browser polls persisted progress
+and reconnects after refresh. Duplicate submission with the same key and same request
+returns the same operation; a changed request with that key conflicts. Existing JSON
+job files remain readable for legacy polling. Upload bytes and existing project
+visual evidence are fingerprinted at enqueue and rechecked before worker execution.
 
-This is a **local-only application**, bound to loopback with origin checks. It has
-no user authentication, cloud queue, or multi-user isolation. Do not expose it to a
-network or deploy these routes as serverless functions. Paid operations are explicit,
-but provider retries can still incur duplicate costs after uncertain timeouts.
+Workers use the same workspace lock as the CLI and checkpoint audio per segment.
+They heartbeat every 15 seconds under a 60-second lease, with a 30-minute attempt
+limit. The operation store owns at most three attempts; a durable worker makes one
+provider request per attempt. Expired leases trigger local process identity checks;
+expiration alone does not release capacity. If a provider result is uncertain, the
+slot remains reserved until an operator resolves it. Use the operation ID shown in
+the error with the configured Python interpreter:
+
+```bash
+"$PYTHON_EXECUTABLE" web_workflow.py reconcile <operation-id> fail
+"$PYTHON_EXECUTABLE" web_workflow.py reconcile <operation-id> retry
+```
+
+Retry may repeat provider billing and counts toward the three-attempt ceiling. The
+command verifies the recorded process where possible. If the process identity cannot
+be read, first confirm it stopped, then add `--worker-stopped`. The
+SQLite database must remain on local storage and cannot coordinate multiple hosts.
+This is a **local-only application**, bound to loopback with origin checks. It has no
+user authentication, hosted queue, or multi-user isolation. Do not expose it to a
+network or deploy these routes as serverless functions.
 
 ## Checks
 
@@ -88,10 +108,11 @@ the repository root, run
 `/absolute/path/to/environment/bin/python -m unittest discover -s tests -v`
 to check backend and worker contracts.
 The web-worker tests cover stale edits, sanitized validation failures, restore,
-inspection, rendering with an injected renderer, export and bundle creation.
-The process recovery test also kills a real worker after its first segment is
-saved, checks writer exclusion and stale-edit rejection, and verifies restart
-reuse and bundle restoration. It uses only temporary projects and synthetic audio.
+inspection, rendering with an injected renderer, export, bundle creation, durable
+enqueue, stage claims, leases and fences. A process test kills a real operation worker
+after its first segment is saved, explicitly resolves the uncertain attempt, and
+verifies restart reuse without regenerating that segment. It uses temporary projects
+and synthetic audio.
 Live visual/browser checks and provider quality evaluation remain separate checks.
 
 For a disposable production HTTP check, first install `web/node_modules`, then

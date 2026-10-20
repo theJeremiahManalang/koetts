@@ -1,9 +1,10 @@
 # Manga panels to reviewed audio
 
-This branch integrates the user-supplied `manga_tts` backend with the MagiV3 starter from `main`. The implementation is a local single-writer backend, with a
-CLI and a local web interface adapted from
-`character-analysis-web`. See [web/README.md](../web/README.md) to start the UI. It is
-not a hosted multi-user service.
+This branch integrates the user-supplied `manga_tts` backend with the MagiV3 starter
+from `main`. The implementation is a local per-project single-writer backend with a
+CLI and a local web interface adapted from `character-analysis-web`. See
+[web/README.md](../web/README.md) to start the UI. It is not a hosted multi-user
+service.
 
 ## Install
 
@@ -20,6 +21,15 @@ Configure `GEMINI_API_KEY` through your host's environment, never
 in project files. Only `plan` and `render` make Gemini generation calls. Model
 availability is account-dependent. The supplied Gemini adapter is retained; live
 provider compatibility and voice quality must be checked with your account.
+
+The web studio persists operations in `results/web/operations.sqlite3` before
+returning an operation ID. This local SQLite scheduler allows one MAGI operation and
+one pipeline operation at a time on the same host, and serializes work per project.
+It is not a distributed queue and the database must stay on local storage. A worker
+lease uses a 15-second heartbeat and 60-second expiry, with a 30-minute attempt
+limit. Uncertain provider outcomes keep their stage slot until explicit local
+reconciliation. Retrying an uncertain operation may repeat provider billing and
+counts toward the three-attempt ceiling.
 
 The following examples use `python` for the activated project environment. Without
 activation, use `.\.venv\Scripts\python.exe` instead. Generated projects and drafts
@@ -123,8 +133,20 @@ and apply one review at a time. Existing draft/proposal output files are not ove
 
 Use the web interface for visual review, crop-based character creation without a
 cast ZIP, and audio audition. CLI and web commands share a workspace lock; direct
-router callers remain responsible for single-writer ownership. After a crash,
-inspect the lock's PID and confirm no writer remains before removing that lock.
+router callers remain responsible for single-writer ownership. The web scheduler
+checks operation-owned process identity before releasing a stale lock or stage slot;
+do not remove operation locks manually. If a provider outcome remains uncertain,
+resolve it with the configured Python interpreter:
+
+```powershell
+python web_workflow.py reconcile OPERATION_ID fail
+python web_workflow.py reconcile OPERATION_ID retry
+```
+
+Choose `retry` only after accepting possible duplicate provider billing. Standalone
+CLI locks still require confirming the recorded process has stopped before manual
+removal. If the web worker's process identity cannot be read, confirm it has stopped
+and append `--worker-stopped` to the reconciliation command.
 
 ## 5. Inspect, render, audition and export
 
@@ -140,7 +162,8 @@ provider call. Rendering preflights the whole selection, splits requests at two
 speakers and the character budget, separates narration, generates silence locally,
 validates mono 24 kHz 16-bit PCM WAVs, and checkpoints each successful segment.
 Intact current takes are reused. An API timeout can still incur a charge before a
-response is lost; retries cannot guarantee exactly-once billing.
+response is lost; retries cannot guarantee exactly-once billing. The web queue marks
+an uncertain provider outcome for explicit reconciliation instead of automatic retry.
 
 Listen using the web audio panel or the WAV files. Regenerate only selected
 segments with `render ... --regenerate scene_001_001`. Previous takes remain. Select
