@@ -30,7 +30,9 @@ Run all commands from the repository root unless a guide says otherwise.
 Local `results/`, `.cache/`, `.venv/`, and web build/dependency folders are ignored
 by Git. Results may contain saved projects and audio; keep these when cleaning
 generated files. MAGI downloads its model assets to the Hugging Face cache.
-`.agents/` and `skills-lock.json` hold development assistant configuration.
+See the [documentation index](docs/README.md) for current architecture and the accepted
+shared reader/admin target. `AGENTS.md` routes assistants to task-specific context;
+project skills remain under `.agents/skills/`.
 
 ## Verify changes
 

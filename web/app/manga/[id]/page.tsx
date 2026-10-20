@@ -114,8 +114,12 @@ export default function MangaDetailsPage() {
 
                 {chapter.audioStatus ===
                 "none" ? (
-                  <Link
-                    href={`/request?manga=${encodeURIComponent(
+                    <Link
+                    href={`/request?mangaId=${encodeURIComponent(
+                      manga.id
+                    )}&chapterId=${encodeURIComponent(
+                      chapter.id
+                    )}&manga=${encodeURIComponent(
                       manga.title
                     )}&chapter=${encodeURIComponent(
                       `Chapter ${chapter.number} - ${chapter.title}`

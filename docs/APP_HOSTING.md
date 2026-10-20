@@ -1,15 +1,15 @@
 # Firebase App Hosting setup
 
 The checkout is linked to Firebase project `koetts-9bf7f` (KoeTTS). The App
-Hosting backend is `my-web-app` in `us-east4`. Deployments use local source,
+Hosting backend is `koetts` in `us-east4`. Deployments use local source,
 not automatic GitHub rollouts.
 
-Public URL: https://my-web-app--koetts-9bf7f.us-east4.hosted.app
+Public URL: https://koetts--koetts-9bf7f.us-east4.hosted.app
 
 ## Configuration
 
 - `firebase.json` targets the Next.js app in `web/` with backend ID
-  `my-web-app` for KoeTTS. Change this ID if using a differently named backend.
+  `koetts` for KoeTTS. Change this ID if using a differently named backend.
 - `web/apphosting.yaml` configures the website runtime: 1 CPU, 512 MiB RAM,
   zero minimum instances, two maximum instances, and concurrency of 40.
 - Local dependencies, generated output, project data, model weights, assistant
@@ -31,7 +31,7 @@ npx --yes firebase-tools@latest init apphosting --project YOUR_PROJECT_ID
 ```
 
 Select the existing Blaze project. Select an existing App Hosting backend or
-create one named `my-web-app`, choose a supported region, and set the
+create one named `koetts`, choose a supported region, and set the
 application root to `web`. Choose a Node.js runtime supported by both App Hosting
 and the installed Next.js version. Keep the checked-in runtime settings when
 prompted about overwriting `web/apphosting.yaml` and review any generated changes.
@@ -80,7 +80,7 @@ After cloud initialization and the application readiness checks above, deploy
 only the intended App Hosting backend from the repository root:
 
 ```powershell
-npx --yes firebase-tools@latest deploy --only apphosting:my-web-app --project koetts-9bf7f
+npx --yes firebase-tools@latest deploy --only apphosting:koetts --project koetts-9bf7f
 ```
 
 If you changed the backend ID, update both the command and `firebase.json`.

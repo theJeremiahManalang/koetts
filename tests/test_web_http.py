@@ -9,10 +9,11 @@ import time
 import unittest
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse, urlencode
 import uuid
+from urllib.parse import urlencode, urlparse
 
 import test_audio_pipeline as fixtures
+
 from manga_tts.schemas import RenderCommand
 
 
@@ -35,13 +36,13 @@ class WebHTTPTests(unittest.TestCase):
             req = urllib.request.Request(base + route, data=data, headers=headers or {})
             return urllib.request.urlopen(req, timeout=45)
 
-        def poll(job):
+        def poll(job, expected="complete"):
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 with request("/api/workflow?job=" + job["id"]) as response:
                     result = json.load(response)
                 if result["status"] in ("complete", "failed"):
-                    self.assertEqual(result["status"], "complete", result.get("message"))
+                    self.assertEqual(result["status"], expected, result.get("message"))
                     return result
                 time.sleep(.25)
             self.fail("Worker did not finish in 60 seconds")
@@ -60,6 +61,20 @@ class WebHTTPTests(unittest.TestCase):
             state = json.load(response)
         self.assertTrue(state["cast_approved"])
         self.assertEqual(state["project"]["chapter_id"], "web_integration_test")
+        mutation_headers = {"Content-Type": "application/json", "X-Manga-Workflow": "1", "Origin": base}
+        payload = {"project": project_id, "revision": state["revision"],
+                   "action": "rename", "command": {"title": "HTTP revision check"}}
+        with request("/api/workflow", json.dumps(payload).encode(), mutation_headers) as response:
+            poll(json.load(response))
+        with request("/api/workflow?project=" + project_id) as response:
+            current = json.load(response)
+        self.assertNotEqual(current["revision"], state["revision"])
+        payload["command"]["title"] = "Rejected stale HTTP edit"
+        with request("/api/workflow", json.dumps(payload).encode(), mutation_headers) as response:
+            failed = poll(json.load(response), expected="failed")
+        self.assertIn("changed in another session", failed["message"])
+        with request("/api/workflow?project=" + project_id) as response:
+            self.assertEqual(json.load(response), current)
         for action in ("inspect", "render", "export", "bundle"):
             with request("/api/workflow?project=" + project_id) as response:
                 revision = json.load(response)["revision"]

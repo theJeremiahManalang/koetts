@@ -1,21 +1,30 @@
 """Tts stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
+
 import array
 import hashlib
 import math
 import shutil
-from pathlib import Path
 import subprocess
-from typing import Any, Iterable, Callable
 import uuid
 import wave
-from .config import SAMPLE_RATE, NARRATOR, MAX_SILENCE_SEC, TEXT_POLICY_VERSION, CACHE_REVISION, PathLike
-from .schemas import SpeechRequest, Renderer, validate_contract
-from .cleaner import require_reviewed_text
-from .storage import asset, digest, write_json, save_project
-from .script import validate_scene, scene_signature
-from .gemini import LOGGER
+from collections.abc import Callable, Iterable
+from pathlib import Path
+from typing import Any
 
+from .cleaner import require_reviewed_text
+from .config import (
+    CACHE_REVISION,
+    MAX_SILENCE_SEC,
+    NARRATOR,
+    SAMPLE_RATE,
+    TEXT_POLICY_VERSION,
+    PathLike,
+)
+from .gemini import LOGGER
+from .schemas import Renderer, SpeechRequest, validate_contract
+from .script import scene_signature, validate_scene
+from .storage import asset, digest, save_project, write_json
 
 
 def validate_speech_request(request: dict[str, Any]) -> None:

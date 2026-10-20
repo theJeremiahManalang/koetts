@@ -2,13 +2,14 @@
 import json
 import shutil
 import unittest
-from unittest.mock import patch
 import uuid
+from unittest.mock import patch
 
+import test_audio_pipeline as fixtures
+
+import web_workflow
 from manga_tts import PipelineConfig, PipelineRouter
 from manga_tts.storage import read_json, write_json
-import test_audio_pipeline as fixtures
-import web_workflow
 
 
 class WebWorkflowTests(unittest.TestCase):
@@ -209,6 +210,7 @@ class WebWorkflowTests(unittest.TestCase):
         before = (self.workspace / "project.json").read_bytes()
         state = self.job("settings", {}, revision="outdated")
         self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["failure_code"], "revision_conflict")
         self.assertIn("another session", state["message"])
         self.assertEqual((self.workspace / "project.json").read_bytes(), before)
 

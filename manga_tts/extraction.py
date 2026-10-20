@@ -4,9 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from pathlib import Path
 import tempfile
 import zipfile
+from pathlib import Path
 
 from .storage import iou, write_json
 
@@ -88,8 +88,8 @@ def extract_chapter(images, destination, *, chapter_id="chapter_001", runner=Non
     is a fallback. Stable import IDs refer to this extraction, not future reruns.
     An injectable runner permits offline integration testing without model weights.
     """
-    from files import load_image, save_overlay, json_default
     from config import MODEL_ID, MODEL_REVISION
+    from files import json_default, load_image, save_overlay
     paths = [Path(p) for p in images]
     destination = Path(destination)
     if not paths or any(not p.is_file() for p in paths):

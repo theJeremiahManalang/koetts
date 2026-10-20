@@ -5,22 +5,43 @@ state. This is not a concurrent writer, HTTP server or background job scheduler.
 """
 from __future__ import annotations
 
+import shutil
+import tempfile
+from collections.abc import Callable, Mapping
 from functools import wraps
 from pathlib import Path
-import tempfile
-import shutil
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from pydantic import ValidationError
 
 from . import resolution, script, storage, tts
-from .config import PipelineConfig, VERSION, PathLike
-from .gemini import GeminiRenderer, LOGGER, create_client
+from .config import VERSION, PathLike, PipelineConfig
+from .gemini import LOGGER, GeminiRenderer, create_client
+from .persistence import PersistenceConflict, ProjectWriter, _copy_overlays
 from .schemas import (
-    CastCreate, CastMember, CastReview, SourceReview, SceneReview, SceneBatchReview, NarrationInsert, SettingsUpdate,
-    RenderSelection, RenderCommand, TakeSelection, Project, Proposal, Segment,
-    ProgressCallback, ProgressEvent, MigrationReport, RenderResult, ExportResult,
-    Renderer, Failure, WorkflowError, dump,
+    CastCreate,
+    CastMember,
+    CastReview,
+    ExportResult,
+    Failure,
+    MigrationReport,
+    NarrationInsert,
+    ProgressCallback,
+    ProgressEvent,
+    Project,
+    Proposal,
+    RenderCommand,
+    Renderer,
+    RenderResult,
+    RenderSelection,
+    SceneBatchReview,
+    SceneReview,
+    Segment,
+    SettingsUpdate,
+    SourceReview,
+    TakeSelection,
+    WorkflowError,
+    dump,
 )
 
 P = ParamSpec("P")
@@ -36,7 +57,9 @@ def operation(stage: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                 return function(*args, **kwargs)
             except WorkflowError:
                 raise
-            except Exception as exc:
+            except PersistenceConflict as exc:
+                raise WorkflowError(Failure(code=exc.code, stage="persistence", message=str(exc))) from None
+            except Exception as exc:  # noqa: BLE001 - sanitize unexpected failures at the public seam.
                 fields: list[str] = []
                 code, message, retryable = "operation_failed", f"The {stage} operation failed. Check inputs, approvals and workspace files.", False
                 if isinstance(exc, ValidationError):
@@ -96,10 +119,13 @@ class PipelineRouter:
     """
 
     def __init__(self, config: PipelineConfig, client_factory: Callable[[], Any] | None = None,
-                 renderer_factory: Callable[[Any, str], Renderer] | None = None) -> None:
+                 renderer_factory: Callable[[Any, str], Renderer] | None = None, *,
+                 persistence: ProjectWriter | None = None) -> None:
         """Retain configuration/adapters without I/O, clients, panels or paid calls."""
         self._config = PipelineConfig.model_validate(config).model_copy(deep=True)
         self._client_factory, self._renderer_factory = client_factory, renderer_factory
+        self._persistence = persistence
+        self._persistence_revision_id: str | None = None
         self._client: Any = None
         self._renderer: Renderer | None = None
         self._project: Project | None = None
@@ -142,18 +168,35 @@ class PipelineRouter:
         for callback in list(self._listeners):
             try:
                 callback(self._revision)
-            except Exception:
+            except Exception:  # noqa: BLE001 - observer failures must not undo saved state.
                 # A presentation failure must not roll back an already saved command.
                 LOGGER.warning("observer_failed", extra={"stage": "notification", "outcome": "failed"})
 
     def _data(self) -> dict[str, Any]:
+        if self._persistence is not None and self._persistence.materialization_pending:
+            revision = self._persistence.load(self.root)
+            self._persistence_revision_id = revision.revision_id if revision is not None else None
+            self._project = Project.model_validate(storage.load_project(self.root))
         return dump(self.project)
 
-    def _commit(self, candidate: dict[str, Any]) -> Project:
+    def _commit(self, candidate: dict[str, Any],
+                workspace_overlays: Mapping[str, str | Path] | None = None) -> Project:
         model = Project.model_validate(candidate)
-        storage.save_project(dump(model), self.root)  # Save before publishing live state.
+        if self._persistence is None:
+            _copy_overlays(self.root, workspace_overlays)
+            storage.save_project(dump(model), self.root)
+        else:
+            revision = self._persistence.commit(
+                self.root, dump(model), self._persistence_revision_id, workspace_overlays
+            )
+            self._persistence_revision_id = revision.revision_id
         self._project = model
         self._notify()
+        if self._persistence is not None and self._persistence.materialization_pending:
+            raise WorkflowError(Failure(
+                code="checkpoint_materialization_pending", stage="persistence",
+                message="The durable revision was accepted, but the local workspace could not refresh. Reload before continuing.",
+            ))
         return self.project
 
     def _get_client(self) -> Any:
@@ -182,9 +225,23 @@ class PipelineRouter:
         self._migration, self._renderer = None, None
         return self._commit(candidate)
 
+    @operation("metadata")
+    def update_metadata(self, metadata: dict[str, Any]) -> Project:
+        """Commit transport-owned project metadata through the normal persistence seam."""
+        allowed = {"title", "source_review_signature", "proposal_applied_signature",
+                   "web_export_signature", "web_export_scenes"}
+        if not isinstance(metadata, dict) or not set(metadata) <= allowed:
+            raise ValueError("Unsupported project metadata fields")
+        candidate = self._data()
+        candidate.update(metadata)
+        return self._commit(candidate)
+
     @operation("load")
     def load_project(self) -> Project:
         """Load saved settings/history without rewriting v2 files; save a v1 migration once. No API calls."""
+        if self._persistence is not None:
+            revision = self._persistence.load(self.root)
+            self._persistence_revision_id = revision.revision_id if revision is not None else None
         old_version = storage.read_json(self.root / "project.json").get("version")
         candidate = storage.load_project(self.root)
         if old_version == 1:
@@ -217,9 +274,8 @@ class PipelineRouter:
                 shutil.copytree(self.root / "references", staged / "references")
             storage.import_cast(candidate, staged, references_zip)
             Project.model_validate(candidate)
-            shutil.copytree(staged / "references", self.root / "references", dirs_exist_ok=True)
-        candidate["approvals"] = {}
-        return self._commit(candidate)
+            candidate["approvals"] = {}
+            return self._commit(candidate, {"references": staged / "references"})
 
     @operation("cast")
     def create_cast_member(self, command: CastCreate) -> Project:
@@ -385,9 +441,10 @@ class PipelineRouter:
             # Even client creation is deferred until a missing non-silence segment.
             return self._get_renderer()(request)
         for scene in scenes:
-            own_ids = {seg["segment_id"] for seg in planned if seg["scene_id"] == scene["scene_id"]}
-            def report(status: str, segment_id: str) -> None:
-                self._event(progress, "render", status, "Segment " + status, scene["scene_id"], segment_id)
+            scene_id = scene["scene_id"]
+            own_ids = {seg["segment_id"] for seg in planned if seg["scene_id"] == scene_id}
+            def report(status: str, segment_id: str, scene_id: str = scene_id) -> None:
+                self._event(progress, "render", status, "Segment " + status, scene_id, segment_id)
             tts.render_scene(candidate, self.root, scene, render,
                 regenerate=[sid for sid in command.regenerate if sid in own_ids], checkpoint=self._commit,
                 progress=report)

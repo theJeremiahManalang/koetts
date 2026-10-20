@@ -4,7 +4,10 @@ Saved/vendor models preserve extra evidence. Commands forbid extra fields. These
 models validate shape; script services enforce cross-record and approval rules.
 """
 from __future__ import annotations
-from typing import Any, Callable, Literal, Protocol
+
+from collections.abc import Callable
+from typing import Any, Literal, Protocol
+
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 JSONData = dict[str, Any]

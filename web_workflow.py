@@ -1,19 +1,19 @@
 """Local Next.js bridge for reviewed Manga-TTS jobs. Never trusts client paths."""
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 from manga_tts import PipelineConfig, PipelineRouter, schemas, tts
 from manga_tts.cli import workspace_lock
 from manga_tts.config import VOICES
 from manga_tts.extraction import extract_chapter
 from manga_tts.script import cast_signature, scene_signature
-from manga_tts.storage import asset, digest, read_json, write_json, save_project
+from manga_tts.storage import asset, digest, read_json, write_json
 
 ROOT = Path(__file__).resolve().parent / "results" / "web"
 
@@ -96,15 +96,16 @@ def perform(router, request, progress):
         return {}
     router.load_project()
     if request.get("revision") != digest(schemas.dump(router.project)):
-        raise ValueError("This project changed in another session. Reload before applying your edits.")
+        raise schemas.WorkflowError(schemas.Failure(
+            code="revision_conflict", stage="persistence",
+            message="This project changed in another session. Reload before applying your edits.",
+        ))
     command = request.get("command", {})
     if action == "rename":
         title = command.get("title")
         if not isinstance(title, str) or not title.strip() or len(title.strip()) > 120 or any(ord(c) < 32 for c in title):
             raise ValueError("Enter a project title between 1 and 120 characters, without control characters.")
-        data = schemas.dump(router.project)
-        data["title"] = title.strip()
-        save_project(data, router.root)
+        router.update_metadata({"title": title.strip()})
     elif action == "cast-import":
         router.import_cast(upload / "cast.zip")
     elif action == "cast-create":
@@ -144,14 +145,13 @@ def perform(router, request, progress):
     if action in {"sources", "proposal", "export"}:
         data = schemas.dump(router.project)
         if action == "sources":
-            data["source_review_signature"] = source_signature(data)
+            router.update_metadata({"source_review_signature": source_signature(data)})
         elif action == "proposal":
-            data["proposal_applied_signature"] = digest(data["proposal"])
-            data["source_review_signature"] = None
+            router.update_metadata({"proposal_applied_signature": digest(data["proposal"]),
+                                    "source_review_signature": None})
         else:
-            data["web_export_signature"] = export_signature(data)
-            data["web_export_scenes"] = command["scene_ids"]
-        save_project(data, router.root)
+            router.update_metadata({"web_export_signature": export_signature(data),
+                                    "web_export_scenes": command["scene_ids"]})
     return {}
 
 
@@ -170,14 +170,14 @@ def run_job(job):
             result = perform(router, request, update)
         update("Ready for review.", "complete", result=result)
     except schemas.WorkflowError as exc:
-        update(exc.detail.message, "failed")
+        update(exc.detail.message, "failed", failure_code=exc.detail.code)
     except schemas.ValidationError as exc:
         fields = [".".join(map(str, e["loc"])) for e in exc.errors(include_input=False, include_context=False)]
         update("Invalid review fields: " + ", ".join(fields), "failed")
     except (ValueError, FileNotFoundError) as exc:
         # Only local workflow errors; provider errors are sanitized by the router.
         update(str(exc)[:400], "failed")
-    except Exception:
+    except Exception:  # noqa: BLE001 - persist a safe terminal job result for unknown failures.
         update("Operation failed. Check dependencies and workspace access. Completed audio is retained.", "failed")
     finally:
         # Uploaded staging files are not needed once imported. Use only the fixed job directory.

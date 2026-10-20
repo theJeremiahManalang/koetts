@@ -1,15 +1,23 @@
 """Script stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
+
 import copy
 import math
 import re
-from typing import Any
-from .config import UNKNOWN, NARRATOR, DELIVERIES, MAX_SILENCE_SEC, TEXT_POLICY_VERSION, CACHE_REVISION
-from .cleaner import require_reviewed_text
-from .schemas import Scene, Proposal, validate_contract
-from .storage import digest
 import uuid
+from typing import Any
 
+from .cleaner import require_reviewed_text
+from .config import (
+    CACHE_REVISION,
+    DELIVERIES,
+    MAX_SILENCE_SEC,
+    NARRATOR,
+    TEXT_POLICY_VERSION,
+    UNKNOWN,
+)
+from .schemas import Proposal, Scene, validate_contract
+from .storage import digest
 
 
 def cast_signature(p: dict[str, Any]) -> str:

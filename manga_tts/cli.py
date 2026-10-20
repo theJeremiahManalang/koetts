@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
 import sys
 import tempfile
 import zipfile
+from contextlib import contextmanager
+from pathlib import Path
 
-from . import PipelineConfig, PipelineRouter
-from . import schemas
+from . import PipelineConfig, PipelineRouter, schemas
 from .storage import digest, read_json
 
 
@@ -151,6 +150,7 @@ def execute(args):
             paths = args.images
         else:
             import re
+
             from files import image_paths
             paths = image_paths(args.input)
             paths.sort(key=lambda p: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", p.name)])

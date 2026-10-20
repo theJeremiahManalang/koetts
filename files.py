@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageOps
 
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}

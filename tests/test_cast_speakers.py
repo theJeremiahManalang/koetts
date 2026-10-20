@@ -2,8 +2,9 @@
 import copy
 import unittest
 
-from manga_tts import schemas, script
 import test_audio_pipeline as fixtures
+
+from manga_tts import schemas, script
 
 
 class CastSpeakerTests(unittest.TestCase):
@@ -29,7 +30,7 @@ class CastSpeakerTests(unittest.TestCase):
 
     def test_saving_cast_persists_the_dialogue_handoff(self):
         from manga_tts.cli import review_document
-        from manga_tts.storage import save_project, read_json
+        from manga_tts.storage import read_json, save_project
         self.turn["text"] = "Retain the edited script"
         save_project(self.project, self.fixture.router.root)
         self.fixture.router.load_project()

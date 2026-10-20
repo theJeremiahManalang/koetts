@@ -1,10 +1,11 @@
 """Check the web OCR contract without downloading model weights."""
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import patch
 
 from PIL import Image
+
 from web_extract import extract_text
 
 

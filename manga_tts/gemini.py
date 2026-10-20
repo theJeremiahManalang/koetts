@@ -1,11 +1,15 @@
 """Gemini stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
+
 import base64
 import logging
 import re
 import time
-from typing import Any, Callable, Iterable, TypeVar
+from collections.abc import Callable, Iterable
+from typing import Any, TypeVar
+
 from .config import DEFAULT_MAX_RETRIES, DEFAULT_RENDER_RPM, PipelineConfig
+
 T = TypeVar("T")
 LOGGER = logging.getLogger("manga_tts")
 LOGGER.addHandler(logging.NullHandler())
