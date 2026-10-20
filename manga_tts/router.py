@@ -321,7 +321,13 @@ class PipelineRouter:
         return self._commit(candidate)
 
     @operation("planning")
-    def generate_proposal(self, planning_model: str | None = None, progress: ProgressCallback | None = None) -> Proposal:
+    def generate_proposal(
+        self,
+        planning_model: str | None = None,
+        progress: ProgressCallback | None = None,
+        *,
+        before_provider: Callable[[], None] | None = None,
+    ) -> Proposal:
         """Explicit paid-capable visual planning; cache first, leave script unapproved/unmodified, autosave proposal."""
         candidate = self._data()
         if len(candidate["cast"]) < 2:
@@ -331,7 +337,8 @@ class PipelineRouter:
         Project.model_validate(candidate)
         result = resolution.propose_plan(candidate, self.root, None,
             progress=lambda message: self._event(progress, "planning", "running", message),
-            max_attempts=self._config.max_attempts, client_factory=self._get_client)
+            max_attempts=self._config.max_attempts, client_factory=self._get_client,
+            before_provider=before_provider)
         self._commit(candidate)
         self._event(progress, "planning", "complete", "Proposal ready for human review.")
         return Proposal.model_validate(result)
@@ -429,7 +436,13 @@ class PipelineRouter:
                 for segment in tts.compile_segments(candidate, scene)]
 
     @operation("render")
-    def render_selected(self, command: RenderCommand, progress: ProgressCallback | None = None) -> RenderResult:
+    def render_selected(
+        self,
+        command: RenderCommand,
+        progress: ProgressCallback | None = None,
+        *,
+        before_provider: Callable[[], None] | None = None,
+    ) -> RenderResult:
         """Explicit paid-capable synthesis with whole-selection preflight and per-segment durable resume."""
         command = RenderCommand.model_validate(command)
         candidate = self._data()
@@ -447,7 +460,7 @@ class PipelineRouter:
                 self._event(progress, "render", status, "Segment " + status, scene_id, segment_id)
             tts.render_scene(candidate, self.root, scene, render,
                 regenerate=[sid for sid in command.regenerate if sid in own_ids], checkpoint=self._commit,
-                progress=report)
+                progress=report, before_provider=before_provider)
         self._event(progress, "render", "complete", "Selected audio is ready for audition.")
         return RenderResult(project=self.project, segments=[Segment.model_validate(seg) for seg in planned])
 
