@@ -69,6 +69,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   let staging: string | undefined;
+  let enqueueStarted = false;
   try {
     sameOrigin(request);
     // Custom header prevents simple cross-origin form submissions.
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
           await writeFile(path.join(staging, field + ".zip"), bytes);
         }
       }
+      enqueueStarted = true;
       const enqueued = await enqueueOperation({
         action,
         mode,
@@ -139,8 +141,12 @@ export async function POST(request: Request) {
     try { await dispatchQueued(); } catch { /* persisted work remains queued for polling recovery */ }
     return Response.json(enqueued.operation, { status: 202 });
   } catch (error) {
-    if (staging) await rm(staging, { recursive: true, force: true });
     const code = typeof error === "object" && error && "code" in error ? String(error.code) : undefined;
+    // An enqueue transport failure can follow a successful SQLite commit. Keep
+    // its inputs for key-based recovery unless rejection proves no ownership.
+    if (staging && (!enqueueStarted || code === "idempotency_conflict")) {
+      await rm(staging, { recursive: true, force: true });
+    }
     const status = code === "idempotency_conflict" ? 409 : 400;
     return Response.json({ error: error instanceof Error ? error.message : "Request failed.", code }, { status });
   }

@@ -10,7 +10,7 @@ from unittest.mock import patch
 from test_audio_pipeline import wav_bytes
 
 import web_workflow
-from manga_tts import PipelineRouter
+from manga_tts import PipelineRouter, resolution
 
 
 def main() -> None:
@@ -36,13 +36,29 @@ def main() -> None:
             renderer_factory=lambda _client, _model: render,
         )
 
-    if mode == "between-checkpoints":
+    if mode.startswith("plan"):
+        def propose(project, _root, _client, **options):
+            options["before_provider"]()
+            (root / "planning-called").touch()
+            data = {"appearances": [], "sources": [], "scenes": []}
+            project["proposal"] = {"cache_key": "offline", "evidence": "fixture", "data": data}
+            return data
+
+        patch.object(resolution, "propose_plan", propose).start()
+
+    if mode in {"between-checkpoints", "before-notification", "failed-notification", "plan-checkpoint"}:
         original_perform = web_workflow.perform
 
         def pause_after_checkpoint(engine, request, progress, **options):
             def report(message, **details):
-                progress(message, **details)
-                if details.get("status") == "saved":
+                if mode == "failed-notification" and details.get("status") == "saved":
+                    (root / "first-segment-saved").touch()
+                    raise RuntimeError("Progress transport failed after persistence")
+                if mode != "before-notification" or details.get("status") != "saved":
+                    progress(message, **details)
+                if details.get("status") == "saved" or (
+                    mode == "plan-checkpoint" and details.get("stage") == "planning" and details.get("status") == "complete"
+                ):
                     (root / "first-segment-saved").touch()
                     while True:
                         time.sleep(.05)

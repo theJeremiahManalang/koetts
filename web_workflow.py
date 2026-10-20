@@ -146,8 +146,32 @@ def _inspect_segments(context: WorkflowExecution) -> dict[str, Any]:
 
 
 def _render_segments(context: WorkflowExecution) -> dict[str, Any]:
+    command = schemas.RenderCommand.model_validate(context.command)
+    if context.operation is not None:
+        operation = context.operation
+        store = operation_store()
+        claim = OperationClaim(operation.operation_id, operation.fence)
+        checkpoint = dict(operation.checkpoint or {})
+        data = schemas.dump(context.router.project)
+        if "baseline_take_ids" not in checkpoint:
+            # Record pre-existing takes before synthesis. A retry can then identify
+            # replacements committed even if the progress notification was lost.
+            checkpoint["baseline_take_ids"] = [
+                take["take_id"] for group in data["takes"].values() for take in group
+            ]
+            checkpoint["project_hash"] = digest(data)
+            store.heartbeat(claim, checkpoint=checkpoint)
+        baseline = set(checkpoint["baseline_take_ids"])
+        accepted = {
+            key.split(":", 1)[0]
+            for key, take_id in data["selected_takes"].items()
+            if take_id not in baseline
+        }
+        command = command.model_copy(update={
+            "regenerate": [segment_id for segment_id in command.regenerate if segment_id not in accepted],
+        })
     result = context.router.render_selected(
-        schemas.RenderCommand.model_validate(context.command),
+        command,
         progress=lambda event: _report_progress(context, event),
         before_provider=context.before_provider,
     )
@@ -454,6 +478,11 @@ def reconcile_operation(
             worker_stopped_confirmed=worker_stopped_confirmed and state is None,
         ):
             raise OperationConflict("workspace_lock_unverified", "Workspace lock ownership could not be verified safely.")
+        if operation.payload.get("action") == "render" and (workspace / "project.json").is_file():
+            store.record_recovery_checkpoint(
+                OperationClaim(operation.operation_id, operation.fence),
+                digest(read_json(workspace / "project.json")),
+            )
     return store.resolve_uncertain(operation.operation_id, resolution)
 
 
@@ -527,12 +556,15 @@ def perform(router, request, progress, *, operation: Operation | None = None, be
         router.load_project()
         current_revision = digest(schemas.dump(router.project))
         checkpoint_revision = operation.checkpoint.get("project_hash") if operation and operation.checkpoint else None
-        is_checkpoint_resume = action == "render" and checkpoint_revision == current_revision
+        is_checkpoint_resume = action in {"render", "plan"} and checkpoint_revision == current_revision
         if request.get("revision") != current_revision and not is_checkpoint_resume:
             raise schemas.WorkflowError(schemas.Failure(
                 code="revision_conflict", stage="persistence",
                 message="This project changed in another session. Reload before applying your edits.",
             ))
+        if (action == "plan" and is_checkpoint_resume and operation and operation.checkpoint
+                and operation.checkpoint.get("planning_complete")):
+            return {}
     result = handler.execute(context)
     if handler.after is not None:
         handler.after(context)
@@ -615,17 +647,20 @@ def run_operation(operation_id: str, fence: int) -> None:
 
     def progress(message: str, **details: Any) -> None:
         checkpoint = None
-        if details.get("status") in {"saved", "reused"} and details.get("segment_id"):
+        planning_complete = details.get("stage") == "planning" and details.get("status") == "complete"
+        if planning_complete or details.get("status") in {"saved", "reused"} and details.get("segment_id"):
             project_path = ROOT / "projects" / operation.project_id / "project.json"
             if project_path.is_file():
-                checkpoint = {
+                checkpoint = {**(store.get(operation_id).checkpoint or {}),
                     "operation_id": operation_id,
                     "project_hash": digest(read_json(project_path)),
                     "segment_id": details["segment_id"],
                 }
+                if planning_complete:
+                    checkpoint["planning_complete"] = True
         provider_result_checkpointed = (
             details.get("status") == "saved"
-            or details.get("stage") == "planning" and details.get("status") == "complete"
+            or planning_complete
         )
         store.heartbeat(
             claim,
@@ -636,6 +671,12 @@ def run_operation(operation_id: str, fence: int) -> None:
 
     def before_provider() -> None:
         store.mark_provider_call_pending(claim)
+
+    def fail(message: str, code: str, *, retryable: bool = False) -> None:
+        try:
+            store.fail(claim, message, code, retryable=retryable)
+        except OperationConflict:
+            pass
 
     try:
         progress("Preparing workspace…")
@@ -655,35 +696,17 @@ def run_operation(operation_id: str, fence: int) -> None:
         if upload_token:
             shutil.rmtree(ROOT / "uploads" / identifier(upload_token), ignore_errors=True)
     except schemas.WorkflowError as exc:
-        try:
-            store.fail(
-                claim,
-                exc.detail.message,
-                exc.detail.code,
-                retryable=exc.detail.retryable,
-            )
-        except OperationConflict:
-            pass
+        fail(exc.detail.message, exc.detail.code, retryable=exc.detail.retryable)
     except schemas.ValidationError as exc:
         fields = [".".join(map(str, error["loc"])) for error in exc.errors(include_input=False, include_context=False)]
-        try:
-            store.fail(claim, "Invalid review fields: " + ", ".join(fields), "invalid_command")
-        except OperationConflict:
-            pass
+        fail("Invalid review fields: " + ", ".join(fields), "invalid_command")
     except (ValueError, FileNotFoundError) as exc:
-        try:
-            store.fail(claim, str(exc)[:400], "invalid_operation")
-        except OperationConflict:
-            pass
+        fail(str(exc)[:400], "invalid_operation")
     except Exception:  # noqa: BLE001 - persist a safe terminal or uncertain outcome.
-        try:
-            store.fail(
-                claim,
-                "Operation failed. Check dependencies and workspace access. Completed audio is retained.",
-                "operation_failed",
-            )
-        except OperationConflict:
-            pass
+        fail(
+            "Operation failed. Check dependencies and workspace access. Completed audio is retained.",
+            "operation_failed",
+        )
     finally:
         stop_heartbeat.set()
         heartbeat.join(timeout=1)

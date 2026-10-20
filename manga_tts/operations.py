@@ -579,7 +579,7 @@ class SQLiteOperationStore:
     def record_recovery_checkpoint(self, claim: OperationClaim, project_hash: str) -> Operation:
         now = time.time()
         with self._transaction() as connection:
-            row = self._active_row(connection, claim)
+            row = self._active_row(connection, claim, allow_uncertain=True)
             if row["payload_json"] and json.loads(row["payload_json"]).get("action") != "render":
                 raise OperationConflict("invalid_checkpoint", "Only render operations can resume project checkpoints.")
             checkpoint = json.loads(row["checkpoint_json"]) if row["checkpoint_json"] else {}
@@ -651,14 +651,17 @@ class SQLiteOperationStore:
             )
             return self._get(connection, claim.operation_id)
 
-    def _active_row(self, connection: sqlite3.Connection, claim: OperationClaim) -> sqlite3.Row:
+    def _active_row(
+        self, connection: sqlite3.Connection, claim: OperationClaim, *, allow_uncertain: bool = False,
+    ) -> sqlite3.Row:
         operation_id = claim.operation_id
         row = connection.execute(
             "SELECT * FROM operations WHERE operation_id=?", (operation_id,)
         ).fetchone()
         if row is None:
             raise FileNotFoundError("Operation was not found")
-        if row["status"] != "running" or row["fence"] != claim.fence:
+        statuses = {"running", "reconciliation_required"} if allow_uncertain else {"running"}
+        if row["status"] not in statuses or row["fence"] != claim.fence:
             raise OperationConflict("stale_fence", "Worker fence is no longer current.")
         slot = connection.execute(
             "SELECT 1 FROM stage_slots WHERE operation_id=? AND fence=?", (operation_id, claim.fence)
@@ -789,7 +792,7 @@ def stop_process(pid: int, created_at: float, grace_seconds: float = 10.0) -> bo
             process.wait(timeout=grace_seconds)
         return process_identity(pid, created_at)
     except psutil.NoSuchProcess:
-        return True
+        return False
     except (psutil.AccessDenied, psutil.TimeoutExpired, OSError):
         return None
 

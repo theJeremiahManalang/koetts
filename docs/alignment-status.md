@@ -276,6 +276,11 @@ The local studio still uses filesystem persistence by default.
 
 ## S2 — Complete, 20 October 2026
 
+Post-implementation S1/S2 review and recovery fixes are recorded in
+[the review evidence](s1-s2-review.md), including independent review results,
+restart and upload regressions, and current validation limits. This follow-up
+supersedes the earlier absence-of-findings claim for the reviewed recovery paths.
+
 Assignment: add a durable same-host operation queue and recoverable finite local
 workers while preserving the existing workflow engine, JSON job polling, and UI
 contract. Cloud storage, hosted execution, publication, and paid generation remain

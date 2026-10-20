@@ -15,7 +15,7 @@ from unittest.mock import patch
 import test_audio_pipeline as fixtures
 
 import web_workflow
-from manga_tts import PipelineConfig, PipelineRouter
+from manga_tts import PipelineConfig, PipelineRouter, schemas
 from manga_tts.operations import LocalOperationService, SQLiteOperationStore
 from manga_tts.storage import read_json
 
@@ -121,14 +121,71 @@ class OperationWorkerProcessTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256((self.workspace / retained["path"]).read_bytes()).hexdigest(), first_audio_hash)
 
     def test_worker_stopped_between_segments_requeues_from_saved_checkpoint(self) -> None:
+        self.check_worker_stopped_between_segments([])
+
+    def test_saved_planning_proposal_completes_after_restart_without_provider_call(self) -> None:
         router = PipelineRouter(PipelineConfig(workspace=self.workspace))
         router.load_project()
+        operation = web_workflow.enqueue_operation({
+            "action": "plan", "project": self.project_id,
+            "revision": web_workflow.snapshot(router)["revision"],
+        }, "planning-checkpoint")
+        claim = self.store.claim(operation.operation_id)
+        assert claim is not None
+        child = self.spawn(operation.operation_id, claim.fence, "plan-checkpoint")
+        deadline = time.monotonic() + 30
+        while not (self.root / "first-segment-saved").exists():
+            self.assertIsNone(child.poll(), "Worker exited before saving proposal")
+            self.assertLess(time.monotonic(), deadline, "Planning checkpoint timed out")
+            time.sleep(.02)
+        accepted = read_json(self.workspace / "project.json")
+        self.assertIsNotNone(accepted["proposal"])
+        child.kill()
+        child.wait(timeout=10)
+        recovered = LocalOperationService(self.store).reconcile_expired(
+            web_workflow.recover_operation_workspace,
+            now=time.time() + self.store.policy.lease_seconds + 1,
+        )
+        self.assertEqual(recovered[0].status, "queued")
+        (self.root / "planning-called").unlink()
+        retry = self.store.claim(operation.operation_id)
+        assert retry is not None
+        resumed = self.spawn(operation.operation_id, retry.fence, "plan-normal")
+        self.assertEqual(resumed.wait(timeout=30), 0)
+        self.assertEqual(self.store.get(operation.operation_id).status, "complete")
+        self.assertFalse((self.root / "planning-called").exists())
+        self.assertEqual(read_json(self.workspace / "project.json"), accepted)
+
+    def test_forced_regeneration_resumes_without_repeating_accepted_replacement(self) -> None:
+        self.check_worker_stopped_between_segments(["scene_001_001", "scene_001_002"])
+
+    def test_forced_regeneration_recovers_commit_before_progress_notification(self) -> None:
+        self.check_worker_stopped_between_segments(
+            ["scene_001_001", "scene_001_002"], mode="before-notification",
+        )
+
+    def test_forced_regeneration_recovers_failed_progress_notification(self) -> None:
+        self.check_worker_stopped_between_segments(
+            ["scene_001_001", "scene_001_002"], mode="failed-notification",
+        )
+
+    def check_worker_stopped_between_segments(self, regenerate: list[str], mode="between-checkpoints") -> None:
+        router = PipelineRouter(
+            PipelineConfig(workspace=self.workspace), client_factory=lambda: object(),
+            renderer_factory=lambda _client, _model: lambda request: fixtures.wav_bytes(),
+        )
+        router.load_project()
+        if regenerate:
+            router.render_selected(schemas.RenderCommand(scene_ids=["scene_001"], regenerate=[]))
+        initial_takes = {
+            take["take_id"] for group in read_json(self.workspace / "project.json")["takes"].values() for take in group
+        }
         revision = web_workflow.snapshot(router)["revision"]
         request = {
             "action": "render",
             "project": self.project_id,
             "revision": revision,
-            "command": {"scene_ids": ["scene_001"], "regenerate": []},
+            "command": {"scene_ids": ["scene_001"], "regenerate": regenerate},
         }
         operation = self.store.enqueue(
             idempotency_key="safe-checkpoint-restart",
@@ -141,7 +198,7 @@ class OperationWorkerProcessTests(unittest.TestCase):
         )
         first_claim = self.store.claim(operation.operation_id)
         assert first_claim is not None
-        child = self.spawn(operation.operation_id, first_claim.fence, "between-checkpoints")
+        child = self.spawn(operation.operation_id, first_claim.fence, mode)
         deadline = time.monotonic() + 30
         while not (self.root / "first-segment-saved").exists():
             self.assertIsNone(child.poll(), "Worker exited before persisting the first segment")
@@ -150,18 +207,27 @@ class OperationWorkerProcessTests(unittest.TestCase):
 
         state = read_json(self.workspace / "project.json")
         takes = [take for group in state["takes"].values() for take in group]
-        self.assertEqual(len(takes), 1)
-        first_take = takes[0]
+        self.assertEqual(len(takes), len(initial_takes) + 1)
+        first_take = next(take for take in takes if take["take_id"] not in initial_takes)
         first_hash = hashlib.sha256((self.workspace / first_take["path"]).read_bytes()).hexdigest()
 
-        child.kill()
+        if mode != "failed-notification":
+            child.kill()
         child.wait(timeout=10)
-        recovered = LocalOperationService(self.store).reconcile_expired(
-            web_workflow.recover_operation_workspace,
-            now=time.time() + self.store.policy.lease_seconds + 1,
-        )
-        self.assertEqual(recovered[0].status, "queued")
-        self.assertFalse(recovered[0].provider_outcome_pending)
+        if mode == "failed-notification":
+            self.assertEqual(self.store.get(operation.operation_id).status, "reconciliation_required")
+            web_workflow.reconcile_operation(operation.operation_id, "retry")
+        else:
+            recovered = LocalOperationService(self.store).reconcile_expired(
+                web_workflow.recover_operation_workspace,
+                now=time.time() + self.store.policy.lease_seconds + 1,
+            )
+            if mode == "before-notification":
+                self.assertEqual(recovered[0].status, "reconciliation_required")
+                web_workflow.reconcile_operation(operation.operation_id, "retry")
+            else:
+                self.assertEqual(recovered[0].status, "queued")
+                self.assertFalse(recovered[0].provider_outcome_pending)
 
         second_claim = self.store.claim(operation.operation_id)
         assert second_claim is not None

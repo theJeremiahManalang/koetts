@@ -6,6 +6,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+import psutil
 
 from manga_tts.operations import (
     LocalOperationService,
@@ -13,6 +16,7 @@ from manga_tts.operations import (
     OperationPolicy,
     OperationStage,
     SQLiteOperationStore,
+    stop_process,
 )
 
 
@@ -142,6 +146,20 @@ class SQLiteOperationStoreTests(unittest.TestCase):
 
         self.assertEqual([item.operation_id for item in overdue], [operation.operation_id])
 
+    def test_timeout_recovers_when_worker_exits_during_termination(self) -> None:
+        operation = self.enqueue("termination-race")
+        claim = self.store.claim(operation.operation_id, now=100)
+        assert claim is not None
+        self.store.register_worker(claim, 4242, 1.0)
+        with patch("manga_tts.operations.process_identity", return_value=True), patch(
+            "manga_tts.operations.psutil.Process", side_effect=psutil.NoSuchProcess(4242),
+        ):
+            self.assertIs(stop_process(4242, 1.0), False)
+            recovered = LocalOperationService(self.store).reconcile_expired(
+                now=time.time() + self.store.policy.attempt_timeout_seconds + 1,
+            )
+        self.assertEqual(recovered[0].status, "queued")
+
     def test_expired_unstarted_dispatch_requeues_without_releasing_attempt_limit(self) -> None:
         operation = self.enqueue("unstarted")
         claim = self.store.claim(operation.operation_id, now=100)
@@ -162,7 +180,6 @@ class SQLiteOperationStoreTests(unittest.TestCase):
         self.store.mark_provider_call_pending(claim)
         now = time.time() + self.store.policy.lease_seconds + 1
 
-        from unittest.mock import patch
         with patch("manga_tts.operations.process_identity", return_value=False):
             result = LocalOperationService(self.store).reconcile_expired(
                 recover_workspace=lambda _: True,
