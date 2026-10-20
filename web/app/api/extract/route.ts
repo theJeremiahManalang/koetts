@@ -1,3 +1,4 @@
+import { requireAdmin } from "../../../lib/require-admin";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -10,6 +11,7 @@ const execute = promisify(execFile);
 const state = globalThis as typeof globalThis & { mangaOcrBusy?: boolean };
 
 export async function POST(request: Request) {
+  const denied = await requireAdmin(request); if (denied) return denied;
   if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   if (state.mangaOcrBusy) return Response.json({ error: "Another panel is being processed. Please try again shortly." }, { status: 429 });
   if (Number(request.headers.get("content-length")) > 11 * 1024 * 1024) return Response.json({ error: "Image must be 10 MB or smaller." }, { status: 413 });

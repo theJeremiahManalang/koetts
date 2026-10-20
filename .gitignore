@@ -10,6 +10,7 @@ vendor/
 weights/
 .env
 .env.*
+!web/.env.example
 .firebase/
 firebase-debug.log
 firebase-debug.*.log
