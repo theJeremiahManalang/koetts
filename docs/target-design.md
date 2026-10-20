@@ -61,12 +61,43 @@ until the current worker reaches a known terminal result and releases ownership.
 Each ownership handoff increments a monotonic fence that is never reused. A revision
 commit requires the active owner, fence, and expected parent revision. An interrupted
 worker keeps its ownership fenced until recovery confirms that execution stopped;
-there is no S1 timeout or automatic takeover policy. S2 still owns lease expiry and
-distributed reconciliation policy.
+S1 introduced no timeout or automatic takeover policy. S2 now resolves local lease
+expiry and uncertain-outcome reconciliation; distributed reconciliation remains in
+the S5 cloud scope.
+
+### Resolved for S2 — local operation scheduling and recovery
+
+The local studio stores durable operations in a SQLite database under
+`results/web/operations.sqlite3`. Its transactional slots coordinate processes on
+one host only; Firestore and hosted execution remain S5 work. Local defaults allow
+one MAGI operation and one pipeline operation at a time, with one active operation
+per project across both stages.
+
+Each intended request supplies an idempotency key. Repeating the key with the same
+normalized inputs returns the same operation; reusing it with changed inputs is a
+conflict. The operation pins the expected project hash, source checksums and
+configuration fingerprint. Upload bytes are hashed at intake; existing project
+visual evidence used by planning (page images, cast references, and appearance
+crops) is hashed when queued and checked again before execution. Workers resolve
+request data from storage and report progress, checkpoint/output pointers, attempt,
+fence, lease and local process identity.
+
+The operation store owns a ceiling of three total attempts; the durable worker makes
+one provider request per attempt, leaving retries to this single authority. A
+30-minute attempt timeout uses 15-second heartbeats and 60-second leases. Lease
+expiry triggers process identity reconciliation using PID and process creation time;
+expiry alone never releases a slot. A provider result that has been checkpointed is
+resolved work and may resume automatically. A possibly submitted call without a
+durable result becomes `reconciliation_required`, retains its slot, and requires an
+explicit local `fail` or `retry` decision. Retrying may repeat provider billing.
+SQLite/WAL is not the distributed production scheduler and must stay on local storage.
+
+Existing JSON job files remain untouched and readable for polling. New enqueues use
+SQLite; old queued/running jobs are not imported or automatically restarted.
 
 | Decision or measurement | Must be resolved before |
 | --- | --- |
-| Distributed stage capacities, retry authority/ceiling, timeout and lease reconciliation policy | S2 production scheduling behavior |
+| Production global stage capacities, dispatcher, timeout/retry policy, and hosted execution reconciliation | S5 cloud integration |
 | Request deduplication identity, chapter/configuration key, lifecycle/status rules | S4 request persistence |
 | Trusted admin provisioning and user/service identity transport | S3 authorization implementation |
 | Dispatcher choice; Workflows/Eventarc/scheduler use; bucket layout | S5 infrastructure integration |
@@ -74,7 +105,6 @@ distributed reconciliation policy.
 | Project/regions, budget, service IAM, secrets, actual deployed state | S5 provisioning/deployment |
 | MAGI resources/startup and Gemini/MP3 compatibility and listening quality | S5 live compatibility and sizing acceptance |
 
-Old claims of one active MAGI and one active pipeline execution are proposals, not
-confirmed global limits. Current local process limits are separate. Fake adapters
-may expose configurable policies while dependent production decisions remain open;
-report that limit explicitly. Resolve independent scope work without inventing policy.
+The resolved 1/1 capacity defaults apply to the same-host local SQLite scheduler;
+they do not establish production global limits. Cloud adapters and hosted stage
+capacity remain open for S5.

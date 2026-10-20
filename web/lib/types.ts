@@ -11,4 +11,5 @@ export type Panel = { panel_id: string; bbox: number[]; reading_order?: number }
 export type Page = { panels: Panel[]; page_id: string; page_index: number; width: number; height: number; image_filename: string; preview_path: string | null; original_path: string | null; annotated_path: string | null };
 export type Snapshot = { workflow_status: { sources_reviewed: boolean; proposal_applied: boolean; audio_ready_scenes: string[]; exported_scenes: string[] }; project: Project; revision: string; pages: Page[]; voices: string[]; cast_approved: boolean; approved_scenes: string[]; exports: string[]; has_api_key: boolean };
 export type Segment = { segment_id: string; scene_id: string; signature: string; silence_sec: number; turns: Turn[]; request: unknown };
-export type Job = { id: string; project: string; status: string; message: string; failure_code?: string; result?: { segments?: Segment[] } };
+export type JobStatus = "queued" | "running" | "complete" | "failed" | "reconciliation_required";
+export type Job = { id: string; project: string; status: JobStatus; message: string; failure_code?: string; progress?: Record<string, unknown>; attempt?: number; result?: { segments?: Segment[] } };

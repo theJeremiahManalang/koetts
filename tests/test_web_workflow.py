@@ -1,4 +1,5 @@
 """Web worker integration without network, model weights, or API credentials."""
+import hashlib
 import json
 import shutil
 import unittest
@@ -9,6 +10,7 @@ import test_audio_pipeline as fixtures
 
 import web_workflow
 from manga_tts import PipelineConfig, PipelineRouter
+from manga_tts.operations import OperationConflict, SQLiteOperationStore
 from manga_tts.storage import read_json, write_json
 
 
@@ -37,6 +39,16 @@ class WebWorkflowTests(unittest.TestCase):
         web_workflow.run_job(job_id)
         return read_json(self.root / "jobs" / f"{job_id}.json")
 
+    def operation(self, key, action="rename", command=None, **extra):
+        request = {
+            "action": action,
+            "project": self.project_id,
+            "revision": self.current()["revision"],
+            "command": command or {},
+            **extra,
+        }
+        return web_workflow.enqueue_operation(request, key)
+
     def test_snapshot_reports_approval_and_evidence(self):
         state = self.current()
         self.assertTrue(state["cast_approved"])
@@ -45,6 +57,131 @@ class WebWorkflowTests(unittest.TestCase):
         self.assertEqual(state["pages"][0]["original_path"], "input/page_001.png")
         self.assertEqual(state["pages"][0]["annotated_path"], "input/previews/page_001_annotated.jpg")
         self.assertNotIn("api_key", state["project"])
+
+    def test_durable_worker_leaves_retry_authority_with_operation_store(self):
+        config = web_workflow.operation_pipeline_config(self.workspace)
+
+        self.assertEqual(config.max_attempts, 1)
+
+    def test_durable_enqueue_is_idempotent_and_payload_conflict_is_typed(self):
+        first = self.operation("same-intent", command={"title": "First"})
+        duplicate = self.operation("same-intent", command={"title": "First"})
+
+        self.assertEqual(duplicate.operation_id, first.operation_id)
+        with self.assertRaises(OperationConflict) as raised:
+            self.operation("same-intent", command={"title": "Different"})
+        self.assertEqual(raised.exception.code, "idempotency_conflict")
+
+    def test_duplicate_upload_intent_ignores_per_attempt_project_and_staging_ids(self):
+        source = b"same uploaded source"
+        source_hash = hashlib.sha256(source).hexdigest()
+        for token in ("1" * 32, "2" * 32):
+            staging = self.root / "uploads" / token
+            staging.mkdir(parents=True)
+            (staging / "0.png").write_bytes(source)
+        first = web_workflow.enqueue_operation({
+            "action": "create", "mode": "images", "direction": "rtl",
+            "project": "a" * 32, "upload_token": "1" * 32,
+            "source_hashes": [source_hash], "images": ["0.png"],
+        }, "same-upload")
+        duplicate = web_workflow.enqueue_operation({
+            "action": "create", "mode": "images", "direction": "rtl",
+            "project": "c" * 32, "upload_token": "2" * 32,
+            "source_hashes": [source_hash], "images": ["0.png"],
+        }, "same-upload")
+
+        self.assertEqual(duplicate.operation_id, first.operation_id)
+        self.assertEqual(duplicate.project_id, "a" * 32)
+        self.assertEqual(duplicate.payload["upload_token"], "1" * 32)
+
+    def test_queued_plan_rejects_changed_visual_evidence_before_provider_call(self):
+        operation = self.operation("pinned-plan-evidence", action="plan")
+        image = self.workspace / "input" / "page_001.png"
+        image.write_bytes(image.read_bytes() + b"changed while queued")
+        store = SQLiteOperationStore(self.root / "operations.sqlite3")
+        claim = store.claim(operation.operation_id)
+        assert claim is not None
+
+        web_workflow.run_operation(operation.operation_id, claim.fence)
+
+        result = store.get(operation.operation_id)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_code, "source_conflict")
+        self.assertFalse(result.provider_outcome_pending)
+
+    def test_queued_plan_rejects_changed_appearance_crop_before_provider_call(self):
+        operation = self.operation("pinned-plan-crop", action="plan")
+        project = read_json(self.workspace / "project.json")
+        crop = self.workspace / "input" / project["appearances"][0]["crop_path"]
+        crop.write_bytes(crop.read_bytes() + b"changed while queued")
+        store = SQLiteOperationStore(self.root / "operations.sqlite3")
+        claim = store.claim(operation.operation_id)
+        assert claim is not None
+
+        web_workflow.run_operation(operation.operation_id, claim.fence)
+
+        result = store.get(operation.operation_id)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_code, "source_conflict")
+        self.assertFalse(result.provider_outcome_pending)
+
+    def test_queued_upload_rejects_changed_bytes_before_import(self):
+        token = uuid.uuid4().hex
+        staging = self.root / "uploads" / token
+        staging.mkdir(parents=True)
+        image = staging / "0.png"
+        image.write_bytes(b"original upload")
+        source_hash = hashlib.sha256(image.read_bytes()).hexdigest()
+        operation = web_workflow.enqueue_operation(
+            {
+                "action": "create",
+                "mode": "images",
+                "direction": "rtl",
+                "project": uuid.uuid4().hex,
+                "upload_token": token,
+                "images": ["0.png"],
+                "source_hashes": [source_hash],
+            },
+            "pinned-upload-source",
+        )
+        image.write_bytes(b"changed upload")
+        store = SQLiteOperationStore(self.root / "operations.sqlite3")
+        claim = store.claim(operation.operation_id)
+        assert claim is not None
+
+        web_workflow.run_operation(operation.operation_id, claim.fence)
+
+        result = store.get(operation.operation_id)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_code, "source_conflict")
+
+    def test_worker_resolves_persisted_payload_and_completes_with_claim_fence(self):
+        operation = self.operation("worker-payload", command={"title": "Persisted request"})
+        store = SQLiteOperationStore(self.root / "operations.sqlite3")
+        claim = store.claim(operation.operation_id)
+        assert claim is not None
+
+        web_workflow.run_operation(operation.operation_id, claim.fence)
+
+        result = store.get(operation.operation_id)
+        self.assertEqual(result.status, "complete")
+        self.assertEqual(self.current()["project"]["title"], "Persisted request")
+
+    def test_invalid_render_preflight_fails_without_marking_provider_outcome_uncertain(self):
+        operation = self.operation(
+            "invalid-render",
+            action="render",
+            command={"scene_ids": ["missing"], "regenerate": []},
+        )
+        store = SQLiteOperationStore(self.root / "operations.sqlite3")
+        claim = store.claim(operation.operation_id)
+        assert claim is not None
+
+        web_workflow.run_operation(operation.operation_id, claim.fence)
+
+        failed = store.get(operation.operation_id)
+        self.assertEqual(failed.status, "failed")
+        self.assertFalse(failed.provider_outcome_pending)
 
     def test_snapshot_handles_missing_image_variants(self):
         (self.workspace / "input/previews/page_001_annotated.jpg").unlink()

@@ -272,6 +272,96 @@ pass both default Ruff rules and import sorting.
 
 Only in-memory adapters validate the application contract; Firestore/GCS transaction,
 object-generation, and service-identity behavior remain unverified and belong to S5.
-The local studio still uses filesystem persistence by default. S2 remains next after
-resolving its distributed stage-capacity, retry-authority, timeout, and reconciliation
-policy in `docs/target-design.md`.
+The local studio still uses filesystem persistence by default.
+
+## S2 — Complete, 20 October 2026
+
+Post-implementation S1/S2 review and recovery fixes are recorded in
+[the review evidence](s1-s2-review.md), including independent review results,
+restart and upload regressions, and current validation limits. This follow-up
+supersedes the earlier absence-of-findings claim for the reviewed recovery paths.
+
+Assignment: add a durable same-host operation queue and recoverable finite local
+workers while preserving the existing workflow engine, JSON job polling, and UI
+contract. Cloud storage, hosted execution, publication, and paid generation remain
+out of scope.
+
+### Decisions and changed behavior
+
+- `docs/target-design.md` resolves S2 policies. SQLite/WAL coordinates one local
+  database only, with one MAGI slot and one pipeline slot and one active operation
+  per project. Firestore and distributed coordination remain S5 work.
+- An `Idempotency-Key` binds one normalized request to one operation. Changed input
+  under the same key conflicts; `GET ?key=` recovers an operation after a lost
+  enqueue response. Browser storage retains multiple pending keys so one new request
+  cannot overwrite another operation's lost-response key. Upload bytes and existing
+  project visual evidence are fingerprinted when queued and checked again before
+  worker execution, alongside the pinned project hash and configuration fingerprint.
+- The operation store owns three total attempts. Each durable worker attempt makes
+  at most one provider request. Workers heartbeat every 15 seconds, use 60-second
+  leases, and have a 30-minute timeout. A stale worker is recovered only after
+  confirming PID plus process creation time and reconciling the project lock.
+- A provider call without a durable result enters `reconciliation_required` and
+  retains its stage slot. The local `web_workflow.py reconcile` command requires an
+  explicit fail or retry decision; retry may repeat billing. Safe stopped work with
+  a durable segment checkpoint returns to the queue and resumes from that checkpoint.
+- Existing JSON job files are read-only polling fallbacks for IDs absent from
+  SQLite. New workers receive only operation ID and fence and load parameters from
+  the store. The UI stops polling on uncertain outcomes and directs the operator to
+  local reconciliation.
+- `GLOSSARY.md` defines Operation, Attempt, Stage slot, Lease, Fence, Idempotency key,
+  and Uncertain outcome. No ADR was needed; the local scheduling choices remain
+  within this scope and do not settle the S5 cloud adapter.
+
+### Acceptance evidence
+
+| Requirement | Evidence | Result |
+| --- | --- | --- |
+| Duplicate enqueue returns the same operation; key reuse with changed payload conflicts | `test_same_idempotency_key_and_payload_returns_one_operation`, `test_reusing_idempotency_key_for_changed_payload_conflicts`, and local HTTP key lookup/conflict coverage | Passed |
+| Competing transactions respect stage capacity and project exclusivity | `test_stage_claim_capacity_and_independent_stages`, `test_claim_next_serializes_one_project_across_stages`, and `test_competing_process_claims_respect_the_single_stage_slot` | Passed |
+| Retries have one authority and stop at three total attempts | `test_retry_ceiling_counts_initial_attempt` and `test_durable_worker_leaves_retry_authority_with_operation_store` | Passed |
+| Stale fence cannot complete a newer attempt | `test_stale_fence_cannot_complete_newer_attempt` | Passed |
+| Changed source image is rejected before a queued planning operation reaches a provider | `test_queued_plan_rejects_changed_visual_evidence_before_provider_call` | Passed |
+| Changed appearance crop is rejected before a queued planning operation reaches a provider | `test_queued_plan_rejects_changed_appearance_crop_before_provider_call` | Passed |
+| Changed upload bytes are rejected before import | `test_queued_upload_rejects_changed_bytes_before_import` | Passed |
+| Dispatch crash and stale worker recovery preserve slot safety | `test_expired_unstarted_dispatch_requeues_without_releasing_attempt_limit`, `test_timed_out_worker_detected_even_when_heartbeat_keeps_lease_fresh`, and process-identity recovery paths | Passed |
+| Uncertain provider outcomes retain capacity until an operator decision | `test_stopped_provider_worker_requires_operator_resolution_and_keeps_slot` and `test_uncertain_outcome_holds_capacity_until_explicit_resolution` | Passed |
+| Restart resumes a persisted render segment without regenerating it | `test_worker_stopped_between_segments_requeues_from_saved_checkpoint` and `test_interrupted_render_resumes_after_operator_resolution_without_repeating_saved_segment` | Passed |
+| API idempotency, lost-response lookup, legacy JSON polling, and existing workflow HTTP behavior work | `tests/test_web_http.py` under the disposable production HTTP runner | Passed |
+| Existing frontend compiles with the reconciliation state and polling changes | `npm test`, `npm run typecheck`, `npm run build`, and studio/frontend-only HTTP checks | Passed |
+
+### Fresh verification
+
+Python 3.11.15 from `/tmp/manga-s2-venv` ran the full suite after final review and
+fixes. Node was v24.18.0, npm 11.16.0, and Next.js 16.4.0.
+
+| Command / working directory | Outcome |
+| --- | --- |
+| `/tmp/manga-s2-venv/bin/python -m unittest discover -s tests -v` / repository root | Exit 0; 80 tests, 78 passed, two expected skips |
+| `/tmp/manga-s2-venv/bin/python -m unittest test_operations test_web_workflow test_operation_worker_process test_worker_process -v` with `PYTHONPATH=tests` | Exit 0; 36 affected tests passed |
+| Ruff `check` and `check --select I` on changed Python files | Exit 0; both passed |
+| Pyright 1.1.414 on changed Python files | Exit 0; zero errors, warnings, or informationals |
+| `npm test` / `web/` | Exit 0; ten tests passed |
+| `npm run typecheck` / `web/` | Exit 0 |
+| `npm run build` / `web/` | Exit 0; production build completed and listed all 11 routes |
+| `/tmp/manga-s2-venv/bin/python tests/verify_local_http.py` / repository root | Exit 0; disposable studio HTTP integration passed and frontend-only HTTP guards passed |
+| `git diff --check a5e59a2...HEAD` / repository root | Exit 0; no whitespace errors |
+
+The full discovery skips were expected: no `MANGA_TTS_SAMPLE_PROJECT` was supplied,
+and no external `MANGA_WEB_TEST_URL` was configured. The disposable HTTP runner
+started its own studio server and passed the HTTP workflow test.
+
+### Final review
+
+The Standards review found no hard documented-rule breaches or remaining
+judgement-call smells. The Spec review found no remaining requirements gaps. Earlier
+review findings for safe checkpoint resume, source-byte pinning, pending idempotency
+key recovery, and acceptance path inventory were fixed and rechecked.
+
+No real Firestore, Cloud Run, live MAGI/Gemini inference, paid provider call, or
+publication work ran. SQLite WAL is not a multi-host scheduler. Process recovery
+tests validate local process identity and checkpoint reuse, not filesystem power-loss
+durability.
+
+S2 has no remaining acceptance blockers. S3 is the next eligible scope in
+`architecture-alignment-plan.md`.

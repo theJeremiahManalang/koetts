@@ -182,7 +182,8 @@ def selection_key(segment: dict[str, Any]) -> str:
 
 def render_scene(p: dict[str, Any], root: PathLike, scene: dict[str, Any], renderer: Renderer, regenerate: Iterable[str] = (),
                  checkpoint: Callable[[dict[str, Any]], Any] | None = None,
-                 progress: Callable[[str, str], None] | None = None) -> list[dict[str, Any]]:
+                 progress: Callable[[str, str], None] | None = None, *,
+                 before_provider: Callable[[], None] | None = None) -> list[dict[str, Any]]:
     """Render or reuse approved scene segments, returning the compiled segment list.
 
     renderer(request) must return WAV bytes and may make paid calls. regenerate is an
@@ -229,6 +230,8 @@ def render_scene(p: dict[str, Any], root: PathLike, scene: dict[str, Any], rende
             write_wav(path, b"\0\0" * round(SAMPLE_RATE * seg["silence_sec"]))
         else:
             try:
+                if before_provider:
+                    before_provider()
                 data = renderer(seg["request"])
             except Exception:
                 LOGGER.error("segment_failed", extra={"operation": "render", "scene_id": scene["scene_id"],
@@ -328,6 +331,7 @@ def export_audio(p: dict[str, Any], root: PathLike, scene_ids: list[str], mp3: b
     write_json(out / "approved_script.json", [s for s in p["scenes"] if s["scene_id"] in scene_ids])
     write_json(out / "render_manifest.json", {"chapter_id": p["chapter_id"], "settings": p["settings"], "segments": timeline})
     if mp3:
+        assert encoder is not None
         temporary = out / "chapter_narration.pending.mp3"
         try:
             subprocess.run([encoder, "-y", "-i", str(wav), "-codec:a", "libmp3lame", "-b:a", "192k", str(temporary)], check=True, capture_output=True)

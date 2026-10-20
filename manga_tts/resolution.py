@@ -86,7 +86,8 @@ def evidence_signature(p: dict[str, Any], root: PathLike) -> str:
 
 
 def propose_plan(p: dict[str, Any], root: PathLike, client: Any, progress: Callable[[str], None] | None = None,
-                 max_attempts: int = DEFAULT_MAX_RETRIES, client_factory: Callable[[], Any] | None = None) -> dict[str, Any]:
+                 max_attempts: int = DEFAULT_MAX_RETRIES, client_factory: Callable[[], Any] | None = None,
+                 before_provider: Callable[[], None] | None = None) -> dict[str, Any]:
     """Return a validated visual proposal using p, root and an injected Gemini client.
 
     Calls progress(message) when supplied. Reuses a matching planning cache; otherwise
@@ -115,7 +116,7 @@ def propose_plan(p: dict[str, Any], root: PathLike, client: Any, progress: Calla
         from google.genai import types
         from PIL import Image
         report("Preparing page images, cast references and appearance crops…")
-        contents = [PLAN_PROMPT, json.dumps(data, ensure_ascii=False)]
+        contents: list[Any] = [PLAN_PROMPT, json.dumps(data, ensure_ascii=False)]
         def attach(label, path, size):
             with Image.open(path) as img:
                 img = img.convert("RGB")
@@ -131,6 +132,8 @@ def propose_plan(p: dict[str, Any], root: PathLike, client: Any, progress: Calla
             attach(f"Detected appearance {a['char_id']} on {a['page_id']}", asset(root, "input/" + a["crop_path"]), (320, 480))
         report(f"Sending {len(p['sources'])} bubbles and {(len(contents)-2)//2} images to {p['settings']['planning_model']}… Waiting for Gemini.")
         active_client = client_factory() if client_factory else client
+        if before_provider:
+            before_provider()
         response = retry_api(lambda: active_client.models.generate_content(model=p["settings"]["planning_model"], contents=contents,
             config=types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=PLAN_SCHEMA, temperature=0)), name="planning", max_attempts=max_attempts)
         raw_text = getattr(response, "text", None)

@@ -23,3 +23,36 @@ _Avoid_: Publication, take
 **Publication**:
 A reviewed export made available to readers through an explicit admin decision.
 _Avoid_: Export, completed render
+
+**Operation**:
+One requested production action with pinned inputs and an observable outcome. An
+operation may require more than one worker attempt.
+_Avoid_: Attempt, worker process
+
+**Attempt**:
+One finite worker execution for an operation.
+_Avoid_: Operation
+
+**Stage slot**:
+A capacity allowance for simultaneous work in one production stage.
+_Avoid_: Worker, operation
+
+**Lease**:
+A temporary claim that lets a worker hold a stage slot. Expiry signals that ownership
+needs reconciliation; it does not prove that the worker stopped.
+_Avoid_: Timeout, completion
+
+**Fence**:
+A nonreused generation attached to ownership, used to distinguish current work from
+stale work.
+_Avoid_: Revision
+
+**Idempotency key**:
+A token that makes repeated delivery of one intended request refer to the same
+operation.
+_Avoid_: Operation ID
+
+**Uncertain outcome**:
+A worker or provider may have started work, but the result cannot be confirmed. It
+requires reconciliation before retry or release.
+_Avoid_: Failed operation
