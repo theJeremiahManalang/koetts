@@ -6,7 +6,8 @@ Updated 20 October 2026. S1/S2 review and remediation completed on
 - **Objective and approval:** The user approved independent standards/spec reviews,
   fixes, regression checks, documentation, and a commit. The user selected the
   parent of the first S1 commit as the review baseline: `6423d44dd495d79de6eb6073875c98ad374ee8cb`.
-  No deployment, paid inference, publication, or push was authorized or performed.
+  No deployment, paid inference, or publication was authorized or performed.
+  The user subsequently authorized pushing this branch and opening a PR to `main`.
 - **Scope and decisions:** Preserve the local studio and S1/S2 contracts. Render
   retries retain the original take baseline and reuse replacements already accepted
   by the operation. Planning retries recognize the checkpointed completion hash.
@@ -33,5 +34,5 @@ Updated 20 October 2026. S1/S2 review and remediation completed on
   Ambiguous enqueue failures can retain orphan uploads pending a separate cleanup
   policy. No supplied samples, model caches, or results were changed.
 - **Blockers:** None within the approved scope.
-- **Next action:** Hand off the committed review fixes. S3 remains the next alignment
-  scope; this task does not authorize starting it or pushing the branch.
+- **Next action:** Push the branch and open the authorized PR to `main`, including
+  S2 and the review fixes. S1 is already on `origin/main`. S3 remains outside scope.
