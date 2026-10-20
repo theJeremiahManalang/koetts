@@ -15,7 +15,7 @@ from .storage import digest, read_json
 
 
 @contextmanager
-def workspace_lock(workspace):
+def workspace_lock(workspace, *, operation_id: str | None = None, fence: int | None = None):
     """Exclude competing CLI writers. A crash leaves a lock requiring human inspection."""
     workspace = Path(workspace).resolve()
     workspace.parent.mkdir(parents=True, exist_ok=True)
@@ -26,10 +26,50 @@ def workspace_lock(workspace):
         raise ValueError("Workspace is locked. Check for an active process before removing its sibling .lock file.") from None
     try:
         with os.fdopen(fd, "w") as stream:
-            stream.write(str(os.getpid()))
+            if operation_id is None:
+                stream.write(str(os.getpid()))
+            else:
+                import psutil
+
+                stream.write(json.dumps({
+                    "pid": os.getpid(),
+                    "process_created_at": psutil.Process().create_time(),
+                    "operation_id": operation_id,
+                    "fence": fence,
+                }, sort_keys=True))
         yield
     finally:
         lock.unlink(missing_ok=True)
+
+
+def recover_operation_lock(
+    workspace,
+    operation_id: str,
+    fence: int,
+    pid: int,
+    created_at: float,
+    *,
+    worker_stopped_confirmed: bool = False,
+) -> bool:
+    """Remove only an operation lock owned by a confirmed stopped worker attempt."""
+    from .operations import process_identity
+
+    workspace = Path(workspace).resolve()
+    lock = workspace.parent / (workspace.name + ".lock")
+    if not lock.exists():
+        return True
+    try:
+        value = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(value, dict) or value.get("operation_id") != operation_id or value.get("fence") != fence:
+        return False
+    if value.get("pid") != pid or value.get("process_created_at") != created_at:
+        return False
+    if not worker_stopped_confirmed and process_identity(pid, created_at) is not False:
+        return False
+    lock.unlink(missing_ok=True)
+    return True
 
 
 @contextmanager
@@ -160,6 +200,8 @@ def execute(args):
         router = PipelineRouter(PipelineConfig.from_environment(args.workspace))
         if args.action == "create":
             with input_bundle(args.chapter) as chapter, input_bundle(args.cast) as cast, input_bundle(args.originals) as originals:
+                if chapter is None:
+                    raise ValueError("A chapter bundle is required")
                 router.create_project(chapter, cast, originals)
         elif args.action == "restore":
             router.restore_project(args.bundle)
@@ -167,6 +209,8 @@ def execute(args):
             router.load_project()
             if args.action == "import-cast":
                 with input_bundle(args.cast) as cast:
+                    if cast is None:
+                        raise ValueError("A cast bundle is required")
                     router.import_cast(cast)
             elif args.action == "plan":
                 if args.output.exists():

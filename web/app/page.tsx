@@ -7,6 +7,12 @@ import { CastWorkspace } from "../components/cast-workspace";
 import { SourceWorkspace } from "../components/source-workspace";
 import { ScriptWorkspace } from "../components/script-workspace";
 import { LoadingState } from "../components/loading-state";
+import {
+  clearConflictedOperationKey,
+  idempotencyKeyForIntent,
+  pendingOperationIntents,
+  removePendingOperationKey,
+} from "../lib/idempotency";
 import type { Acting, Job, Project, Segment, Snapshot } from "../lib/types";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
@@ -42,6 +48,15 @@ function operationFor(action: string, command: unknown = {}, mode = ""): Operati
   return labels[action] ?? { pending: "Resuming your saved operation…", success: "Saved operation complete", detail: "The latest project state is ready to review." };
 }
 const operationToast = "workflow-operation";
+function formFingerprint(form: FormData) {
+  const entries: unknown[][] = [];
+  form.forEach((value, key) => {
+    entries.push([key, value instanceof File
+      ? { name: value.name, size: value.size, type: value.type, modified: value.lastModified }
+      : value]);
+  });
+  return JSON.stringify(entries);
+}
 const BusyContext = createContext("");
 function ActionButton({ disabled, reason, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { reason?: string }) {
   const busy = useContext(BusyContext);
@@ -137,9 +152,15 @@ export default function Home() {
   }, [preview]);
   const focused = draft?.sources.find(s => s.source_id === focusSource && s.page_id === page?.page_id);
 
-  async function api(url: string, options?: RequestInit) {
+  async function api(url: string, options?: RequestInit, idempotencyKey?: string) {
     const r = await fetch(url, options); const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Request failed.");
+    if (!r.ok) {
+      const code = typeof data.code === "string" ? data.code : undefined;
+      clearConflictedOperationKey(code, idempotencyKey);
+      const error = new Error(data.error || "Request failed.") as Error & { code?: string };
+      error.code = code;
+      throw error;
+    }
     return data;
   }
   async function refreshList() { const data = await api("/api/workflow"); setProjects(data.projects); setHasKey(data.has_api_key); }
@@ -153,7 +174,7 @@ export default function Home() {
     setSegments([]); setBundleReady(false);
     localStorage.setItem("manga-tts-project", id);
   }
-  async function watch(job: { id: string; project: string; operation?: Operation }) {
+  async function watch(job: { id: string; project: string; operation?: Operation; idempotencyKey?: string }) {
     const operation = job.operation ?? operationFor("resume");
     operationSection.current = operation.section ?? null;
     startOperation(operation);
@@ -163,6 +184,14 @@ export default function Home() {
       while (mounted.current) {
         const state: Job = await api(`/api/workflow?job=${job.id}`);
         setBusy(state.message || operation.pending);
+        if (state.status === "reconciliation_required") {
+          toast.error("Operation needs reconciliation", {
+            id: operationToast,
+            description: `${state.message} Operation ${job.id}. Resolve locally with web_workflow.py reconcile ${job.id} fail|retry.`,
+            duration: Infinity,
+          });
+          return false;
+        }
         if (!["complete", "failed"].includes(state.status) && state.message !== lastProgress) {
           lastProgress = state.message;
           toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
@@ -194,8 +223,26 @@ export default function Home() {
       try {
         await refreshList();
         const job = localStorage.getItem("manga-tts-job");
-        if (job) { setInitialLoading(false); setBusy("Reconnecting to your job…"); await watch(JSON.parse(job)); }
-        else { const id = localStorage.getItem("manga-tts-project"); if (id) await openProject(id); }
+        if (job) {
+          setInitialLoading(false);
+          setBusy("Reconnecting to your job…");
+          const savedJob = JSON.parse(job) as { idempotencyKey?: string } & Parameters<typeof watch>[0];
+          await watch(savedJob);
+          if (savedJob.idempotencyKey) removePendingOperationKey(savedJob.idempotencyKey);
+        }
+        else {
+          for (const pending of pendingOperationIntents()) {
+            try {
+              const operation = await api(`/api/workflow?key=${encodeURIComponent(pending.key)}`);
+              const watching = watch({ ...operation, idempotencyKey: pending.key });
+              setInitialLoading(false);
+              await watching;
+              removePendingOperationKey(pending.key);
+              return;
+            } catch { /* The POST may not have reached persistence; keep its key for lookup or retry. */ }
+          }
+          const id = localStorage.getItem("manga-tts-project"); if (id) await openProject(id);
+        }
       } catch (e) { toast.error("Saved projects could not be loaded", { description: e instanceof Error ? e.message : "Check the server connection and reload the page.", duration: Infinity }); }
       finally { setInitialLoading(false); }
     })();
@@ -238,8 +285,12 @@ export default function Home() {
     const operation = { ...operationFor(action, command), section: operationSection.current };
     startOperation(operation);
     try {
-      const job = await api("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json", "X-Manga-Workflow": "1" }, body: JSON.stringify({ project: projectId, revision: snapshot.revision, action, command, ...extra }) });
-      const ok = await watch({ ...job, operation });
+      const payload = { project: projectId, revision: snapshot.revision, action, command, ...extra };
+      const fingerprint = JSON.stringify(payload);
+      const key = idempotencyKeyForIntent(fingerprint);
+      const job = await api("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json", "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: JSON.stringify(payload) }, key);
+      const ok = await watch({ ...job, operation, idempotencyKey: key });
+      removePendingOperationKey(key);
       if (ok && ["take", "export", "bundle"].includes(action)) setSegments(segments);
       if (ok && action === "bundle") setBundleReady(true);
       return ok;
@@ -251,7 +302,12 @@ export default function Home() {
     setErrorSection(null);
     const operation = { ...operationFor(String(form.get("action")), {}, String(form.get("mode") || "")), section: operationSection.current };
     startOperation(operation);
-    try { const job = await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1" }, body: form }); await watch({ ...job, operation }); }
+    try {
+      const key = idempotencyKeyForIntent(formFingerprint(form));
+      const job = await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: form }, key);
+      await watch({ ...job, operation, idempotencyKey: key });
+      removePendingOperationKey(key);
+    }
     catch (e) { failOperation(operation, e); setBusy(""); }
   }
   function createProject() {

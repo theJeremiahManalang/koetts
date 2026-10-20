@@ -1,29 +1,38 @@
 # Task checkpoint
 
-Updated 19 October 2026. Assignment: clear conflicts on PR #9 by syncing current
-`main` into `feat/architecture-alignment`. Keep the pull request open and unmerged.
+Updated 20 October 2026. S1/S2 review and remediation completed on
+`feat/architecture-alignment`, starting from `b7d4ff2`.
 
-- Approval: user approved updating the feature branch from `main`, resolving the
-  conflicts, and pushing the feature branch so PR #9 has no conflicts. No merge into
-  `main` is authorized.
-- Baseline: `origin/main` at `ad672f970130cab219304a3127e79710dad178ed`; feature
-  branch before sync at `ad4549d41086901edbaacc157f9d2fc9848131d9`.
-- Resolution: conflicts in `docs/alignment-status.md`, `docs/architecture.md`,
-  `docs/target-design.md`, `tests/test_worker_process.py`,
-  `tests/verify_local_http.py`, and `tests/worker_process.py` retain the feature
-  branch's S1 evidence and harness changes. `tests/test_web_http.py` auto-merged.
-  `CONTEXT.md` now records this assignment. The result preserves S1 decisions,
-  acceptance evidence, and current main's S0 history.
-- Verification: `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -v`
-  passed (59 tests: 57 passed, two optional skips for the missing external sample
-  and local web server). `npm test` passed (8 tests), `npm run typecheck` passed,
-  and `npm run build` passed with Next.js 16.4.0 and 11 routes.
-  `git diff --check --cached` passed; no conflict markers remain in the resolved
-  files.
-- PR: [PR #9](https://github.com/theJeremiahManalang/koetts/pull/9) remains open
-  against `main`.
-- Review: Standards found zero violations. Spec review found no missing or incorrect
-  S1 behavior, and flagged `e44e4c8` for import sorting across 28 files plus
-  unrelated `run.py` and storage exception changes; their need is not documented.
-- Next action: push the feature branch and confirm GitHub reports the PR as
-  conflict-free. Leave PR #9 open.
+- **Objective and approval:** The user approved independent standards/spec reviews,
+  fixes, regression checks, documentation, and a commit. The user selected the
+  parent of the first S1 commit as the review baseline: `6423d44dd495d79de6eb6073875c98ad374ee8cb`.
+  No deployment, paid inference, or publication was authorized or performed.
+  The user subsequently authorized pushing this branch and opening a PR to `main`.
+- **Scope and decisions:** Preserve the local studio and S1/S2 contracts. Render
+  retries retain the original take baseline and reuse replacements already accepted
+  by the operation. Planning retries recognize the checkpointed completion hash.
+  Ambiguous enqueue failures retain staged inputs. Explicit reconciliation refreshes
+  accepted render state only after worker stoppage and workspace ownership checks.
+- **Changed source/tests:** `manga_tts/operations.py`, `web_workflow.py`,
+  `web/app/api/workflow/route.ts`, `tests/test_operations.py`,
+  `tests/test_operation_worker_process.py`, `tests/operation_worker_process.py`,
+  and `web/tests/workflow-route.test.cjs`. Includes the stopped-process termination
+  race fix and shared fenced failure handling.
+- **Evidence:** `docs/alignment-status.md` links `docs/s1-s2-review.md`, which owns
+  the initial findings, remediation, acceptance evidence, and limitations.
+  Final independent standards and spec reviews report zero remaining findings
+  within the reviewed fixes.
+- **Checks:** `/tmp/manga-s2-venv/bin/python -m unittest discover -s tests -v`:
+  85 tests, 83 passed, two optional skips (external sample and HTTP server).
+  Focused operation tests: 12 passed; worker process tests: six passed.
+  `npm test`: 12 passed; `npm run typecheck` and `npm run build`: passed in `web/`.
+  Scoped Ruff and import ordering passed. Scoped Pyright with
+  `/tmp/manga-s2-pyrightconfig.json`: zero diagnostics. Initial Pyright without the
+  environment config reported three psutil source warnings; the configured run
+  resolves them. `git diff --check` passed.
+- **Limits:** Synthetic audio only; no live provider or cloud verification.
+  Ambiguous enqueue failures can retain orphan uploads pending a separate cleanup
+  policy. No supplied samples, model caches, or results were changed.
+- **Blockers:** None within the approved scope.
+- **Next action:** Push the branch and open the authorized PR to `main`, including
+  S2 and the review fixes. S1 is already on `origin/main`. S3 remains outside scope.
