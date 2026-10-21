@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, Literal, ParamSpec, TypeVar
 
 from pydantic import ValidationError
 
@@ -207,7 +207,8 @@ class PipelineRouter:
             ))
         return self.project
 
-    def _commit_approval(self, candidate: dict[str, Any], subjects: list[str]) -> Project:
+    def _commit_approval(self, candidate: dict[str, Any],
+                         subjects: list[tuple[Literal["cast", "scene"], str]]) -> Project:
         """Stage trusted audit decisions inside the same durable project commit."""
         if subjects:
             context = self._approval_context or ApprovalContext(
@@ -216,8 +217,7 @@ class PipelineRouter:
                 reviewed_revision=self._persistence_revision_id or storage.digest(self._data()),
             )
             history = candidate.setdefault("approval_audit", [])
-            for subject in subjects:
-                kind = "cast" if subject == "cast" else "scene"
+            for kind, subject in subjects:
                 fingerprint = (candidate["cast_approval"] if kind == "cast"
                                else candidate["approvals"][subject])
                 if any(record["operation_id"] == context.operation_id
@@ -342,14 +342,14 @@ class PipelineRouter:
         for entry in command.new_characters:
             if not storage.asset(self.root, candidate["cast"][entry.speaker_id]["references"][0]).is_file():
                 raise ValueError("The selected appearance has no reference image")
-        return self._commit_approval(candidate, ["cast"] if command.approve else [])
+        return self._commit_approval(candidate, [("cast", "cast")] if command.approve else [])
 
     @operation("cast")
     def approve_cast(self) -> Project:
         """Validate current appearance resolution and approve the current cast; autosave, no API calls."""
         candidate = self._data()
         script.approve_cast(candidate)
-        return self._commit_approval(candidate, ["cast"])
+        return self._commit_approval(candidate, [("cast", "cast")])
 
     @operation("planning")
     def generate_proposal(
@@ -405,7 +405,7 @@ class PipelineRouter:
         """Apply exact transcript edits and optional approval atomically; source evidence stays unchanged."""
         command = SceneReview.model_validate(command)
         return self._commit_approval(script.review_scene(self._data(), dump(command)),
-                                     [command.scene_id] if command.approve else [])
+                                     [("scene", command.scene_id)] if command.approve else [])
 
     @operation("script")
     def apply_scene_reviews(self, command: SceneBatchReview) -> Project:
@@ -424,7 +424,7 @@ class PipelineRouter:
             if review.approve:
                 scene = next(s for s in candidate["scenes"] if s["scene_id"] == review.scene_id)
                 script.approve_scene(candidate, scene)
-        return self._commit_approval(candidate, [review.scene_id for review in command.scenes if review.approve])
+        return self._commit_approval(candidate, [("scene", review.scene_id) for review in command.scenes if review.approve])
 
     @operation("narration")
     def insert_narration(self, command: NarrationInsert) -> Project:

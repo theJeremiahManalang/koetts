@@ -90,6 +90,24 @@ class ApprovalAuditTests(unittest.TestCase):
                 self.router.update_metadata(metadata)
         self.assertEqual(schemas.dump(self.router.project), before)
 
+    def test_scene_named_cast_keeps_scene_identity_and_fingerprint(self):
+        self.fixture.approve()
+        sources = review_document(self.router.project, "sources")
+        for source in sources["command"]["sources"]:
+            source["scene_id"] = "cast"
+        apply_review(self.router, sources)
+        scene = review_document(self.router.project, "script", "cast")
+        apply_review(self.router, scene, approve=True)
+        audit = self.router.project.approval_audit[-1]
+        self.assertEqual(audit.subject_kind, "scene")
+        self.assertEqual(audit.subject_id, "cast")
+        self.assertEqual(audit.fingerprint, self.router.project.approvals["cast"])
+        command = schemas.SceneReview.model_validate({**scene["command"], "approve": True})
+        self.router.apply_scene_reviews(schemas.SceneBatchReview(scenes=[command]))
+        audit = self.router.project.approval_audit[-1]
+        self.assertEqual((audit.subject_kind, audit.subject_id), ("scene", "cast"))
+        self.assertEqual(audit.fingerprint, self.router.project.approvals["cast"])
+
     def test_old_project_has_empty_history_without_changing_serialization(self):
         data = schemas.dump(self.router.project)
         data.pop('approval_audit', None)
