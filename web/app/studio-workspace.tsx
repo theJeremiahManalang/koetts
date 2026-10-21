@@ -166,20 +166,34 @@ function StudioWorkspace() {
   const focused = draft?.sources.find(s => s.source_id === focusSource && s.page_id === page?.page_id);
 
   async function api(url: string, options?: RequestInit, idempotencyKey?: string) {
-    const user = getFirebaseAuth().currentUser;
-    if (!user || !authorization.current.ready || authorization.current.uid !== user.uid) throw new Error("Verify your account before continuing. Your draft is retained.");
-    const headers = new Headers(options?.headers);
-    headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
-    if (!authorization.current.ready || authorization.current.uid !== user.uid) throw new Error("Verify your account before continuing. Your draft is retained.");
-    const r = await fetch(url, { ...options, headers }); const data = await r.json();
-    if (!r.ok) {
-      const code = typeof data.code === "string" ? data.code : undefined;
-      clearConflictedOperationKey(code, idempotencyKey);
-      const error = new Error(data.error || "Request failed.") as Error & { code?: string };
-      error.code = code;
-      throw error;
+    const readOnly = !options?.method || options.method === "GET";
+    while (true) {
+      const user = getFirebaseAuth().currentUser;
+      if (!mounted.current || !user || authorization.current.uid !== user.uid) throw new Error("Verify your account before continuing. Your draft is retained.");
+      if (!authorization.current.ready) {
+        if (!readOnly) throw new Error("Verify your account before continuing. Your draft is retained.");
+        // Keep read/poll recovery alive through same-account reauthentication.
+        // Mutation requests are never automatically replayed.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
+      }
+      const headers = new Headers(options?.headers);
+      headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
+      if (!mounted.current || getFirebaseAuth().currentUser?.uid !== user.uid || !authorization.current.ready || authorization.current.uid !== user.uid) {
+        if (readOnly) continue;
+        throw new Error("Verify your account before continuing. Your draft is retained.");
+      }
+      const r = await fetch(url, { ...options, headers }); const data = await r.json();
+      if (!mounted.current || getFirebaseAuth().currentUser?.uid !== user.uid) throw new Error("Your account changed. Sign in again to resume this operation.");
+      if (!r.ok) {
+        const code = typeof data.code === "string" ? data.code : undefined;
+        clearConflictedOperationKey(code, idempotencyKey);
+        const error = new Error(data.error || "Request failed.") as Error & { code?: string };
+        error.code = code;
+        throw error;
+      }
+      return data;
     }
-    return data;
   }
   async function refreshList() { const data = await api("/api/workflow"); setProjects(data.projects); setHasKey(data.has_api_key); }
   async function loadProject(id: string) {
@@ -215,13 +229,16 @@ function StudioWorkspace() {
           toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
         }
         if (["complete", "failed"].includes(state.status)) {
-          localStorage.removeItem("manga-tts-job");
           await refreshList();
           if (state.status === "failed") {
+            localStorage.removeItem("manga-tts-job");
+            if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
             // Preserve editable drafts on failure; explicit reload recovers partial audio.
             throw new Error(state.message);
           }
           await loadProject(job.project);
+          localStorage.removeItem("manga-tts-job");
+          if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
           if (state.result?.segments) setSegments(state.result.segments);
           setErrorSection(null);
           toast.success(operation.success, { id: operationToast, description: operation.detail, duration: 6500 });
@@ -246,7 +263,6 @@ function StudioWorkspace() {
           setBusy("Reconnecting to your job…");
           const savedJob = JSON.parse(job) as { idempotencyKey?: string } & Parameters<typeof watch>[0];
           await watch(savedJob);
-          if (savedJob.idempotencyKey) removePendingOperationKey(savedJob.idempotencyKey);
         }
         else {
           for (const pending of pendingOperationIntents()) {
@@ -255,7 +271,6 @@ function StudioWorkspace() {
               const watching = watch({ ...operation, idempotencyKey: pending.key });
               setInitialLoading(false);
               await watching;
-              removePendingOperationKey(pending.key);
               return;
             } catch { /* The POST may not have reached persistence; keep its key for lookup or retry. */ }
           }
@@ -308,7 +323,6 @@ function StudioWorkspace() {
       const key = idempotencyKeyForIntent(fingerprint);
       const job = await api("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json", "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: JSON.stringify(payload) }, key);
       const ok = await watch({ ...job, operation, idempotencyKey: key });
-      removePendingOperationKey(key);
       if (ok && ["take", "export", "bundle"].includes(action)) setSegments(segments);
       if (ok && action === "bundle") setBundleReady(true);
       return ok;
@@ -324,7 +338,6 @@ function StudioWorkspace() {
       const key = idempotencyKeyForIntent(formFingerprint(form));
       const job = await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: form }, key);
       await watch({ ...job, operation, idempotencyKey: key });
-      removePendingOperationKey(key);
     }
     catch (e) { failOperation(operation, e); setBusy(""); }
   }

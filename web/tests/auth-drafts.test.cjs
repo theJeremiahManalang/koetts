@@ -25,7 +25,7 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
-for (const surface of ['request', 'studio']) test(`${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+for (const surface of ['request', 'studio', 'polling']) test(surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage, File: dom.window.File, URL: dom.window.URL, ResizeObserver: class { observe() {} disconnect() {} }, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -37,8 +37,15 @@ for (const surface of ['request', 'studio']) test(`${surface} draft survives tok
   let pending;
   let loginCalls = 0;
   let fail = false;
-  globalThis.fetch = async () => {
-    if (pending) await pending;
+  let polls = 0;
+  let jobStatus = 'running';
+  let observedReconciliation = false;
+  globalThis.fetch = async url => {
+    if (String(url).includes('?job=')) {
+      polls++;
+      return { ok: true, json: async () => { if (jobStatus === 'reconciliation_required') observedReconciliation = true; return { status: jobStatus, message: 'Rendering fixture' }; } };
+    }
+    if (pending && url === '/api/auth/session') await pending;
     return { ok: !fail, json: async () => ({ projects: [], has_api_key: false }) };
   };
   const mocks = {
@@ -59,11 +66,39 @@ for (const surface of ['request', 'studio']) test(`${surface} draft survives tok
   const Page = load(surface === 'request' ? '../app/request/page.tsx' : '../app/studio-workspace.tsx', mocks, cache).default;
   const { createRoot } = require('react-dom/client');
   const root = createRoot(document.getElementById('root'));
-  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  t.after(async () => { await act(async () => root.unmount()); if (surface === 'polling') await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); }); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
   await act(async () => root.render(React.createElement(AuthProvider, null, React.createElement(Page))));
   const emit = user => { firebaseAuth.currentUser = user; return observer(user); };
   const user = uid => ({ uid, getIdToken: async () => 'token', getIdTokenResult: async () => ({ token: 'token', claims: { admin: true } }) });
+  if (surface === 'polling') {
+    localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'a'.repeat(32), project: 'b'.repeat(32), idempotencyKey: 'retained-intent' }));
+    localStorage.setItem('manga-tts-pending-operation', JSON.stringify([{ key: 'retained-intent', fingerprint: 'operation' }]));
+  }
   await act(async () => emit(user('alice')));
+  if (surface === 'polling') {
+    assert.ok(polls > 0, 'saved operation must start polling');
+    let release;
+    pending = new Promise(resolve => { release = resolve; });
+    let refresh;
+    await act(async () => { refresh = emit(user('alice')); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    fail = true;
+    await act(async () => { release(); await refresh; });
+    const pausedPolls = polls;
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    assert.equal(polls, pausedPolls, 'verification failure must pause protected requests');
+    pending = null;
+    fail = false;
+    await act(async () => emit(user('alice')));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    assert.ok(polls > pausedPolls, 'reauthentication must resume the existing operation without reload');
+    assert.ok(localStorage.getItem('manga-tts-job'), 'running operation recovery record must remain');
+    jobStatus = 'reconciliation_required';
+    await act(async () => { for (let elapsed = 0; elapsed < 2000 && !observedReconciliation; elapsed += 50) await new Promise(resolve => setTimeout(resolve, 50)); });
+    assert.ok(observedReconciliation, 'worker reconciliation state must be observed before checking retained intent');
+    assert.ok(localStorage.getItem('manga-tts-pending-operation')?.includes('retained-intent'), 'uncertain outcome must retain its idempotency lookup key');
+    return;
+  }
   const selector = surface === 'request' ? 'textarea' : 'input[aria-label="Upload manga images"]';
   const textarea = document.querySelector(selector);
   assert.ok(textarea);
