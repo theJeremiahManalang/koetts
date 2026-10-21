@@ -1,5 +1,12 @@
 # Task checkpoint
 
+## Final S3 review handoff — 22 October 2026
+
+- **Approval and scope:** User approved final review of `7d89726...d3af872`, confirmed fixes with affected checks, separate bounded commits and separate evidence. Preserve existing history and unrelated checkpoint edits; exclude S4/S5 and deployment.
+- **Findings and fixes:** Independent Standards review: zero findings. Spec: P1 polling stopped during same-user renewal; P2 scene ID `cast` was misclassified in audit. Both reproduced red and passed after fixes. Commit `434c81e` owns only studio polling and its rendered regression; `4161dfa` owns only router audit identity and its regression. Independent follow-ups report no remaining findings.
+- **Checks:** Python 3.11.15 full discovery `/tmp/manga-final-review-venv/bin/python -m unittest discover -s tests -v`: 101 run, 99 passed, two expected skips. Web: 33 tests, typecheck/build passed. Scoped Ruff/Pyright passed. Native Chromium polling/failure/recovery/reconciliation test passed without page errors. Exact methods, initial failures and limits: `docs/s3-final-review.md`; linked from `docs/alignment-status.md`.
+- **State and next action:** Review fixes are committed locally on `feat/architecture-alignment`; no rollout, role changes or paid calls occurred. Existing S3 live verification evidence remains separate. Evidence commit follows. Preserve the pre-existing review-only CONTEXT section outside task commits. Final review has no remaining actionable finding; S4 requires its own approved scope.
+
 ## S3 completion handoff — 22 October 2026
 
 - **Objective and approval:** User approved and requested implementation, authentication-only deployment and commits for S3. Scope excludes hosted generation, publication and S4/S5 processing. The agent made no role changes or paid provider calls.

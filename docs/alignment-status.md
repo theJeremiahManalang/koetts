@@ -502,3 +502,11 @@ successful authentication-only deployment, and the user-confirmed positive live
 admin check. No S3 acceptance blocker remains within the approved scope. S4 is
 the next eligible implementation scope; hosted generation remains disabled and
 this report does not establish S4 or S5 completion.
+
+### Final code review follow-up
+
+[Final S3 review](s3-final-review.md) records two subsequently discovered defects
+in local polling recovery and audit subject identity, red/green regression evidence,
+separate fixes `434c81e` and `4161dfa`, fresh verification and clean independent
+follow-up reviews. It supersedes earlier no-findings claims for those paths.
+These local review fixes were not deployed; hosted processing remains disabled.
