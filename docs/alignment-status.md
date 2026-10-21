@@ -366,12 +366,12 @@ durability.
 S2 has no remaining acceptance blockers. S3 is the next eligible scope in
 `architecture-alignment-plan.md`.
 
-## S3 — Local implementation verified; live admin acceptance blocked, 22 October 2026
+## S3 — Complete for the approved authentication scope, 22 October 2026
 
 The user explicitly approved completing S3 and deploying authentication boundaries
 in the existing KoeTTS project. Hosted generation, publication, S4 shared requests
-and S5 production storage/execution remain excluded. No admin was promoted, no user
-was impersonated and no paid provider call ran.
+and S5 production storage/execution remain excluded. The agent did not promote
+accounts, impersonate users or invoke paid providers.
 
 ### Implemented boundaries
 
@@ -488,15 +488,17 @@ The previous frontend revision remains the rollback target. See [S3 deployment](
 cost limits and rollback. The user successfully signed in after the correction and
 reported the diagnostic's `Administrator access required.` response. Inspection
 confirmed a reader account now exists alongside the unchanged existing admin;
-live reader denial is therefore confirmed. The user cannot access the existing
-admin account. Successful frontend-to-private-API admin verification is blocked
-by that access limitation; it is not claimed passed. The approved scope excludes
-automatic role promotion, so existing roles remain unchanged. An existing admin
-must run the diagnostic, or a separately authorized designated-admin provisioning
-task must establish another trusted administrator before this live criterion closes.
+live reader denial is therefore confirmed. Access to the original admin initially
+blocked the positive check. After trusted account setup, the user confirmed the
+live admin diagnostic returned `{"verified":true,"mode":"verification"}`.
+This is user-observed end-to-end acceptance of browser session, Next admin
+authorization, service identity and independent Python Firebase verification.
+The agent made no role changes and did not handle the user's login credentials.
 Revoked-user behavior is verified offline, not by modifying the live admin's sessions.
 
 Implementation and deployment are committed in `8ae3968` on
 `feat/architecture-alignment`. This report distinguishes completed local contracts,
-successful authentication-only deployment, and the blocked positive live admin
-check. It does not establish S4 or S5 completion.
+successful authentication-only deployment, and the user-confirmed positive live
+admin check. No S3 acceptance blocker remains within the approved scope. S4 is
+the next eligible implementation scope; hosted generation remains disabled and
+this report does not establish S4 or S5 completion.
