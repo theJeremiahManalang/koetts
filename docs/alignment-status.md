@@ -366,7 +366,7 @@ durability.
 S2 has no remaining acceptance blockers. S3 is the next eligible scope in
 `architecture-alignment-plan.md`.
 
-## S3 — Local implementation verified; live admin acceptance pending, 22 October 2026
+## S3 — Local implementation verified; live admin acceptance blocked, 22 October 2026
 
 The user explicitly approved completing S3 and deploying authentication boundaries
 in the existing KoeTTS project. Hosted generation, publication, S4 shared requests
@@ -488,7 +488,15 @@ The previous frontend revision remains the rollback target. See [S3 deployment](
 cost limits and rollback. The user successfully signed in after the correction and
 reported the diagnostic's `Administrator access required.` response. Inspection
 confirmed a reader account now exists alongside the unchanged existing admin;
-live reader denial is therefore confirmed. The user has been asked to retry with
-that existing admin. Successful frontend-to-private-API admin verification remains
-pending. Revoked-user behavior is verified offline, not by modifying the live
-admin's sessions. No role promotion was performed.
+live reader denial is therefore confirmed. The user cannot access the existing
+admin account. Successful frontend-to-private-API admin verification is blocked
+by that access limitation; it is not claimed passed. The approved scope excludes
+automatic role promotion, so existing roles remain unchanged. An existing admin
+must run the diagnostic, or a separately authorized designated-admin provisioning
+task must establish another trusted administrator before this live criterion closes.
+Revoked-user behavior is verified offline, not by modifying the live admin's sessions.
+
+Implementation and deployment are committed in `8ae3968` on
+`feat/architecture-alignment`. This report distinguishes completed local contracts,
+successful authentication-only deployment, and the blocked positive live admin
+check. It does not establish S4 or S5 completion.
