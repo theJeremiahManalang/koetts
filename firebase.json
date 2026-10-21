@@ -1,4 +1,18 @@
 {
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "KoeTTS",
+        "supportEmail": "engr.jeremiah.m@gmail.com",
+        "authorizedRedirectUris": [
+          "https://koetts-9bf7f.firebaseapp.com/__/auth/handler",
+          "http://localhost",
+          "http://127.0.0.1",
+          "https://my-web-app--koetts-9bf7f.us-east4.hosted.app"
+        ]
+      }
+    }
+  },
   "apphosting": [
     {
       "backendId": "koetts",

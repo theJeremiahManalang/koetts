@@ -1,4 +1,4 @@
-# Manga Reader audio workspace
+# KoeTTS audio workspace
 
 The UI is adapted from `character-analysis-web`: same paper/ink/sage palette,
 header, image viewer, zoom controls, split reader layout and character crops.
@@ -6,6 +6,12 @@ The earlier Windows speech prototype has been replaced with the reviewed
 `manga_tts` workflow on `dev-test-1`.
 
 ## Start locally
+
+Google login and signup use Firebase Authentication. Fill in the four
+`NEXT_PUBLIC_FIREBASE_*` settings in `.env.local` using `.env.example` as a
+reference, then restart the development server. See
+[Firebase authentication setup](../docs/FIREBASE_AUTH.md) for enabling Google,
+authorizing domains, and assigning admin roles.
 
 1. Install the Python dependencies described in `../docs/AUDIO_WORKFLOW.md`.
 2. Select a Python 3.11+ environment with the audio dependencies installed. From

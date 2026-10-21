@@ -10,7 +10,7 @@ const compiled = ts.transpileModule(
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } },
 ).outputText;
 
-function route(root, enqueueOperation) {
+function route(root, enqueueOperation, requireAdmin = async () => null) {
   let sequence = 0;
   const api = {};
   const workflow = {
@@ -24,10 +24,20 @@ function route(root, enqueueOperation) {
   new Function("exports", "require", compiled)(api, name => {
     if (name.endsWith("/workflow")) return workflow;
     if (name.endsWith("/python")) return {};
+    if (name.endsWith("/require-admin")) return { requireAdmin };
     return require(name);
   });
   return api;
 }
+
+test("workflow denies unauthenticated and non-admin requests before processing", async () => {
+  for (const status of [401, 403]) {
+    const api = route("unused", () => assert.fail("Denied requests must not enqueue"), async () =>
+      Response.json({ error: "Access denied" }, { status }));
+    assert.equal((await api.GET(new Request("http://localhost/api/workflow"))).status, status);
+    assert.equal((await api.POST(upload())).status, status);
+  }
+});
 
 function upload() {
   const form = new FormData();

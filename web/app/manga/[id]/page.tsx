@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { mangas } from "../../data/manga";
+import { LibraryHeader, MangaCover } from "../../../components/library-ui";
 
 export default function MangaDetailsPage() {
   const params = useParams();
@@ -24,22 +25,20 @@ export default function MangaDetailsPage() {
   }
 
   return (
-    <main className="manga-details-page">
+    <div className="library-shell"><LibraryHeader /><main className="manga-details-page library-page">
       <Link href="/browse" className="back-link">
-        ← Browse
+        ← Back to the collection
       </Link>
 
       <section className="manga-hero">
-        <div className="detail-cover">
-          {manga.title.charAt(0)}
-        </div>
+        <MangaCover id={manga.id} title={manga.title} />
 
         <div className="manga-info">
           <p className="manga-status">
             {manga.status}
           </p>
 
-          <h1>{manga.title}</h1>
+          <p className="eyebrow">THE KOETTS COLLECTION</p><h1>{manga.title}</h1>
 
           <div className="genre-list">
             {manga.genres.map((genre) => (
@@ -51,11 +50,12 @@ export default function MangaDetailsPage() {
             {manga.description}
           </p>
 
+          <div className="detail-stats"><span><strong>{manga.chapters.length}</strong> chapters</span><span><strong>{manga.chapters.filter(chapter => chapter.audioStatus === "ready").length}</strong> audiobook ready</span></div>
           <Link
             href={`/read/${manga.id}/${manga.chapters[0].id}`}
             className="primary-action"
           >
-            Start Reading
+            Start reading · Chapter 1 ↗
           </Link>
         </div>
       </section>
@@ -67,7 +67,7 @@ export default function MangaDetailsPage() {
               Chapters
             </p>
 
-            <h2>Chapter List</h2>
+            <h2>Choose your next chapter</h2>
           </div>
 
           <span>
@@ -75,19 +75,20 @@ export default function MangaDetailsPage() {
           </span>
         </div>
 
-        <div className="chapter-list">
+        <p className="chapter-intro">Read at your own pace, or explore the available audio chapters.</p><div className="chapter-list">
           {manga.chapters.map((chapter) => (
             <article
               className="chapter-row"
               key={chapter.id}
             >
-              <div>
+              <span className="chapter-index" aria-hidden="true">{String(chapter.number).padStart(2, "0")}</span><div className="chapter-row-info">
                 <p className="chapter-number">
                   Chapter {chapter.number}
                 </p>
 
                 <h3>{chapter.title}</h3>
 
+                {chapter.audioStatus === "none" && <span className="library-muted">Audio available on request</span>}
                 {chapter.audioStatus === "ready" && (
                   <span className="audio-ready">
                     ✓ Audiobook Ready
@@ -106,6 +107,7 @@ export default function MangaDetailsPage() {
                 <Link
                   href={`/read/${manga.id}/${chapter.id}`}
                   className="read-button"
+                  aria-label={`Read chapter ${chapter.number}: ${chapter.title}`}
                 >
                   Read
                 </Link>
@@ -123,6 +125,7 @@ export default function MangaDetailsPage() {
                       `Chapter ${chapter.number} - ${chapter.title}`
                     )}`}
                     className="request-audio-button"
+                    aria-label={`Request audiobook for chapter ${chapter.number}: ${chapter.title}`}
                   >
                     Request Audiobook
                   </Link>
@@ -131,6 +134,7 @@ export default function MangaDetailsPage() {
                   <button
                     type="button"
                     className="listen-button"
+                    aria-label={`Listen to chapter ${chapter.number}: ${chapter.title}`}
                   >
                     ▶ Listen
                   </button>
@@ -148,6 +152,6 @@ export default function MangaDetailsPage() {
           ))}
         </div>
       </section>
-    </main>
+    </main></div>
   );
 }
