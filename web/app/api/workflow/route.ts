@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { requireAdmin } from "../../../lib/require-admin";
+import { adminPrincipal, requireAdmin } from "../../../lib/require-admin";
 import { mkdir, readdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -74,6 +74,7 @@ export async function POST(request: Request) {
   let staging: string | undefined;
   let enqueueStarted = false;
   try {
+    const actor = adminPrincipal(request);
     sameOrigin(request);
     // Custom header prevents simple cross-origin form submissions.
     if (request.headers.get("x-manga-workflow") !== "1") return Response.json({ error: "Invalid request." }, { status: 403 });
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
       }
       enqueueStarted = true;
       const enqueued = await enqueueOperation({
+        actor,
         action,
         mode,
         direction,
@@ -138,6 +140,8 @@ export async function POST(request: Request) {
     const text = await request.text();
     if (text.length > 5_000_000) throw new Error("Review request is too large.");
     const payload = JSON.parse(text);
+    // Actor provenance is server-owned, including when the caller supplies a value.
+    payload.actor = actor;
     if (!["rename", "cast-create", "plan", "proposal", "cast", "sources", "script", "script-batch", "sync-speakers", "settings", "narration", "take", "inspect", "render", "export", "bundle"].includes(payload.action)) throw new Error("Unknown action.");
     payload.project = validId(payload.project);
     const enqueued = await enqueueOperation(payload, idempotencyKey);

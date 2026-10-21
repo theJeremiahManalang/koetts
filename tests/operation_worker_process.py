@@ -29,11 +29,12 @@ def main() -> None:
                 time.sleep(.05)
         return wav_bytes()
 
-    def router(config):
+    def router(config, **options):
         return PipelineRouter(
             config,
             client_factory=lambda: object(),
             renderer_factory=lambda _client, _model: render,
+            **options,
         )
 
     if mode.startswith("plan"):

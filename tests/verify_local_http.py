@@ -22,8 +22,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def fetch(base, route, method="GET"):
-    request = urllib.request.Request(base + route, method=method)
+def fetch(base, route, method="GET", identity: str | None = "admin"):
+    headers = {"Authorization": "Bearer fixture-" + identity} if identity else {}
+    request = urllib.request.Request(base + route, method=method, headers=headers)
     try:
         return urllib.request.build_opener(NoRedirect).open(request, timeout=60)
     except urllib.error.HTTPError as response:
@@ -71,6 +72,18 @@ def main():
             "node_modules", ".next", "*.tsbuildinfo"))
         # A real copy keeps Turbopack resolution and generated files inside the runtime.
         shutil.copytree(repo / "web/node_modules", runtime / "web/node_modules", symlinks=True)
+        # Replace the external identity SDK only in this disposable source copy.
+        # No environment variable or fixture credential can bypass production auth.
+        (runtime / "web/lib/firebase-admin.ts").write_text('''
+export function getAdminAuth() {
+  async function verify(value: string, _checkRevoked?: boolean) {
+    if (value !== "fixture-admin" && value !== "fixture-reader") throw new Error("Invalid fixture");
+    return { uid: value, aud: "offline-fixture", admin: value === "fixture-admin" };
+  }
+  return { verifyIdToken: verify, verifySessionCookie: verify,
+    createSessionCookie: async (value: string, _options?: { expiresIn: number }) => { await verify(value); return value; } };
+}
+''')
         env = {**os.environ, "PYTHON_EXECUTABLE": sys.executable,
                "GEMINI_API_KEY": "", "NEXT_TELEMETRY_DISABLED": "1"}
         env.pop("MANGA_WEB_TEST_URL", None)
@@ -108,6 +121,11 @@ def main():
                         except (OSError, TimeoutError):
                             pass
                         time.sleep(.1)
+                    for identity, expected in ((None, 401), ("reader", 403)):
+                        for route, method in [("/api/workflow", "GET"), ("/api/workflow", "POST"),
+                                              ("/api/asset", "GET"), ("/api/extract", "POST")]:
+                            with fetch(base, route, method, identity) as response:
+                                check(response.status == expected, "Authorization denial failed: " + route)
                     if frontend_only:
                         with fetch(base, "/") as response:
                             check(response.status in (307, 308), "Missing frontend-only redirect")
@@ -124,7 +142,8 @@ def main():
                                 check(b"<html" in response.read(), "Missing HTML: " + route)
                         subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests",
                                         "-p", "test_web_http.py", "-v"], cwd=runtime,
-                                       env={**env, "MANGA_WEB_TEST_URL": base}, check=True, timeout=120)
+                                       env={**env, "MANGA_WEB_TEST_URL": base,
+                                            "MANGA_WEB_TEST_TOKEN": "fixture-admin"}, check=True, timeout=120)
                     print(label + " HTTP checks passed", flush=True)
                 finally:
                     try:

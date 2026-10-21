@@ -65,6 +65,29 @@ S1 introduced no timeout or automatic takeover policy. S2 now resolves local lea
 expiry and uncertain-outcome reconciliation; distributed reconciliation remains in
 the S5 cloud scope.
 
+### Resolved for S3 — identity and approval attribution
+
+Firebase's boolean `admin: true` custom claim grants studio access. Only trusted
+administrative tooling provisions it; browser roles and forwarded identity headers
+never grant authority. Existing accounts are retained without automatic promotion.
+
+The private Python API independently verifies a Google service ID token against
+its configured audience and an explicit subject/action allowlist, then verifies
+exactly one Firebase user ID token or session cookie with revocation checks.
+Next sends the service token in both Authorization and X-Serverless-Authorization:
+Cloud Run consumes the latter while the application verifies the full former.
+User credentials use separate headers and never appear in URLs or saved operations.
+
+Verified actor identity is pinned server-side in queued requests. Cast and scene
+approval records persist atomically with approved state and retain reviewed revision,
+subject fingerprint, timestamp and operation identity. CLI actors are explicitly local.
+Historical projects default to empty history without rewriting their fingerprints.
+
+The authorized S3 cloud rollout is authentication verification only. Frontend-only
+hosting remains enabled; private API project, asset and operation access stays
+unavailable until S5 supplies durable storage and hosted execution. This restriction
+does not prevent local testing of short-operation HTTP contracts.
+
 ### Resolved for S2 — local operation scheduling and recovery
 
 The local studio stores durable operations in a SQLite database under
@@ -99,7 +122,6 @@ SQLite; old queued/running jobs are not imported or automatically restarted.
 | --- | --- |
 | Production global stage capacities, dispatcher, timeout/retry policy, and hosted execution reconciliation | S5 cloud integration |
 | Request deduplication identity, chapter/configuration key, lifecycle/status rules | S4 request persistence |
-| Trusted admin provisioning and user/service identity transport | S3 authorization implementation |
 | Dispatcher choice; Workflows/Eventarc/scheduler use; bucket layout | S5 infrastructure integration |
 | Retention periods, reference tracking, deletion and recovery policy | S5 cleanup implementation |
 | Project/regions, budget, service IAM, secrets, actual deployed state | S5 provisioning/deployment |

@@ -1,0 +1,7 @@
+*
+!Dockerfile.s3
+!requirements-api.txt
+!manga_tts/
+!manga_tts/**
+manga_tts/**/__pycache__/
+manga_tts/**/*.pyc

@@ -56,6 +56,17 @@ The web worker reports stale project-hash rejection with a machine-readable
 engine mutations. The project-hash value in snapshots remains the expected-state
 contract; durable revision IDs are separate.
 
+S3 adds independently authenticated short-operation HTTP contracts in
+`manga_tts/http_api.py`. The default verification mode authorizes identities but
+refuses all project, asset and operation access before touching workspaces. Local
+mode wraps the same snapshot and durable queue services; requests never run long
+generation inline. Service audience/subject/action checks and Firebase user checks
+are separate. The existing Next studio retains local subprocess execution.
+
+Approval audit records are part of project state, saved in the same commit as cast
+and scene decisions. Web actors come from verified request identity; worker retries
+retain that actor and operation identity. Local CLI actors are labeled separately.
+
 The bridge in `web/lib/python.ts` selects `PYTHON_EXECUTABLE`, then the repository
 virtual environment, then `python`. Operation recovery uses `psutil` from
 `requirements-audio.txt` to confirm local process identity. Check interpreter and
@@ -67,9 +78,10 @@ before removal.
 ## Reader demo and hosting
 
 Browse, manga details, and reader pages use `web/app/data/manga.ts` sample data.
-The request form stores requests in browser storage; `/requests` is missing and
-Listen is inactive. No shared requests, roles, publication, or hosted production
-backend are implemented.
+The request form stores requests in browser storage; `/requests` displays the local
+list and Listen is inactive. Google sign-in and trusted admin claims protect the
+studio page, workflow/extraction APIs and private assets. No shared requests,
+publication or hosted production-processing backend are implemented.
 
 `firebase.json` targets the `web/` App Hosting application. Its frontend-only mode
 in `web/apphosting.yaml` and Next configuration redirects the home route and guards

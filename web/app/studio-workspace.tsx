@@ -16,6 +16,7 @@ import {
 import type { Acting, Job, Project, Segment, Snapshot } from "../lib/types";
 import { getFirebaseAuth } from "../lib/firebase-client";
 import { useAuth } from "../components/auth-provider";
+import { RequireSignIn } from "../components/require-sign-in";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -75,10 +76,13 @@ export default function Home() {
   const { user, isAdmin, loading, error } = useAuth();
   if (loading) return <LoadingState />;
   if (!user || !isAdmin) return <main><h1>Administrator access required</h1><p>{error || "Sign in with an administrator account to use the studio."}</p><a href="/browse">Return to the library</a></main>;
-  return <StudioWorkspace />;
+  return <RequireSignIn><StudioWorkspace key={user.uid} /></RequireSignIn>;
 }
 
 function StudioWorkspace() {
+  const { user: signedInUser, authorizationReady } = useAuth();
+  const authorization = useRef({ uid: signedInUser?.uid, ready: authorizationReady });
+  authorization.current = { uid: signedInUser?.uid, ready: authorizationReady };
   const [projects, setProjects] = useState<{ id: string; name: string; scenes: number }[]>([]);
   const [projectId, setProjectId] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
@@ -163,9 +167,10 @@ function StudioWorkspace() {
 
   async function api(url: string, options?: RequestInit, idempotencyKey?: string) {
     const user = getFirebaseAuth().currentUser;
-    if (!user) throw new Error("Sign in required.");
+    if (!user || !authorization.current.ready || authorization.current.uid !== user.uid) throw new Error("Verify your account before continuing. Your draft is retained.");
     const headers = new Headers(options?.headers);
     headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
+    if (!authorization.current.ready || authorization.current.uid !== user.uid) throw new Error("Verify your account before continuing. Your draft is retained.");
     const r = await fetch(url, { ...options, headers }); const data = await r.json();
     if (!r.ok) {
       const code = typeof data.code === "string" ? data.code : undefined;
