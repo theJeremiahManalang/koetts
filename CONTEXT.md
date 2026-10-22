@@ -1,5 +1,13 @@
 # Task checkpoint
 
+## PR handoff — 22 October 2026
+
+- **Request and authorization:** User requested a PR to main with detailed change documentation. This is the publishing follow-up to the approved S3 implementation and final review. No merge or deployment was requested or performed.
+- **Result:** Pushed six existing commits through `5d51d8f` from `feat/architecture-alignment`. Opened ready-for-review PR #13: https://github.com/theJeremiahManalang/koetts/pull/13, base `main`. GitHub confirms repository was renamed from `manga-to-audio-book-project` to `koetts`; the existing remote redirects successfully and was not rewritten.
+- **Documentation:** PR body records behavior by subsystem, identity/control flow, atomic audit compatibility, regression before/after evidence, 101 Python tests (99 passed/two skipped), 33 web tests, build/type/static/browser results, live S3 acceptance, separate review-fix commits, deployment limits and rollback. It explicitly distinguishes already-deployed S3 verification from the final local review fixes, which are not deployed.
+- **Preparation:** Refreshed origin; main was `7d89726`, branch six commits ahead/zero behind, no existing open PR. Used `gh pr create --body-file` with PR skill Summary/Evidence/Merge Danger structure. Runtime tests were not rerun because this task changed no runtime source. Existing uncommitted checkpoint edits are preserved; this handoff is local metadata.
+- **Next action:** Await human PR review. Do not merge, deploy or start S4 without applicable authorization.
+
 ## Final S3 review handoff — 22 October 2026
 
 - **Approval and scope:** User approved final review of `7d89726...d3af872`, confirmed fixes with affected checks, separate bounded commits and separate evidence. Preserve existing history and unrelated checkpoint edits; exclude S4/S5 and deployment.
@@ -16,6 +24,15 @@
 - **Live result:** Anonymous/service/audience/credential denials, session CSRF and real browser checks passed. User first confirmed reader403, then reported live admin diagnostic `{"verified":true,"mode":"verification"}` after trusted account setup. Positive admin acceptance is user-observed, not agent impersonation. Account-access blocker is resolved; no S3 blocker remains in approved scope.
 - **Commits and state:** Implementation `8ae3968`, earlier blocked-acceptance evidence `09a7b1a`; final evidence update follows. Current branch `feat/architecture-alignment`. Prior review-only CONTEXT edits below remain preserved and must stay outside task commits. No deployment process is active.
 - **Next action:** S3 is complete for the approved authentication-only scope. S4 is next eligible; obtain its own scope approval before implementation. S5 production storage/execution and live provider compatibility remain unverified.
+
+## Active review: PR #12, 21 October 2026
+
+- **Approval and scope:** User explicitly approved reviewing `cb467f1...7d89726` for standards, specification coverage, correctness, and regressions. No implementation fixes were authorized. Separate Standards and Spec reviewers completed source inspection. This checkpoint is the only intentional tracked edit.
+- **Findings:** P1: `web/components/auth-provider.tsx:27` resets loading on token refresh; `web/app/studio-workspace.tsx:76` unmounts the workspace and loses unsaved drafts. Request forms also unmount through `RequireSignIn`. Firebase SDK documentation confirms token-refresh events invoke this observer. P2: new API guards return anonymous 401, but `tests/verify_local_http.py:105` still waits for anonymous 200/503 and `tests/test_web_http.py` supplies no credentials. HTTP harness incompatibility was established by source inspection, not live execution.
+- **Status:** S3 is partial: Firebase admin claims, server page/API guards, session cookies and CSRF checks exist. Python HTTP/service authorization and persisted approval actors remain absent. S4 requests remain browser-local; real publication/playback and S5 cloud integration remain pending.
+- **Fresh checks:** `npm test` in `web/`: 25 passed. `npm run typecheck`: exit 2, Firebase modules missing with consequent type errors. `npm run build`: exit 1, five Firebase module-resolution errors. Manifests include the dependencies but this checkout's installed dependencies are stale. `git diff --check cb467f1...7d89726`: exit 0. No dependency install, live Firebase, browser, Python or HTTP integration run occurred.
+- **Limits:** `gh pr view 12 --json title,body,comments` could not connect to GitHub; review used commit, repository requirements and runtime source. Build/typecheck need dependency synchronization before a source-level pass/failure conclusion. No paid calls, deployment, publication, or external writes.
+- **Next action:** Report findings and implementation status; fixes require a separate authorized scope. Previous merge handoff below is historical.
 
 ## Active handoff: 21 October 2026 merge repair
 
