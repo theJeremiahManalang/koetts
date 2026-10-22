@@ -16,7 +16,7 @@
   "apphosting": [
     {
       "backendId": "koetts",
-      "rootDir": "web",
+      "rootDir": "apps/web",
       "ignore": [
         "**/node_modules/**",
         "**/.next/**",

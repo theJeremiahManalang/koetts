@@ -1,0 +1,31 @@
+[project]
+name = "manga-studio"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = ["manga-worker[api]"]
+
+[project.optional-dependencies]
+vision-cpu = ["manga-vision[cpu]"]
+vision-cuda = ["manga-vision[cuda124]"]
+
+[dependency-groups]
+dev = ["httpx>=0.28,<1", "ruff==0.15.7"]
+
+[tool.uv]
+package = false
+required-version = "==0.11.16"
+conflicts = [[{ extra = "vision-cpu" }, { extra = "vision-cuda" }]]
+
+[tool.uv.workspace]
+members = ["apps/worker", "packages/engine", "packages/vision"]
+
+[tool.uv.sources]
+manga-worker = { workspace = true }
+manga-vision = { workspace = true }
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]

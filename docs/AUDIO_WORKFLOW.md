@@ -1,26 +1,13 @@
 # Manga panels to reviewed audio
 
-This branch integrates the user-supplied `manga_tts` backend with the MagiV3 starter
-from `main`. The implementation is a local per-project single-writer backend with a
-CLI and a local web interface adapted from `character-analysis-web`. See
-[web/README.md](../web/README.md) to start the UI. It is not a hosted multi-user
-service.
+The Python CLI and local Next.js studio share a per-project single-writer engine.
+Start with [developer setup](development.md). Firebase identity protects studio access;
+local SQLite and filesystem workers coordinate production on one host. Hosted shared
+processing remains migration work.
 
-## Install
+## Environment
 
-Use Python 3.11+. For image extraction, follow the PyTorch/Magi setup in [MODELS.md](MODELS.md)
-and install `requirements.txt`. For planning, review, and audio, also install:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-audio.txt
-```
-
-An audio-only environment does not need PyTorch. MP3 export uses the encoder bundled
-with `imageio-ffmpeg` in the audio dependencies, or `ffmpeg` on PATH when available.
-Configure `GEMINI_API_KEY` through your host's environment, never
-in project files. Only `plan` and `render` make Gemini generation calls. Model
-availability is account-dependent. The supplied Gemini adapter is retained; live
-provider compatibility and voice quality must be checked with your account.
+Follow [developer setup](development.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GEMINI_API_KEY` only in the server environment for planning/synthesis. Live provider compatibility remains a separate check.
 
 The web studio persists operations in `results/web/operations.sqlite3` before
 returning an operation ID. This local SQLite scheduler allows one MAGI operation and
@@ -31,14 +18,13 @@ limit. Uncertain provider outcomes keep their stage slot until explicit local
 reconciliation. Retrying an uncertain operation may repeat provider billing and
 counts toward the three-attempt ceiling.
 
-The following examples use `python` for the activated project environment. Without
-activation, use `.\.venv\Scripts\python.exe` instead. Generated projects and drafts
+The following examples use `uv run python` from the repository root. Generated projects and drafts
 in these examples are under the already ignored `results/` directory.
 
 ## 1. Extract images in the intended sequence
 
 ```powershell
-python -m manga_tts extract --images page1.png page2.png page3.png --output results/chapter.zip --device cuda
+uv run manga-tts extract --images page1.png page2.png page3.png --output results/chapter.zip --device cuda
 ```
 
 You can upload individual panels or complete pages. The explicit file sequence is
@@ -67,7 +53,7 @@ automatic reconciliation of human edits across extraction reruns is not implemen
 ## 2. Create the review project and import cast references
 
 ```powershell
-python -m manga_tts create --workspace results/chapter-project --chapter results/chapter.zip --cast cast_references
+uv run manga-tts create --workspace results/chapter-project --chapter results/chapter.zip --cast cast_references
 ```
 
 `--chapter`, `--cast`, and optional `--originals` accept ZIPs or unpacked folders.
@@ -82,13 +68,13 @@ Named characters need reference images. Optional `profile_path` points to a UTF-
 profile in the same bundle. A generic cast entry may use `is_generic: true` without
 an image; it represents a shared voice, not a single character identity. `UNKNOWN`
 means unresolved; `NARRATOR` is separate and is never an attribution fallback.
-To import cast later: `python -m manga_tts import-cast --workspace results/chapter-project --cast cast_references`.
+To import cast later: `uv run manga-tts import-cast --workspace results/chapter-project --cast cast_references`.
 
 ## 3. Generate and explicitly load an AI proposal
 
 ```powershell
-python -m manga_tts plan --workspace results/chapter-project --output results/proposal.json
-python -m manga_tts load-proposal --workspace results/chapter-project --file results/proposal.json
+uv run manga-tts plan --workspace results/chapter-project --output results/proposal.json
+uv run manga-tts load-proposal --workspace results/chapter-project --file results/proposal.json
 ```
 
 Planning uses pages, crops, references and OCR to propose identities, dialogue order,
@@ -99,15 +85,15 @@ It is also possible to skip planning and edit the cast/sources manually.
 ## 4. Review cast, then source order, then exact script
 
 ```powershell
-python -m manga_tts review --workspace results/chapter-project --stage cast --output results/cast-review.json
+uv run manga-tts review --workspace results/chapter-project --stage cast --output results/cast-review.json
 ```
 
 Edit the generated `command` fields: assign each appearance to a speaker or reject
 false detections, and choose voices. Then explicitly approve:
 
 ```powershell
-python -m manga_tts apply --workspace results/chapter-project --file results/cast-review.json --approve
-python -m manga_tts review --workspace results/chapter-project --stage sources --output results/sources-review.json
+uv run manga-tts apply --workspace results/chapter-project --file results/cast-review.json --approve
+uv run manga-tts review --workspace results/chapter-project --stage sources --output results/sources-review.json
 ```
 
 Edit the sources against the page evidence: text, inclusion, speaker, unique order,
@@ -116,10 +102,10 @@ turn group. Apply sources before final script edits: rebuilding source groups re
 dialogue-turn wording. Original recovered text remains immutable evidence.
 
 ```powershell
-python -m manga_tts apply --workspace results/chapter-project --file results/sources-review.json
-python -m manga_tts status --workspace results/chapter-project
-python -m manga_tts review --workspace results/chapter-project --stage script --scene scene_001 --output results/scene-001-review.json
-python -m manga_tts apply --workspace results/chapter-project --file results/scene-001-review.json --approve
+uv run manga-tts apply --workspace results/chapter-project --file results/sources-review.json
+uv run manga-tts status --workspace results/chapter-project
+uv run manga-tts review --workspace results/chapter-project --stage script --scene scene_001 --output results/scene-001-review.json
+uv run manga-tts apply --workspace results/chapter-project --file results/scene-001-review.json --approve
 ```
 
 Review the script file before the final command. Repeat the last two commands for
@@ -139,8 +125,8 @@ do not remove operation locks manually. If a provider outcome remains uncertain,
 resolve it with the configured Python interpreter:
 
 ```powershell
-python web_workflow.py reconcile OPERATION_ID fail
-python web_workflow.py reconcile OPERATION_ID retry
+uv run manga-worker reconcile OPERATION_ID fail
+uv run manga-worker reconcile OPERATION_ID retry
 ```
 
 Choose `retry` only after accepting possible duplicate provider billing. Standalone
@@ -151,10 +137,10 @@ and append `--worker-stopped` to the reconciliation command.
 ## 5. Inspect, render, audition and export
 
 ```powershell
-python -m manga_tts inspect --workspace results/chapter-project --scenes scene_001 scene_002 --output results/requests.json
-python -m manga_tts render --workspace results/chapter-project --scenes scene_001 scene_002
-python -m manga_tts export --workspace results/chapter-project --scenes scene_001 scene_002
-python -m manga_tts bundle --workspace results/chapter-project --output results/reviewed-project.zip
+uv run manga-tts inspect --workspace results/chapter-project --scenes scene_001 scene_002 --output results/requests.json
+uv run manga-tts render --workspace results/chapter-project --scenes scene_001 scene_002
+uv run manga-tts export --workspace results/chapter-project --scenes scene_001 scene_002
+uv run manga-tts bundle --workspace results/chapter-project --output results/reviewed-project.zip
 ```
 
 Use the actual scene IDs from `status`. Inspection requires approvals and makes no
@@ -185,8 +171,8 @@ multi-file transaction. The bundle contains applied state/assets, not unapplied 
 ## Recovery and advanced edits
 
 ```powershell
-python -m manga_tts restore --workspace results/restored --bundle results/reviewed-project.zip
-python -m manga_tts export --workspace results/restored --scenes scene_001 scene_002
+uv run manga-tts restore --workspace results/restored --bundle results/reviewed-project.zip
+uv run manga-tts export --workspace results/restored --scenes scene_001 scene_002
 ```
 
 Restore stages and validates the bundle before publishing to an empty workspace.
@@ -202,7 +188,7 @@ Review and approve narration against the referenced visual evidence.
 
 ## Validation and limits
 
-Run `python -m unittest discover -s tests -v`. Tests use synthetic images/predictions
+Run `npm run test:python`. Tests use synthetic images/predictions
 and valid synthetic PCM, exercising the real import/review/render/export/restore
 code. They cover geometry, RTL fallback, stale drafts, approval rollback, three-speaker
 segmentation, exclusions, silence, narration, targeted regeneration, corrupt takes,

@@ -1,0 +1,21 @@
+[project]
+name = "manga-engine"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "manga-vision", "pydantic>=2.12,<3", "google-genai>=2.25,<3",
+  "imageio-ffmpeg>=0.6,<0.7", "psutil>=7.2,<8",
+]
+
+[project.scripts]
+manga-tts = "manga_tts.cli:main"
+
+[tool.uv.sources]
+manga-vision = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/manga_tts"]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"

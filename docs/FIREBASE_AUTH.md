@@ -11,7 +11,7 @@ The repository currently selects project `koetts-9bf7f` in `.firebaserc`.
 
 1. In Firebase Console, open Project settings > Your apps, select or register the
    web app, and copy its web configuration.
-2. Add these public web configuration values to `web/.env.local` (preserve any
+2. Add these public web configuration values to `apps/web/.env.local` (preserve any
    existing server environment settings):
 
    ```dotenv
@@ -31,7 +31,7 @@ The repository currently selects project `koetts-9bf7f` in `.firebaserc`.
    hostname and local development hostnames (`localhost` and `127.0.0.1` as used).
    Enter hostnames without protocols or port numbers.
 5. Restart the development server. For App Hosting, add the same four environment
-   variables to `web/apphosting.yaml` with BUILD availability, then rebuild and
+   variables to `apps/web/apphosting.yaml` with BUILD availability, then rebuild and
    deploy. Next.js embeds `NEXT_PUBLIC_` values at build time.
 
 The Firebase web configuration is public. Never put a service account private key
@@ -46,9 +46,9 @@ and legacy role strings do not grant access. There is no self-service promotion 
    Google Cloud, use the runtime's attached service account with the required Firebase
    Authentication permissions. Locally, use ADC or point GOOGLE_APPLICATION_CREDENTIALS
    to a service-account JSON file outside the repository. Never use NEXT_PUBLIC_ for it.
-2. Set FIREBASE_PROJECT_ID in web/.env.local to the same project as the public web config.
+2. Set FIREBASE_PROJECT_ID in apps/web/.env.local to the same project as the public web config.
 3. Sign in with Google once, then copy the intended administrator's UID from Firebase
-   Console > Authentication > Users. From web/, with trusted administrative credentials:
+   Console > Authentication > Users. From apps/web/, with trusted administrative credentials:
 
    node --env-file=.env.local scripts/set-admin.mjs <UID> grant
 
