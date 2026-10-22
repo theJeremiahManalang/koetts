@@ -1,0 +1,5 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -f, Dockerfile.s3, -t, '${_IMAGE}', .]
+images: ['${_IMAGE}']
+timeout: 600s

@@ -365,3 +365,148 @@ durability.
 
 S2 has no remaining acceptance blockers. S3 is the next eligible scope in
 `architecture-alignment-plan.md`.
+
+## S3 — Complete for the approved authentication scope, 22 October 2026
+
+The user explicitly approved completing S3 and deploying authentication boundaries
+in the existing KoeTTS project. Hosted generation, publication, S4 shared requests
+and S5 production storage/execution remain excluded. The agent did not promote
+accounts, impersonate users or invoke paid providers.
+
+### Implemented boundaries
+
+- Same-user token renewal retains the mounted studio/request form. Pending or
+  failed session verification makes protected content inert and blocks studio API
+  requests. Inline reauthentication restores access; sign-out or UID change removes
+  the private workspace. `authorizationReady` is separate from initial loading.
+- `require-admin.ts` retains a verified principal for the exact request. Workflow
+  enqueue overwrites caller actor metadata with Firebase UID/project and persists
+  that identity in the durable operation, without storing tokens or cookies.
+- Cast and single/batch scene approvals commit audit records atomically with their
+  validity fingerprints. Records include actor, reviewed revision, subject,
+  decision, approval fingerprint, timestamp and operation identity. Retry deduplication
+  and legacy empty-history serialization preserve existing compatibility. CLI actors
+  are explicitly local. Audit survives project bundles and restore.
+- `manga_tts/http_auth.py` independently verifies Google issuer/audience/signature,
+  service subject/action permission, and exactly one revoked-checked Firebase user
+  credential. `http_api.py` wraps snapshot and durable enqueue/poll services in local
+  mode. Its default verification mode refuses project, asset and operation access
+  before touching workspaces. Readiness and identity require no provider clients.
+- `GET /api/auth/backend` verifies both identities from App Hosting without exposing
+  user identity in its response. Existing local subprocess execution remains default.
+  Production has no authentication-fixture environment switch: the HTTP runner replaces
+  the external SDK only inside its disposable copied source tree.
+
+### Acceptance checks from this task
+
+Commands ran from the repository root unless specified. Python was 3.11.15; Node
+was 24.18.0; Next.js was 16.4.0. The temporary Python environment and first logs
+disappeared during execution-environment restart; these outcomes were observed
+directly in this task and are not inherited S2 claims.
+
+| Check | Result |
+| --- | --- |
+| `/tmp/manga-s3-venv/bin/python -m unittest discover -s tests -v` | 100 run; 98 passed; two expected skips: external sample and externally managed HTTP server |
+| Focused approval audit suite | Seven passed: trusted/local identity, retry dedupe, failed save, failed revision-pointer commit, bundle recovery, forged metadata denial and legacy serialization |
+| Focused Python HTTP suite | Seven passed; includes real workspace snapshot, durable idempotency and stale-revision failure, independent identity denials and unavailable asset delivery |
+| Focused process recovery suite after adapter update | Six passed; retained segment and forced-regeneration recovery remain intact |
+| `npm test` in `web/` | 32 passed after hosted-origin correction, including real React DOM request/studio draft continuity, proxy CSRF regression and backend diagnostic credential separation |
+| `npm run typecheck` and `npm run build` in `web/` | Passed; build includes `/api/auth/backend` |
+| `/tmp/manga-s3-venv/bin/python tests/verify_local_http.py` | Passed two disposable production builds, authenticated studio workflow and frontend-only denial/unavailability checks |
+| Scoped Ruff and Pyright | Passed changed Python runtime/test files; Pyright zero errors/warnings with explicit temporary Python 3.11 environment/import paths |
+| API-only dependency smoke | Fresh environment installed only `requirements-api.txt`; API factory imported without extraction/generation dependencies |
+| Native Chromium via Playwright | Request notes and studio upload survive pending/failed renewal in the same mounted DOM; native inert blocks focus in both and request-submit pointer interaction; retry/recovery, UID switch and sign-out pass; no page errors |
+| Independent Standards and Spec reviews | Zero actionable findings on each axis |
+
+Native browser command was `node /tmp/s3-browser/run.cjs`, with temporary
+Playwright/esbuild tooling and real application components. Firebase/navigation
+were mocked at external boundaries; child review UI used fixtures. Studio submission
+was not attempted without a valid project. The Browser plugin was unavailable, so
+regular Playwright used installed Chromium. Durable React DOM regression coverage
+is `web/tests/auth-drafts.test.cjs`; browser screenshots/harness are temporary.
+
+Initial full discovery failed six subprocess cases because its injected router
+factory did not accept the new optional approval context. The fixture now forwards
+constructor options and all six pass. The first disposable build rejected the
+fixture SDK's one-argument signatures; matching SDK signatures fixed that harness.
+An intermediate test-only indentation error was fixed before final discovery.
+No runtime guard was weakened. Locked dependencies were synchronized; production
+audit reported four inherited high advisories in the unused Firebase Firestore/gRPC
+dependency chain. No broad Firebase downgrade or unrelated dependency remediation ran.
+
+### Live deployment evidence
+
+Private API project/region: `koetts-9bf7f` / `us-east4`. Revision:
+`koetts-s3-api-00001-gl5`. Image digest:
+`sha256:bd5cf2fac59d9733ee408d847eb80b6795ab9c40b7840534b06163d336a43cc2`.
+Cloud Build: `f2bf2888-ed20-4dce-92fc-08e1e8e106f8`. The earlier image build was
+superseded before deployment after strict service-subject validation was added.
+Only 19 source files (about 216 KiB) entered the reviewed API build context;
+no uploads, results, credentials or model caches were included.
+
+The API uses its dedicated runtime account with custom role
+`projects/koetts-9bf7f/roles/koettsS3AuthVerifier`, containing only
+`firebaseauth.users.get`. Invocation initially allowed App Hosting and the
+dedicated verification account; no public invoker exists. Temporary verifier
+minting/invocation grants were removed after probes. Final IAM inspection confirms
+only App Hosting invokes the API and no temporary user binding remains on its account.
+Verification mode,
+zero minimum/one maximum instances, one CPU and 512 MiB remain configured.
+
+`python3 tests/verify_s3_identity.py` passed against the deployed service:
+anonymous platform denial 403, authorized readiness 200, missing/forged/duplicate
+Firebase credentials 401, and a separately forwarded wrong-audience service token
+401. Service tokens stayed in memory. Direct IAM Credentials ID-token minting
+avoided granting broader access-token impersonation rights.
+
+Named Firestore database `koetts-default` already deploys explicit deny-all browser
+rules; no rules or database provisioning changed. One existing admin and no reader
+accounts were discovered. Google sign-in was already enabled. The actual App Hosting
+hostname was added to authorized domains while preserving prior entries.
+
+Frontend rollout `build-2026-10-21-001` succeeded, but real Chromium found initial
+session DELETE rejected with 403 `Invalid origin.` The browser sent the correct
+public Origin; Next's request URL reflected the internal proxy. Traffic was restored
+to `koetts-build-2026-10-18-001` while correcting this. The user also observed session
+failure and a diagnostic 404 during rollback. No unauthorized access succeeded.
+
+The correction configures the exact canonical `MANGA_APP_ORIGIN` server-side.
+CSRF still requires an explicit matching Origin and rejects cross-site requests,
+invalid configured origins and forged forwarded-host headers. Its regression test
+failed before the fix and passed afterward. All 32 web tests and production build
+passed; focused independent Standards and Spec follow-up reviews found no issues.
+A corrected frontend rollout `build-2026-10-21-002` succeeded and serves 100% of
+traffic. Live public checks passed: home redirects to Browse; Browse/login return
+200; anonymous diagnostic/workflow/extraction/assets return 401; missing-origin
+session mutation returns 403; canonical-origin session DELETE returns 200 with
+Secure/HttpOnly/SameSite=Strict cookie flags; attacker origin with forged forwarded
+host returns 403; canonical-origin POST without user token returns 401.
+Native Chromium also confirms session DELETE200 on login and Browse, enabled
+Google button, no visible session error, three demo stories and zero runtime errors.
+No Google sign-in was attempted by the agent.
+The previous frontend revision remains the rollback target. See [S3 deployment](S3_DEPLOYMENT.md) for rollout,
+cost limits and rollback. The user successfully signed in after the correction and
+reported the diagnostic's `Administrator access required.` response. Inspection
+confirmed a reader account now exists alongside the unchanged existing admin;
+live reader denial is therefore confirmed. Access to the original admin initially
+blocked the positive check. After trusted account setup, the user confirmed the
+live admin diagnostic returned `{"verified":true,"mode":"verification"}`.
+This is user-observed end-to-end acceptance of browser session, Next admin
+authorization, service identity and independent Python Firebase verification.
+The agent made no role changes and did not handle the user's login credentials.
+Revoked-user behavior is verified offline, not by modifying the live admin's sessions.
+
+Implementation and deployment are committed in `8ae3968` on
+`feat/architecture-alignment`. This report distinguishes completed local contracts,
+successful authentication-only deployment, and the user-confirmed positive live
+admin check. No S3 acceptance blocker remains within the approved scope. S4 is
+the next eligible implementation scope; hosted generation remains disabled and
+this report does not establish S4 or S5 completion.
+
+### Final code review follow-up
+
+[Final S3 review](s3-final-review.md) records two subsequently discovered defects
+in local polling recovery and audit subject identity, red/green regression evidence,
+separate fixes `434c81e` and `4161dfa`, fresh verification and clean independent
+follow-up reviews. It supersedes earlier no-findings claims for those paths.
+These local review fixes were not deployed; hosted processing remains disabled.

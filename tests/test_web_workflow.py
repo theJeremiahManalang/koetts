@@ -10,6 +10,7 @@ import test_audio_pipeline as fixtures
 
 import web_workflow
 from manga_tts import PipelineConfig, PipelineRouter
+from manga_tts.cli import review_document
 from manga_tts.operations import OperationConflict, SQLiteOperationStore
 from manga_tts.storage import read_json, write_json
 
@@ -62,6 +63,30 @@ class WebWorkflowTests(unittest.TestCase):
         config = web_workflow.operation_pipeline_config(self.workspace)
 
         self.assertEqual(config.max_attempts, 1)
+
+    def test_durable_approval_retains_verified_actor_and_rejects_stale_review(self):
+        actor = {"kind": "firebase", "uid": "verified-reviewer", "project_id": "test-project"}
+        router = PipelineRouter(PipelineConfig(workspace=self.workspace))
+        router.load_project()
+        command = review_document(router.project, "cast")["command"]
+        command["approve"] = True
+        revision = self.current()["revision"]
+        operation = self.operation("authenticated-review", action="cast", command=command, actor=actor)
+        claim = web_workflow.claim_next_operation()
+        assert claim is not None
+        web_workflow.run_operation(claim.operation_id, claim.fence)
+        self.assertEqual(web_workflow.operation_store().get(operation.operation_id).status, "complete")
+        history = self.current()["project"]["approval_audit"]
+        self.assertEqual(history[-1]["actor"], {**actor, "local_name": None})
+        self.assertEqual(history[-1]["reviewed_revision"], revision)
+        self.assertEqual(history[-1]["operation_id"], operation.operation_id)
+        stale = self.operation("stale-review", action="cast", command=command, actor=actor, revision=revision)
+        claim = web_workflow.claim_next_operation()
+        assert claim is not None
+        web_workflow.run_operation(claim.operation_id, claim.fence)
+        failed = web_workflow.operation_store().get(stale.operation_id)
+        self.assertEqual(failed.failure_code, "revision_conflict")
+        self.assertEqual(self.current()["project"]["approval_audit"], history)
 
     def test_durable_enqueue_is_idempotent_and_payload_conflict_is_typed(self):
         first = self.operation("same-intent", command={"title": "First"})

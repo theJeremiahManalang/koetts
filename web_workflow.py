@@ -683,7 +683,14 @@ def run_operation(operation_id: str, fence: int) -> None:
         workspace = ROOT / "projects" / operation.project_id
         with workspace_lock(workspace, operation_id=operation_id, fence=fence):
             verify_operation_sources(operation, request)
-            router = PipelineRouter(operation_pipeline_config(workspace))
+            approval_context = None
+            if request.get("actor") is not None:
+                approval_context = schemas.ApprovalContext(
+                    actor=schemas.ApprovalActor.model_validate(request["actor"]),
+                    operation_id=operation_id,
+                    reviewed_revision=operation.revision or "new-project",
+                )
+            router = PipelineRouter(operation_pipeline_config(workspace), approval_context=approval_context)
             result = perform(
                 router,
                 request,

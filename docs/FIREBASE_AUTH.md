@@ -74,6 +74,27 @@ Session creation and deletion require a matching Origin header; token and sessio
 verification check revocation. The provider renews the cookie on ID-token changes
 and clears it on sign-out. Session sync must succeed before admin navigation appears.
 
+Behind App Hosting, `MANGA_APP_ORIGIN` pins the exact public HTTPS origin for
+session CSRF checks. This avoids comparing the browser origin with Next's internal
+proxy URL. Forwarded-host headers never define trusted origins. Local execution
+without this setting compares against the request URL; invalid configured origins
+fail closed.
+
+Same-user token renewal preserves mounted studio and request drafts. While session
+verification is pending or fails, protected controls are inert and studio requests
+are blocked. Inline reauthentication can restore access without discarding edits.
+Sign-out or an account change clears the private workspace.
+
+The server pins verified actor identity into durable workflow requests. Approval
+history records the actor, reviewed revision and subject fingerprint in the same
+project commit as the approval. Local CLI identities are explicitly distinguished
+from Firebase users; history does not replace approval-validity checks.
+
+`GET /api/auth/backend` is an admin-only diagnostic for the optional private Python
+API configured by `S3_API_URL`. It verifies both the calling service and the user
+without exposing identity or accessing projects. See [S3 deployment](S3_DEPLOYMENT.md)
+for service permissions, verification-only rollout and rollback.
+
 The existing local-only origin checks and MANGA_FRONTEND_ONLY processing switch
 remain in effect. App Hosting configured with MANGA_FRONTEND_ONLY=1 still redirects
 `/` to Browse and disables processing even for admins. Hosting the Python studio

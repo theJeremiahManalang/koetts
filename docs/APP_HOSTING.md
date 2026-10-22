@@ -44,7 +44,8 @@ GitHub integration is optional. No automatic deployment workflow is installed.
 
 App Hosting sets `MANGA_FRONTEND_ONLY=1` at build time and runtime. In this
 mode, `/` redirects to `/browse`, and all workflow, extraction, and asset handlers
-return HTTP 503 before reading uploads, accessing project files, or starting Python.
+reject anonymous/reader requests with 401/403. Verified admins receive HTTP 503
+before reading uploads, accessing project files, or starting Python.
 The local studio remains available at `/` when this variable is unset.
 
 The deployed catalog and reader use sample data and placeholder artwork. The
@@ -73,6 +74,10 @@ it has deliberately not been changed as part of configuration initialization.
 If provider features are enabled later, use App Hosting secrets backed by Secret
 Manager. Do not commit `GEMINI_API_KEY` or place it in a `NEXT_PUBLIC_` variable.
 Firestore is not required to initialize or host the website.
+
+The S3 authentication rollout adds an admin-only private-API diagnostic while
+retaining frontend-only mode. It does not enable hosted generation or move local
+projects into container filesystems. See [the S3 runbook](S3_DEPLOYMENT.md).
 
 ## Deploy later
 
