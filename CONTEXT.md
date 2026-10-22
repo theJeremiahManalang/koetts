@@ -2,7 +2,7 @@
 
 ## Objective and approval
 
-Implement the user's explicitly approved small-team uv/npm monorepo plan. Preferences: `apps/` + `packages/`; retain intentional demos. Work is complete; final pointer/lint checks passed. Changes are uncommitted and incorporate the earlier cleanup. No deployment, publication, paid provider calls, or model-weight downloads were authorized/performed.
+Implement the user's explicitly approved small-team uv/npm monorepo plan. Preferences: `apps/` + `packages/`; retain intentional demos. Work is complete; final pointer/lint checks passed. Changes are committed and published in PR #14, incorporating the earlier cleanup. No deployment, publication, paid provider calls, or model-weight downloads were authorized/performed.
 
 ## Delivered source boundaries
 
@@ -33,8 +33,10 @@ Durable evidence: [monorepo foundation acceptance](docs/archive/monorepo-foundat
 
 External sample compatibility remains skipped without supplied sample; the HTTP skip in the normal suite is covered by the separate runner. Live inference, Gemini quality, browser visuals, actual hosted CI, Docker image build, accelerator runtime, and cloud rollout remain unverified. Container packaging was validated with the equivalent non-editable workspace install.
 
-No blockers. Review the uncommitted diff or continue the user's next assignment. Current setup commands and interface migration map are in `docs/development.md`; archived evidence does not authorize future scope or cloud actions.
+No blockers. Review PR #14 or continue the user's next assignment. Current setup commands and interface migration map are in `docs/development.md`; archived evidence does not authorize future scope or cloud actions.
 
 ## PR publication follow-up
 
 The user explicitly requested a pull request with a prominent codebase-change warning and detailed old-to-new onboarding. Added the step-by-step migration procedure to `docs/development.md`; the PR body repeats actionable onboarding and validation limits. Current branch: `chore/repo-management`; default base: `main`. GitHub resolves the previous origin URL to `theJeremiahManalang/koetts`. Publication is authorized; merging and deployment are not requested.
+
+PR created: https://github.com/theJeremiahManalang/koetts/pull/14 (base `main`, head `chore/repo-management`). Main implementation commit: `e566d86`. The PR includes an explicit breaking-codebase warning, old-checkout backup/retirement/restoration steps, tool versions, command/import replacements, validation limits, and rollback instructions. `docs/development.md` contains the same durable onboarding procedure. Post-documentation repository/pointer checks and diff whitespace checks passed; existing runtime acceptance evidence remains linked above. PR is open; no merge or deployment performed. Next action: review PR and CI results.
