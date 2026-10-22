@@ -1,0 +1,23 @@
+[project]
+name = "manga-worker"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = ["manga-engine", "manga-vision", "psutil>=7.2,<8"]
+
+[project.optional-dependencies]
+api = ["fastapi==0.156.6", "uvicorn==0.54.0", "firebase-admin==7.7.0", "requests>=2.32,<3"]
+
+[project.scripts]
+manga-worker = "manga_worker.workflow:main"
+manga-ocr = "manga_worker.extract:main"
+
+[tool.uv.sources]
+manga-engine = { workspace = true }
+manga-vision = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/manga_worker"]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"

@@ -6,11 +6,15 @@ not automatic GitHub rollouts.
 
 Public URL: https://koetts--koetts-9bf7f.us-east4.hosted.app
 
+## Monorepo build boundary
+
+Run source commands from the repository root. `apps/web` is the configured application directory; the root npm workspace and lockfile remain the dependency authority. Keep those files in source uploads, and retain `apps/web/apphosting.yaml` beside the app manifest. Verify the provider's detected build root and root lockfile before rollout. A local build does not establish that the hosted adapter or configured runtime Node version has been verified.
+
 ## Configuration
 
-- `firebase.json` targets the Next.js app in `web/` with backend ID
+- `firebase.json` targets the Next.js app in `apps/web/` with backend ID
   `koetts` for KoeTTS. Change this ID if using a differently named backend.
-- `web/apphosting.yaml` configures the website runtime: 1 CPU, 512 MiB RAM,
+- `apps/web/apphosting.yaml` configures the website runtime: 1 CPU, 512 MiB RAM,
   zero minimum instances, two maximum instances, and concurrency of 40.
 - Local dependencies, generated output, project data, model weights, assistant
   settings, and environment files are excluded from source uploads.
@@ -34,7 +38,7 @@ Select the existing Blaze project. Select an existing App Hosting backend or
 create one named `koetts`, choose a supported region, and set the
 application root to `web`. Choose a Node.js runtime supported by both App Hosting
 and the installed Next.js version. Keep the checked-in runtime settings when
-prompted about overwriting `web/apphosting.yaml` and review any generated changes.
+prompted about overwriting `apps/web/apphosting.yaml` and review any generated changes.
 The initialization flow may create cloud resources; run it only when ready to
 associate this checkout with the real project.
 

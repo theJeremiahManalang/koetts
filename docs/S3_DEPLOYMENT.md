@@ -52,7 +52,7 @@ local and Firebase auth-handler entries.
    in a private deployment evidence directory. Do not commit tokens or cookies.
 2. Complete the production build and offline acceptance checks. Review the image
    build context to exclude private uploads, `results/`, credentials and caches.
-   Build the API image from `Dockerfile.s3` and record its immutable digest.
+   Build the API image from root `Dockerfile.s3` and record its immutable digest. It installs the locked `manga-worker[api]` workspace subset without vision inference extras; the ASGI target is `manga_worker.http_api:create_app`.
 3. Create the dedicated runtime identity only if absent. Record its numeric
    subject and the verification caller subject. Apply the reviewed narrow IAM
    changes, then deploy a private API revision with the limits above. For an
@@ -143,7 +143,7 @@ With gcloud authenticated and the verifier granted only
 `iam.serviceAccounts.getOpenIdToken` on the dedicated service account, run:
 
 ```bash
-python3 tests/verify_s3_identity.py
+uv run python tests/verify_s3_identity.py
 ```
 
 The script calls IAM Credentials `generateIdToken` directly. It keeps credentials

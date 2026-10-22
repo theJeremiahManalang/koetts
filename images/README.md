@@ -1,3 +1,5 @@
-Place your own PNG/JPG/WebP comic images here. No copyrighted sample comics are bundled.
-For the README example, name one image page1.png. Update captions.example.json to describe it accurately.
-TIFF input uses the first frame only. PDF and CBZ are not supported directly; export pages to images first.
+# Supplied image input
+
+`page1.jpg` is the retained supplied sample. Use authorized image input. Studio uploads support PNG, JPEG, and WebP; CLI formats are defined by the vision package. Convert PDF/CBZ pages to images before extraction.
+
+See [model setup](../docs/MODELS.md) and [audio workflow](../docs/AUDIO_WORKFLOW.md). Preserve this sample during artifact cleanup.

@@ -1,6 +1,0 @@
-# Private authentication verification image: no extraction or generation providers.
-fastapi==0.156.6
-uvicorn==0.54.0
-firebase-admin==7.7.0
-pydantic>=2.12,<3
-requests>=2.32,<3

@@ -1,6 +1,6 @@
 # Architecture alignment implementation plan
 
-Updated 19 October 2026. Read [current architecture](architecture.md) and [the accepted target](target-design.md) first. This plan applies to the existing app in [the supplied baseline](current-app-baseline.md), not a new web application.
+Updated 19 October 2026. Read [current architecture](architecture.md) and [the accepted target](target-design.md) first. This plan applies to the existing app in [the supplied baseline](archive/current-app-baseline.md), not a new web application.
 
 ## Scope selection
 
@@ -23,9 +23,9 @@ but cannot establish unresolved production policy.
 
 ## S0 — Stabilize and verify the existing app
 
-Likely files: `web/package.json`, lockfile, Next/TypeScript configuration, Python dependency files, existing test configuration and runtime launcher.
+Likely files: `apps/web/package.json`, lockfile, Next/TypeScript configuration, Python workspace manifests and root uv lockfile, existing test configuration and runtime launcher.
 
-Inspect repository instructions, active imports, route handlers, `web_workflow.py`, extraction, CLI and engine. Reproduce frontend tests, typecheck, production build and Python tests using the target's documented commands. Diagnose missing Python selection, MP3 dependency and reported build failures from actual output. Distinguish environmental restrictions from code defects. Make only necessary runtime/configuration fixes; retain existing dependency tooling unless evidence requires a change.
+Inspect repository instructions, active imports, route handlers, `apps/worker/src/manga_worker/workflow.py`, extraction, CLI and engine. Reproduce frontend tests, typecheck, production build and Python tests using the target's documented commands. Diagnose missing Python selection, MP3 dependency and reported build failures from actual output. Distinguish environmental restrictions from code defects. Make only necessary runtime/configuration fixes; retain existing dependency tooling unless evidence requires a change.
 
 Acceptance:
 
@@ -55,7 +55,7 @@ Excluded: queue dispatch, real cloud provisioning, reader/catalog changes. Fake-
 
 ## S2 — Durable queue and finite workers
 
-Likely boundaries: `web/lib/workflow.ts`, workflow route, `web_workflow.py`, worker entry points and application operation/dispatcher services.
+Likely boundaries: `apps/web/lib/workflow.ts`, workflow route, `apps/worker/src/manga_worker/workflow.py`, worker entry points and application operation/dispatcher services.
 
 Separate the current local subprocess executor from a durable execution adapter. Keep local execution available. API enqueue returns an operation ID only after persistence. Define operation states and legal transitions, pinned revision/source/configuration, dedupe key, attempt count, fence, lease, external execution identity, progress and checkpoint/output pointers.
 

@@ -1,0 +1,29 @@
+{
+  "name": "manga-studio",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22.22.3 <23",
+    "npm": ">=10 <11"
+  },
+  "packageManager": "npm@10.9.8",
+  "scripts": {
+    "dev": "npm run dev --workspace @manga/web",
+    "build": "npm run build --workspace @manga/web",
+    "start": "npm run start --workspace @manga/web",
+    "test": "npm run test:python && npm run test:web",
+    "test:python": "uv run --locked python -m unittest discover -s tests -t . -v",
+    "test:web": "npm test --workspace @manga/web",
+    "typecheck": "npm run typecheck --workspace @manga/web",
+    "lint": "uv run --locked ruff check .",
+    "check:repo": "uv run --locked python tools/check_repo.py",
+    "check": "npm run check:repo && npm run lint && npm test && npm run typecheck && npm run build",
+    "test:http": "uv run --locked python tests/verify_local_http.py"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
+  }
+}

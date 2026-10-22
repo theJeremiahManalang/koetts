@@ -1,69 +1,24 @@
-# Project agent guide
+# Repository agent guide
 
-## Working context
+Start with `README.md` for entrypoints and `docs/README.md` for authority. Workspace manifests and runtime source establish behavior; migration plans describe future work.
 
-Preserve the Next.js reader/demo and local Python audiobook studio. Runtime source
-and configuration establish behavior; architecture plans describe future work.
+## Task routing
 
-Use caveman chat; professional prose in files, comments, commits, and external messages.
-For library documentation, resolve and query Context7 first; fall back to official docs.
+- **Substantial new work:** read `docs/agents/prompt-approval.md`. Continue approved follow-ups; explicit bypasses remain valid. Renew approval for material scope changes.
+- **Web:** read `apps/web/AGENTS.md` before changing routes, features, or web tooling.
+- **Workers or HTTP:** read `apps/worker/AGENTS.md` before changing transport, execution, or identity boundaries.
+- **Engine:** read `packages/engine/AGENTS.md` before changing review, audio, persistence, or operation contracts.
+- **Vision:** read `packages/vision/AGENTS.md`; read `docs/MODELS.md` before dependency changes or real inference.
+- **Harness:** read `docs/agents/writing.md` before editing instructions or their context pointers.
+- **Migration:** read `docs/target-design.md`, then the assigned scope in `docs/architecture-alignment-plan.md`; record scope evidence in `docs/alignment-status.md`.
+- **Hosting:** read `docs/APP_HOSTING.md` or `docs/S3_DEPLOYMENT.md` for the affected service.
+- **Domain decisions:** use `GLOSSARY.md`; inspect relevant ADRs when present.
+- **Issues:** read `docs/agents/issue-tracker.md`; use `gh` within the user's authorized tracker scope.
 
-Keep agent docs under `docs/`, except `AGENTS.md`, `CONTEXT.md`, and skills under
-`.agents/skills/`. Read `docs/README.md` for authority.
+## Workspace and completion
 
-## Prompt approval
+Use pinned uv/npm tooling from the root. Package dependencies flow worker to engine/vision, engine to vision; vision imports no app package. Keep heavy inference optional. `npm run check:repo` enforces ownership and pointers; `npm run check` runs the normal acceptance suite. Use `npm run test:http` for transport, packaging, auth, or runtime changes. Record failures and optional skips separately from live-provider claims.
 
-Before substantial new implementation, architecture, or investigation, read
-`docs/agents/prompt-approval.md`: ground and present a rewritten prompt, then wait
-for explicit approval before execution. Read-only preparation is allowed. Answer
-quick questions directly; continue approved follow-ups. Material scope changes
-require renewed approval. Honor explicit requests to skip rewriting.
+Preserve saved results, supplied samples, model caches, credentials, and unrelated edits. Test recovery on temporary copies. Human cast/script decisions and publication require explicit approval. Paid generation and deployment require task authorization; existing authorization persists.
 
-## Conditional context
-
-- **Web changes:** read `web/AGENTS.md`; use `web/package.json` for available checks.
-- **Extraction, review, audio, or worker changes:** read
-  `.agents/skills/manga-workflow/SKILL.md` before editing the pipeline or its adapters.
-- **Model setup or real inference:** read `docs/MODELS.md`.
-- **Cloud hosting:** read `docs/APP_HOSTING.md` and `web/apphosting.yaml`.
-  App Hosting runs the demo with `MANGA_FRONTEND_ONLY=1`, without local processing.
-  For authorized deployment, use the provider skill. For Cloud Run operations, read
-  `.agents/skills/cloud-run-basics/SKILL.md`.
-- **Architecture migration:** read `docs/target-design.md`, including unresolved decisions,
-  then the assigned scope in `docs/architecture-alignment-plan.md`.
-  `docs/current-app-baseline.md` is historical evidence, not fresh verification.
-- **Past validation:** consult `docs/VALIDATION.md` only when historical results help
-  diagnosis. Report checks from this task separately.
-
-Complete the assigned scope's acceptance checks, then report.
-Human approval remains explicit for cast/script decisions and publication. Paid
-generation and cloud deployment require task authorization; existing authorization
-remains valid. Ordinary reversible implementation and offline checks proceed within scope.
-
-## State and verification
-
-Preserve `results/`, model caches, and supplied samples. Check recovery/compatibility
-on temporary copies. Inspect imports before deleting duplicates: the studio uses
-`web/components/`; older copies exist.
-
-Choose an available project Python interpreter explicitly; `python` may be absent.
-Configure `PYTHON_EXECUTABLE` for the web worker.
-Run affected Python checks with `<interpreter> -m unittest discover -s tests -v`;
-run affected web checks from `web/` using its package scripts. Distinguish failures,
-optional skips, missing dependencies, and unverified live-provider behavior.
-
-## Task handoff
-
-Before handoff or compaction, update `CONTEXT.md`: objective, scope/approval status,
-decisions, changed paths, exact checks/results, blockers, next action. Include source
-paths; exclude credentials/private uploads. Read only when resuming its task; verify
-against request, tree, and source. Checkpoints record state, not authority. For alignment
-scopes, link durable acceptance evidence in `docs/alignment-status.md` rather than duplicating it.
-
-## Conditional guides
-
-- **Agent-document changes:** use `.agents/skills/writing-for-agents/SKILL.md`.
-- **Issue/spec work:** use GitHub Issues through `gh`; read `docs/agents/issue-tracker.md`.
-- **Triage labels:** read `docs/agents/triage-labels.md` for canonical roles.
-- **Domain terms or decisions:** read `docs/agents/domain.md` and root `GLOSSARY.md`;
-  consult relevant ADRs when present.
+Before handoff, update `CONTEXT.md` with objective, approval, decisions, changed paths, exact checks/results, blockers, and next action. Read that checkpoint only when resuming its task; verify against source.

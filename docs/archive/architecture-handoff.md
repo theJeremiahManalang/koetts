@@ -3,7 +3,7 @@
 # Architecture alignment handoff
 
 Updated 19 October 2026. This checkout contains the target Next.js/Python app.
-The [supplied baseline](../current-app-baseline.md) records historical inspection;
+The [supplied baseline](current-app-baseline.md) records historical inspection;
 verify current source and rerun checks before relying on it.
 
 ## Purpose and document authority
