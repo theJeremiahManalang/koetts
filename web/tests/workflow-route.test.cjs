@@ -18,13 +18,14 @@ function route(root, enqueueOperation, requireAdmin = async () => null) {
     id: () => String(++sequence).padStart(32, "0"),
     sameOrigin: () => {},
     validIdempotencyKey: key => key,
+    validId: value => value,
     dispatchQueued: async () => {},
     enqueueOperation,
   };
   new Function("exports", "require", compiled)(api, name => {
     if (name.endsWith("/workflow")) return workflow;
     if (name.endsWith("/python")) return {};
-    if (name.endsWith("/require-admin")) return { requireAdmin };
+    if (name.endsWith("/require-admin")) return { requireAdmin, adminPrincipal: () => ({ kind: "firebase", uid: "admin-fixture", project_id: "test-project" }) };
     return require(name);
   });
   return api;
@@ -78,4 +79,18 @@ test("definite idempotency rejection removes the unused upload", async t => {
   });
   assert.equal((await api.POST(upload())).status, 409);
   assert.deepEqual(fs.readdirSync(path.join(root, "uploads")), []);
+});
+
+test("approval enqueue replaces caller actor with the verified administrator", async () => {
+  let submitted;
+  const api = route("unused", async payload => {
+    submitted = payload;
+    return { operation: { id: "saved", status: "queued" } };
+  });
+  const response = await api.POST(new Request("http://localhost/api/workflow", {
+    method: "POST", headers: { "content-type": "application/json", "x-manga-workflow": "1", "idempotency-key": "review" },
+    body: JSON.stringify({ action: "cast", project: "a".repeat(32), actor: { uid: "forged" } }),
+  }));
+  assert.equal(response.status, 202);
+  assert.deepEqual(submitted.actor, { kind: "firebase", uid: "admin-fixture", project_id: "test-project" });
 });

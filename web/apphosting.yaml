@@ -12,3 +12,24 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: FIREBASE_PROJECT_ID
+    value: koetts-9bf7f
+    availability: [RUNTIME]
+  - variable: MANGA_APP_ORIGIN
+    value: https://koetts--koetts-9bf7f.us-east4.hosted.app
+    availability: [RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyBljFt_jV1IJTPhA1D5oE8YsyZdYFcGd2k
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: koetts-9bf7f.firebaseapp.com
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: koetts-9bf7f
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:907898221016:web:ee2b810d9a68d350b442ad
+    availability: [BUILD, RUNTIME]
+  - variable: S3_API_URL
+    value: https://koetts-s3-api-gu5jb64hpq-uk.a.run.app
+    availability: [RUNTIME]

@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes } from "react";
 import { Toaster, toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { ImageOrder } from "../components/image-order";
 import { CastWorkspace } from "../components/cast-workspace";
 import { SourceWorkspace } from "../components/source-workspace";
@@ -17,6 +16,7 @@ import {
 import type { Acting, Job, Project, Segment, Snapshot } from "../lib/types";
 import { getFirebaseAuth } from "../lib/firebase-client";
 import { useAuth } from "../components/auth-provider";
+import { RequireSignIn } from "../components/require-sign-in";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -76,11 +76,13 @@ export default function Home() {
   const { user, isAdmin, loading, error } = useAuth();
   if (loading) return <LoadingState />;
   if (!user || !isAdmin) return <main><h1>Administrator access required</h1><p>{error || "Sign in with an administrator account to use the studio."}</p><a href="/browse">Return to the library</a></main>;
-  return <StudioWorkspace />;
+  return <RequireSignIn><StudioWorkspace key={user.uid} /></RequireSignIn>;
 }
 
 function StudioWorkspace() {
-  const router = useRouter();
+  const { user: signedInUser, authorizationReady } = useAuth();
+  const authorization = useRef({ uid: signedInUser?.uid, ready: authorizationReady });
+  authorization.current = { uid: signedInUser?.uid, ready: authorizationReady };
   const [projects, setProjects] = useState<{ id: string; name: string; scenes: number }[]>([]);
   const [projectId, setProjectId] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
@@ -164,19 +166,34 @@ function StudioWorkspace() {
   const focused = draft?.sources.find(s => s.source_id === focusSource && s.page_id === page?.page_id);
 
   async function api(url: string, options?: RequestInit, idempotencyKey?: string) {
-    const user = getFirebaseAuth().currentUser;
-    if (!user) throw new Error("Sign in required.");
-    const headers = new Headers(options?.headers);
-    headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
-    const r = await fetch(url, { ...options, headers }); const data = await r.json();
-    if (!r.ok) {
-      const code = typeof data.code === "string" ? data.code : undefined;
-      clearConflictedOperationKey(code, idempotencyKey);
-      const error = new Error(data.error || "Request failed.") as Error & { code?: string };
-      error.code = code;
-      throw error;
+    const readOnly = !options?.method || options.method === "GET";
+    while (true) {
+      const user = getFirebaseAuth().currentUser;
+      if (!mounted.current || !user || authorization.current.uid !== user.uid) throw new Error("Verify your account before continuing. Your draft is retained.");
+      if (!authorization.current.ready) {
+        if (!readOnly) throw new Error("Verify your account before continuing. Your draft is retained.");
+        // Keep read/poll recovery alive through same-account reauthentication.
+        // Mutation requests are never automatically replayed.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
+      }
+      const headers = new Headers(options?.headers);
+      headers.set("Authorization", `Bearer ${await user.getIdToken()}`);
+      if (!mounted.current || getFirebaseAuth().currentUser?.uid !== user.uid || !authorization.current.ready || authorization.current.uid !== user.uid) {
+        if (readOnly) continue;
+        throw new Error("Verify your account before continuing. Your draft is retained.");
+      }
+      const r = await fetch(url, { ...options, headers }); const data = await r.json();
+      if (!mounted.current || getFirebaseAuth().currentUser?.uid !== user.uid) throw new Error("Your account changed. Sign in again to resume this operation.");
+      if (!r.ok) {
+        const code = typeof data.code === "string" ? data.code : undefined;
+        clearConflictedOperationKey(code, idempotencyKey);
+        const error = new Error(data.error || "Request failed.") as Error & { code?: string };
+        error.code = code;
+        throw error;
+      }
+      return data;
     }
-    return data;
   }
   async function refreshList() { const data = await api("/api/workflow"); setProjects(data.projects); setHasKey(data.has_api_key); }
   async function loadProject(id: string) {
@@ -212,13 +229,16 @@ function StudioWorkspace() {
           toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
         }
         if (["complete", "failed"].includes(state.status)) {
-          localStorage.removeItem("manga-tts-job");
           await refreshList();
           if (state.status === "failed") {
+            localStorage.removeItem("manga-tts-job");
+            if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
             // Preserve editable drafts on failure; explicit reload recovers partial audio.
             throw new Error(state.message);
           }
           await loadProject(job.project);
+          localStorage.removeItem("manga-tts-job");
+          if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
           if (state.result?.segments) setSegments(state.result.segments);
           setErrorSection(null);
           toast.success(operation.success, { id: operationToast, description: operation.detail, duration: 6500 });
@@ -243,7 +263,6 @@ function StudioWorkspace() {
           setBusy("Reconnecting to your job…");
           const savedJob = JSON.parse(job) as { idempotencyKey?: string } & Parameters<typeof watch>[0];
           await watch(savedJob);
-          if (savedJob.idempotencyKey) removePendingOperationKey(savedJob.idempotencyKey);
         }
         else {
           for (const pending of pendingOperationIntents()) {
@@ -252,7 +271,6 @@ function StudioWorkspace() {
               const watching = watch({ ...operation, idempotencyKey: pending.key });
               setInitialLoading(false);
               await watching;
-              removePendingOperationKey(pending.key);
               return;
             } catch { /* The POST may not have reached persistence; keep its key for lookup or retry. */ }
           }
@@ -305,7 +323,6 @@ function StudioWorkspace() {
       const key = idempotencyKeyForIntent(fingerprint);
       const job = await api("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json", "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: JSON.stringify(payload) }, key);
       const ok = await watch({ ...job, operation, idempotencyKey: key });
-      removePendingOperationKey(key);
       if (ok && ["take", "export", "bundle"].includes(action)) setSegments(segments);
       if (ok && action === "bundle") setBundleReady(true);
       return ok;
@@ -321,7 +338,6 @@ function StudioWorkspace() {
       const key = idempotencyKeyForIntent(formFingerprint(form));
       const job = await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: form }, key);
       await watch({ ...job, operation, idempotencyKey: key });
-      removePendingOperationKey(key);
     }
     catch (e) { failOperation(operation, e); setBusy(""); }
   }
@@ -386,7 +402,7 @@ function StudioWorkspace() {
     {initialLoading && <LoadingState label={busy || "Preparing your reading space…"} />}
     <div hidden={initialLoading}>
     {busy && !initialLoading && <LoadingState compact label={busy} />}
-    <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><div className="header-actions"><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton><ActionButton className="button" disabled={!!busy} onClick={async () => { if (await canLeave()) router.push("/browse"); }}><span aria-hidden="true">&#8592;</span> Back to browse</ActionButton></div></header>
+    <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><div className="header-actions"><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton></div></header>
     <main>
       <div className="reader-heading"><div><div className="eyebrow">YOUR READING SPACE</div><h1>A voice for every character.</h1><p>{snapshot ? "Review the story, direct the voices, and create your audiobook." : "Start with manga images or pick up a saved production."}</p></div><span className="mode-label"><span className="status-dot" />{snapshot ? `${(snapshot.project.title || snapshot.project.chapter_id)} · ${snapshot.approved_scenes.length}/${snapshot.project.scenes.length} scenes approved` : "Reviewed manga audio"}</span></div>
       {snapshot && <div className="project-title-row">{renaming ? <form className="action-row" onSubmit={e => { e.preventDefault(); if (titleDraft.trim() && !dirty) void run("rename", { title: titleDraft.trim() }); }}><label className="field-label">Project title<input autoFocus maxLength={120} required value={titleDraft} disabled={!!busy} onChange={e => setTitleDraft(e.target.value)} /></label><ActionButton type="submit" className="button primary" disabled={dirty || !titleDraft.trim()} reason={dirty ? "Apply your section edits before saving a new title." : "Enter a project title."}>Save title</ActionButton><ActionButton type="button" className="button" onClick={() => { setRenaming(false); setTitleDraft(snapshot.project.title || snapshot.project.chapter_id); }}>Cancel</ActionButton></form> : <><strong>{snapshot.project.title || snapshot.project.chapter_id}</strong><ActionButton className="button small" disabled={dirty} reason="Apply or discard your section edits before renaming the project." onClick={() => setRenaming(true)}>Rename project</ActionButton></>}</div>}

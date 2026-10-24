@@ -6,8 +6,11 @@ import { authErrorMessage, getFirebaseAuth } from "../lib/firebase-client";
 
 type AuthState = {
   user: User | null;
+  // Last verified role retains the mounted workspace; authorizationReady gates actions.
   isAdmin: boolean;
+  // Initial identity discovery or account changes, never same-account renewal.
   loading: boolean;
+  authorizationReady: boolean;
   error: string;
   login: () => Promise<void>;
   logout: () => Promise<void>;
@@ -16,7 +19,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sessionQueue = useRef<Promise<void>>(Promise.resolve());
-  const [state, setState] = useState<Pick<AuthState, "user" | "isAdmin" | "loading" | "error">>({ user: null, isAdmin: false, loading: true, error: "" });
+  const [state, setState] = useState<Pick<AuthState, "user" | "isAdmin" | "loading" | "authorizationReady" | "error">>({ user: null, isAdmin: false, loading: true, authorizationReady: false, error: "" });
   useEffect(() => {
     let active = true;
     let revision = 0;
@@ -24,7 +27,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       unsubscribe = onIdTokenChanged(getFirebaseAuth(), async user => {
         const current = ++revision;
-        setState({ user, isAdmin: false, loading: true, error: "" });
+        setState(previous => previous.user?.uid === user?.uid && user
+          ? { ...previous, user, authorizationReady: false, error: "" }
+          : { user, isAdmin: false, loading: true, authorizationReady: false, error: "" });
         try {
           const token = user ? await user.getIdTokenResult() : null;
           // Sync an HTTP-only server session before exposing studio navigation.
@@ -38,16 +43,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           sessionQueue.current = sync;
           await sync;
-          if (active && current === revision) setState({ user, isAdmin: token?.claims.admin === true, loading: false, error: "" });
+          if (active && current === revision) setState({ user, isAdmin: token?.claims.admin === true, loading: false, authorizationReady: !!user, error: "" });
         } catch (error) {
-          if (active && current === revision) setState({ user, isAdmin: false, loading: false, error: authErrorMessage(error) });
+          if (active && current === revision) setState(previous => ({ ...previous, loading: false, authorizationReady: false, error: authErrorMessage(error) }));
         }
       }, error => {
         ++revision;
-        if (active) setState({ user: null, isAdmin: false, loading: false, error: authErrorMessage(error) });
+        if (active) setState(previous => ({ ...previous, loading: false, authorizationReady: false, error: authErrorMessage(error) }));
       });
     } catch (error) {
-      setState({ user: null, isAdmin: false, loading: false, error: authErrorMessage(error) });
+      setState({ user: null, isAdmin: false, loading: false, authorizationReady: false, error: authErrorMessage(error) });
     }
     return () => { active = false; ++revision; unsubscribe?.(); };
   }, []);
