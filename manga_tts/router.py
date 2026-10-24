@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import uuid
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, Literal, ParamSpec, TypeVar
 
 from pydantic import ValidationError
 
@@ -19,6 +21,9 @@ from .config import VERSION, PathLike, PipelineConfig
 from .gemini import LOGGER, GeminiRenderer, create_client
 from .persistence import PersistenceConflict, ProjectWriter, _copy_overlays
 from .schemas import (
+    ApprovalActor,
+    ApprovalAudit,
+    ApprovalContext,
     CastCreate,
     CastMember,
     CastReview,
@@ -120,10 +125,13 @@ class PipelineRouter:
 
     def __init__(self, config: PipelineConfig, client_factory: Callable[[], Any] | None = None,
                  renderer_factory: Callable[[Any, str], Renderer] | None = None, *,
-                 persistence: ProjectWriter | None = None) -> None:
+                 persistence: ProjectWriter | None = None,
+                 approval_context: ApprovalContext | None = None) -> None:
         """Retain configuration/adapters without I/O, clients, panels or paid calls."""
         self._config = PipelineConfig.model_validate(config).model_copy(deep=True)
         self._client_factory, self._renderer_factory = client_factory, renderer_factory
+        self._approval_context = (ApprovalContext.model_validate(approval_context).model_copy(deep=True)
+                                  if approval_context is not None else None)
         self._persistence = persistence
         self._persistence_revision_id: str | None = None
         self._client: Any = None
@@ -198,6 +206,29 @@ class PipelineRouter:
                 message="The durable revision was accepted, but the local workspace could not refresh. Reload before continuing.",
             ))
         return self.project
+
+    def _commit_approval(self, candidate: dict[str, Any],
+                         subjects: list[tuple[Literal["cast", "scene"], str]]) -> Project:
+        """Stage trusted audit decisions inside the same durable project commit."""
+        if subjects:
+            context = self._approval_context or ApprovalContext(
+                actor=ApprovalActor(kind="local", local_name="cli"),
+                operation_id=str(uuid.uuid4()),
+                reviewed_revision=self._persistence_revision_id or storage.digest(self._data()),
+            )
+            history = candidate.setdefault("approval_audit", [])
+            for kind, subject in subjects:
+                fingerprint = (candidate["cast_approval"] if kind == "cast"
+                               else candidate["approvals"][subject])
+                if any(record["operation_id"] == context.operation_id
+                       and record["subject_kind"] == kind and record["subject_id"] == subject
+                       and record["fingerprint"] == fingerprint for record in history):
+                    continue
+                record = ApprovalAudit(**context.model_dump(), subject_kind=kind,
+                    subject_id=subject, fingerprint=fingerprint,
+                    timestamp=datetime.now(UTC).isoformat())
+                history.append(record.model_dump())
+        return self._commit(candidate)
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -311,14 +342,14 @@ class PipelineRouter:
         for entry in command.new_characters:
             if not storage.asset(self.root, candidate["cast"][entry.speaker_id]["references"][0]).is_file():
                 raise ValueError("The selected appearance has no reference image")
-        return self._commit(candidate)
+        return self._commit_approval(candidate, [("cast", "cast")] if command.approve else [])
 
     @operation("cast")
     def approve_cast(self) -> Project:
         """Validate current appearance resolution and approve the current cast; autosave, no API calls."""
         candidate = self._data()
         script.approve_cast(candidate)
-        return self._commit(candidate)
+        return self._commit_approval(candidate, [("cast", "cast")])
 
     @operation("planning")
     def generate_proposal(
@@ -373,7 +404,8 @@ class PipelineRouter:
     def apply_scene_review(self, command: SceneReview) -> Project:
         """Apply exact transcript edits and optional approval atomically; source evidence stays unchanged."""
         command = SceneReview.model_validate(command)
-        return self._commit(script.review_scene(self._data(), dump(command)))
+        return self._commit_approval(script.review_scene(self._data(), dump(command)),
+                                     [("scene", command.scene_id)] if command.approve else [])
 
     @operation("script")
     def apply_scene_reviews(self, command: SceneBatchReview) -> Project:
@@ -392,7 +424,7 @@ class PipelineRouter:
             if review.approve:
                 scene = next(s for s in candidate["scenes"] if s["scene_id"] == review.scene_id)
                 script.approve_scene(candidate, scene)
-        return self._commit(candidate)
+        return self._commit_approval(candidate, [("scene", review.scene_id) for review in command.scenes if review.approve])
 
     @operation("narration")
     def insert_narration(self, command: NarrationInsert) -> Project:

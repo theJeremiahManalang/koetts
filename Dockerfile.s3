@@ -1,0 +1,8 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements-api.txt ./
+RUN pip install --no-cache-dir -r requirements-api.txt
+COPY manga_tts ./manga_tts
+ENV S3_API_MODE=verification PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+USER 65532:65532
+CMD ["sh", "-c", "exec uvicorn manga_tts.http_api:create_app --factory --host 0.0.0.0 --port ${PORT:-8080}"]

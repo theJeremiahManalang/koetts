@@ -8,7 +8,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 JSONData = dict[str, Any]
 class Contract(BaseModel):
@@ -291,6 +298,41 @@ class SavedProposal(Contract):
     data: Proposal
 
 
+class ApprovalActor(BaseModel):
+    """Identity assigned by a trusted adapter, never a review command."""
+    model_config = ConfigDict(strict=True, extra="forbid")
+    kind: Literal["firebase", "local"]
+    uid: str | None = None
+    project_id: str | None = None
+    local_name: str | None = None
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> ApprovalActor:
+        if self.kind == "firebase":
+            if not self.uid or not self.project_id or self.local_name is not None:
+                raise ValueError("Firebase actors require UID and project identity")
+        elif not self.local_name or self.uid is not None or self.project_id is not None:
+            raise ValueError("Local actors require an explicitly local name")
+        return self
+
+
+class ApprovalContext(BaseModel):
+    """Trusted operation identity and exact revision presented for review."""
+    model_config = ConfigDict(strict=True, extra="forbid")
+    actor: ApprovalActor
+    operation_id: str = Field(min_length=1)
+    reviewed_revision: str = Field(min_length=1)
+
+
+class ApprovalAudit(ApprovalContext):
+    """Immutable human decision saved atomically with its approval fingerprint."""
+    subject_kind: Literal["cast", "scene"]
+    subject_id: str = Field(min_length=1)
+    decision: Literal["approve"] = "approve"
+    fingerprint: str = Field(min_length=1)
+    timestamp: str = Field(min_length=1)
+
+
 class ProjectFields(Contract):
     """Persisted project.json contract; validated by Pydantic at workflow seams.
 
@@ -318,6 +360,7 @@ class ProjectFields(Contract):
     cast_approval: str | None
     proposal: SavedProposal | None
     render_selection: list[str] = Field(default_factory=list)
+    approval_audit: list[ApprovalAudit] = Field(default_factory=list)
 
 class Project(ProjectFields):
     """Current version-2 persisted project and detached router snapshot."""

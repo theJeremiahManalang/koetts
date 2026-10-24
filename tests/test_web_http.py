@@ -35,6 +35,9 @@ class WebHTTPTests(unittest.TestCase):
 
         def request(route, data=None, headers=None):
             request_headers = dict(headers or {})
+            token = os.environ.get("MANGA_WEB_TEST_TOKEN")
+            if token:
+                request_headers.setdefault("Authorization", "Bearer " + token)
             req = urllib.request.Request(base + route, data=data, headers=request_headers)
             return urllib.request.urlopen(req, timeout=45)
 
