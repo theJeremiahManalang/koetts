@@ -5,9 +5,19 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LibraryHeader } from "../../components/library-ui";
 import { RequireSignIn } from "../../components/require-sign-in";
+import { useAuth } from "../../components/auth-provider";
+import { Toaster, toast } from "sonner";
 
 export default function RequestMangaPage() {
-  return <RequireSignIn><RequestForm /></RequireSignIn>;
+  return <RequireSignIn>
+      <Toaster position="top-right" closeButton theme="light"
+        toastOptions={{
+          duration: 6500,
+          classNames: { toast: "reader-toast" },
+        }}
+      />
+      <RequestForm />
+    </RequireSignIn>;
 }
 
 function RequestForm() {
@@ -16,23 +26,70 @@ function RequestForm() {
   const [selectedChapter, setSelectedChapter] = useState(() =>
     (searchParams.get("chapter") || "").match(/^(?:Chapter\s+)?([0-9]{1,4})(?=\s|$)/i)?.[1] || "");
   const [notes, setNotes] = useState("");
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const valid = !!selectedManga.trim() && /^[0-9]{1,4}$/.test(selectedChapter);
+  const { user, authorizationReady } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!valid) return;
+    if (!valid || submitting || !user || !authorizationReady) return;
+
+    const mangaTitle = selectedManga.trim();
+    const chapter = selectedChapter;
+    const submittedNotes = notes;
+
+    setSubmitting(true);
     setError("");
-    setMessage("");
+
     try {
-      const existing: unknown = JSON.parse(localStorage.getItem("mangaRequests") || "[]");
-      if (!Array.isArray(existing)) throw new Error();
-      const newRequest = { id: crypto.randomUUID(), mangaTitle: selectedManga.trim(), chapter: selectedChapter, notes, status: "PENDING", createdAt: new Date().toISOString() };
-      localStorage.setItem("mangaRequests", JSON.stringify([...existing, newRequest]));
-      setMessage(`Your request for ${selectedManga.trim()}, chapter ${selectedChapter}, has been saved.`);
+      const token = await user.getIdToken();
+      const response = await fetch("/api/requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization:  `Bearer ${token}`,
+        }, 
+        body: JSON.stringify({
+          mangaTitle,
+          chapter,
+          notes: submittedNotes
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Could not save your request.");
+      }
+
+      toast.success("Request saved", {
+        description: `Your request for ${mangaTitle}, chapter ${chapter}, has been saved.`,
+      });
+
       setNotes("");
-    } catch { setError("Your request could not be saved. Check that browser storage is available and try again."); }
+      setSelectedManga("");
+      setSelectedChapter("");
+      setNotes("");
+
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not save your request. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+
+    // try {
+    //   const existing: unknown = JSON.parse(localStorage.getItem("mangaRequests") || "[]");
+    //   if (!Array.isArray(existing)) throw new Error();
+    //   const newRequest = { id: crypto.randomUUID(), mangaTitle: selectedManga.trim(), chapter: selectedChapter, notes, status: "PENDING", createdAt: new Date().toISOString() };
+    //   localStorage.setItem("mangaRequests", JSON.stringify([...existing, newRequest]));
+    //   setMessage(`Your request for ${selectedManga.trim()}, chapter ${selectedChapter}, has been saved.`);
+    //   setNotes("");
+    // } catch { setError("Your request could not be saved. Check that browser storage is available and try again."); }
   }
 
   return <div className="library-shell"><LibraryHeader />
@@ -44,19 +101,19 @@ function RequestForm() {
           <form onSubmit={handleSubmit} className="request-form">
             <div className="request-fields">
               <label htmlFor="request-manga">Manga title <span className="request-required">Required</span>
-                <input id="request-manga" type="text" required value={selectedManga} onChange={event => { setSelectedManga(event.target.value); setMessage(""); }} placeholder="e.g. Echoes of Tomorrow" autoComplete="off" />
+                <input id="request-manga" type="text" required value={selectedManga} maxLength={200} onChange={event => { setSelectedManga(event.target.value); }} placeholder="e.g. Echoes of Tomorrow" autoComplete="off" />
               </label>
               <label htmlFor="request-chapter">Chapter <span className="request-required">Required</span>
-                <input id="request-chapter" type="text" inputMode="numeric" pattern="[0-9]{1,4}" maxLength={4} required value={selectedChapter} onChange={event => { setSelectedChapter(event.target.value.replace(/[^0-9]/g, "").slice(0, 4)); setMessage(""); }} placeholder="e.g. 12" aria-describedby="chapter-hint" />
+                <input id="request-chapter" type="text" inputMode="numeric" pattern="[0-9]{1,4}" maxLength={4} required value={selectedChapter} onChange={event => { setSelectedChapter(event.target.value.replace(/[^0-9]/g, "").slice(0, 4)); }} placeholder="e.g. 12" aria-describedby="chapter-hint" />
                 <small id="chapter-hint">Up to 4 digits.</small>
               </label>
             </div>
             <label htmlFor="request-notes"><span>Additional notes <span className="request-required">Optional</span></span>
-              <textarea id="request-notes" value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything we should know about this chapter or your narration preferences?" rows={4} />
+              <textarea id="request-notes" value={notes} maxLength={2000} onChange={event => setNotes(event.target.value)} placeholder="Anything we should know about this chapter or your narration preferences?" rows={4} />
             </label>
-            <div className="request-submit-area"><p>One chapter per request. You can track it in My requests.</p><button type="submit" className="submit-request" disabled={!valid}>Submit request <span aria-hidden="true">↗</span></button></div>
+            <div className="request-submit-area"><p>One chapter per request. You can track it in My requests.</p><button type="submit" className="submit-request" disabled={!valid || submitting || !authorizationReady}>{submitting ? "Saving..." : "Submit request"} <span aria-hidden="true">↗</span></button></div>
             {error && <p className="notice error" role="alert">{error}</p>}
-            {message && <div className="request-saved" role="status"><span aria-hidden="true">✓</span><div><strong>Request saved</strong><p>{message}</p><Link href="/requests">View my requests →</Link></div></div>}
+            {/* {<div className="request-saved" role="status"><span aria-hidden="true">✓</span><div><strong>Request saved</strong><Link href="/requests">View my requests →</Link></div></div>} */}
           </form>
         </section>
         <aside className="request-guide" aria-labelledby="request-guide-title">
@@ -65,7 +122,7 @@ function RequestForm() {
           <div className="request-guide-footer"><p>Looking for your next story?</p><Link href="/browse">Explore the collection <span aria-hidden="true">↗</span></Link></div>
         </aside>
       </div>
-      <p className="request-storage-note">Requests are currently saved in this browser.</p>
+      <p className="request-storage-note">Requests are currently saved to your account.</p>
     </main>
   </div>;
 }
