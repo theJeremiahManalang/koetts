@@ -2,41 +2,23 @@
 
 ## Objective and approval
 
-Implement the user's explicitly approved small-team uv/npm monorepo plan. Preferences: `apps/` + `packages/`; retain intentional demos. Work is complete; final pointer/lint checks passed. Changes are committed and published in PR #14, incorporating the earlier cleanup. No deployment, publication, paid provider calls, or model-weight downloads were authorized/performed.
+Identify and fix the CI failure on PR #14. User approved the bounded implementation prompt on 2026-10-26.
 
-## Delivered source boundaries
+## Finding and decision
 
-- `apps/web`: root npm workspace, explicit studio/identity/library/requests features, owned demo fixtures, thin route adapters, installed-module Python transport.
-- `apps/worker/src/manga_worker`: workflow/OCR/HTTP/auth application adapters and explicit data-root resolution.
-- `packages/engine/src/manga_tts`: reusable production engine with preserved namespace.
-- `packages/vision/src/manga_vision`: reusable image/inference utilities and CLI; heavy dependencies are optional.
-- Root `pyproject.toml`, `uv.lock`, `package.json`, `package-lock.json`, runtime pins, and `.npmrc`: frozen workspace management. Removed requirements manifests, root scripts/aliases/examples, nested lock, generic shared skills/templates.
-- `tests/unit`, `tests/integration`, `tests/helpers`: grouped regression ownership; `tools/check_repo.py` enforces package/feature boundaries and docs/harness pointers.
-- `.github/workflows/ci.yml`, updated `Dockerfile.s3`, cloud source configuration, `tools/verify_fresh_checkout.py`, and updated disposable HTTP runner.
-- Root/developer/contribution/domain/hosting docs and scoped agent guides reflect current boundaries. Historical evidence remains archived.
+The failing job was `verify_fresh_checkout.py`. Its temporary checkout copied `docs/` but omitted root `firebase.json`. The repository checker therefore reported the archived baseline's valid `../../firebase.json` link as broken. Add `firebase.json` to the verifier's copied root files; leave the archived link unchanged.
 
-Default data remains repository `results/web`. An absolute `MANGA_DATA_ROOT` overrides it; non-checkout installed workers use the user-data fallback. Web passes the same root to workers. Existing samples/results/model caches/credentials/environment files were preserved.
+## Changed paths
+
+- `tools/verify_fresh_checkout.py`: copy root `firebase.json` into the disposable checkout.
+- `CONTEXT.md`: record this task and its verification.
 
 ## Verification
 
-Durable evidence: [monorepo foundation acceptance](docs/archive/monorepo-foundation-2026-10-22.md).
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:/home/ssuish/.local/bin:/usr/local/bin:/usr/bin:/bin uv run --locked python tools/verify_fresh_checkout.py`: passed. Fresh checkout install succeeded; `check:repo` passed; 105 Python tests ran (103 passed, 2 optional skips); 33 web tests passed; no-Torch assertion and external-directory CLI help checks passed.
+- `git diff --check`: passed.
+- Initial run with default Node 24/npm 11 stopped at `npm ci` because project requires Node 22/npm 10. Rerun used pinned Node 22.22.3/npm 10.9.8.
 
-- `npm run check`: passed with pinned Node 22.22.3/npm 10.9.8 and uv 0.11.16/Python 3.11.15. Includes boundaries/docs, Ruff, 105 Python tests (103 passed, 2 optional skips), 33 web tests, Next type generation, typecheck, production build.
-- `npm run test:http`: passed studio and frontend-only production modes and one HTTP integration test in temporary runtimes.
-- `uv run --locked python tools/verify_fresh_checkout.py`: passed clean-copy frozen installs, checks/tests, no-Torch assertion, external-directory entrypoints.
-- CPU/CUDA extra dry runs select pinned accelerator builds; enabling both fails as expected. No accelerator packages or weights were installed in the developer environment.
-- Frozen non-editable worker/API subset installed under `/tmp/manga-worker-package-check`; API imports and installed module entrypoints pass outside checkout, with no Torch.
-- Root npm override pins patched gRPC 1.14.6; final install reports zero audit findings. Firebase client 12.10.0 supports the selected Node version; Firebase 13 required Node 24 transitively.
-- `git diff --check` passed. Final documentation/pointer checks are recorded in completion output.
+## Blockers and next action
 
-## Limits and next action
-
-External sample compatibility remains skipped without supplied sample; the HTTP skip in the normal suite is covered by the separate runner. Live inference, Gemini quality, browser visuals, actual hosted CI, Docker image build, accelerator runtime, and cloud rollout remain unverified. Container packaging was validated with the equivalent non-editable workspace install.
-
-No blockers. Review PR #14 or continue the user's next assignment. Current setup commands and interface migration map are in `docs/development.md`; archived evidence does not authorize future scope or cloud actions.
-
-## PR publication follow-up
-
-The user explicitly requested a pull request with a prominent codebase-change warning and detailed old-to-new onboarding. Added the step-by-step migration procedure to `docs/development.md`; the PR body repeats actionable onboarding and validation limits. Current branch: `chore/repo-management`; default base: `main`. GitHub resolves the previous origin URL to `theJeremiahManalang/koetts`. Publication is authorized; merging and deployment are not requested.
-
-PR created: https://github.com/theJeremiahManalang/koetts/pull/14 (base `main`, head `chore/repo-management`). Main implementation commit: `e566d86`. The PR includes an explicit breaking-codebase warning, old-checkout backup/retirement/restoration steps, tool versions, command/import replacements, validation limits, and rollback instructions. `docs/development.md` contains the same durable onboarding procedure. Post-documentation repository/pointer checks and diff whitespace checks passed; existing runtime acceptance evidence remains linked above. PR is open; no merge or deployment performed. Next action: review PR and CI results.
+No local blockers. Commit and push the fix to PR #14 to rerun hosted CI; no commit or push performed.

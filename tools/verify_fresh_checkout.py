@@ -10,7 +10,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="manga-onboarding-") as directory:
         checkout = Path(directory)
-        for name in ("package.json", "package-lock.json", "pyproject.toml", "uv.lock", ".nvmrc", ".npmrc", ".python-version", "README.md", "AGENTS.md", "CONTRIBUTING.md", "GLOSSARY.md", "CONTEXT.md"):
+        for name in ("package.json", "package-lock.json", "pyproject.toml", "uv.lock", ".nvmrc", ".npmrc", ".python-version", "firebase.json", "README.md", "AGENTS.md", "CONTRIBUTING.md", "GLOSSARY.md", "CONTEXT.md"):
             shutil.copy2(root / name, checkout / name)
         for name in ("apps", "packages", "tests", "tools", "docs", "images"):
             shutil.copytree(root / name, checkout / name, ignore=shutil.ignore_patterns(
