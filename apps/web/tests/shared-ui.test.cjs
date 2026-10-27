@@ -128,3 +128,26 @@ test('browse displays only published catalog entries', async t => {
   assert.doesNotMatch(document.body.textContent, /Echoes of Tomorrow/);
   assert.ok(document.querySelector(`a[href="/manga/${mangaId}"]`));
 });
+
+test('manga details links published chapters to playback', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/manga/' + 'b'.repeat(32) });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const mangaId = 'b'.repeat(32), workId = 'a'.repeat(32);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ chapters: [{ work_id: workId, manga_id: mangaId, title: 'Published Manga', chapter: 3, publication_id: 'c'.repeat(32) }] }) });
+  const mocks = {
+    'next/link': props => React.createElement('a', props),
+    'next/navigation': { useParams: () => ({ id: mangaId }) },
+    '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
+    '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
+    './library-ui': { LibraryHeader: () => null, MangaCover: () => null },
+  };
+  const Page = load('../features/library/manga-page.tsx', mocks).default;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  await act(async () => root.render(React.createElement(Page)));
+  assert.match(document.body.textContent, /Chapter 3/);
+  const listen = document.querySelector(`a[href="/read/${mangaId}/${workId}"]`);
+  assert.ok(listen); assert.match(listen.textContent, /Listen/);
+});
