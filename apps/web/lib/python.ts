@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -32,5 +32,37 @@ export function python(module: string, args: string[]) {
   return execute(executable, ["-m", module, ...args], {
     cwd: root, timeout: 30 * 60 * 1000, maxBuffer: 20 * 1024 * 1024,
     env: { ...process.env, MANGA_DATA_ROOT: dataRoot, PYTHONIOENCODING: "utf-8" }, windowsHide: true,
+  });
+}
+
+/** Send short application requests over stdin, keeping private fields out of argv. */
+export function pythonJSON(module: string, input: unknown): Promise<unknown> {
+  const body = JSON.stringify(input);
+  if (Buffer.byteLength(body, "utf8") > 65536) return Promise.reject(new Error("Request too large"));
+  const executable = process.env.PYTHON_EXECUTABLE || local;
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, ["-m", module], {
+      cwd: root,
+      env: { ...process.env, MANGA_DATA_ROOT: dataRoot, PYTHONIOENCODING: "utf-8" },
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const timer = setTimeout(() => child.kill(), 30 * 60 * 1000);
+    child.stdout.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 20 * 1024 * 1024) child.kill();
+      else chunks.push(chunk);
+    });
+    child.on("error", () => { clearTimeout(timer); reject(new Error("Shared service unavailable")); });
+    child.on("close", code => {
+      clearTimeout(timer);
+      if (code !== 0 || size > 20 * 1024 * 1024) return reject(new Error("Shared service unavailable"));
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }
+      catch { reject(new Error("Shared service unavailable")); }
+    });
+    child.stdin.on("error", () => {});
+    child.stdin.end(body);
   });
 }
