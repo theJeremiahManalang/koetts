@@ -19,7 +19,7 @@ function PublishedReader() {
   if (!chapter) return <main className="reader-not-found"><h1>Chapter not found</h1><Link href="/browse">Return to Browse</Link></main>;
   return <main className="accessible-reader">
     <header className="accessible-reader-header"><Link href={`/manga/${chapter.manga_id}`} className="reader-back">← {chapter.title}</Link><div className="reader-chapter-title"><strong>Chapter {chapter.chapter}</strong><span>Published audiobook</span></div></header>
-    <section className="reader-stage" aria-label="Chapter audio"><div className="manga-page-demo" tabIndex={0}>
+    <section className="reader-stage" aria-label="Chapter audio"><div className="reader-audio-panel" tabIndex={0}>
       <p className="eyebrow">NOW LISTENING</p><h1>{chapter.title}</h1><h2>Chapter {chapter.chapter}</h2>
       <PublishedAudioPlayer key={chapter.work_id} workId={chapter.work_id} />
       <p>Manga pages are not available here yet.</p>
