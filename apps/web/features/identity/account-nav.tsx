@@ -47,6 +47,7 @@ export function AccountNav() {
         </summary>
         <div className="account-dropdown-panel">
           <Link href="/requests" onClick={() => { if (menu.current) menu.current.open = false; }}>My Requests <span aria-hidden="true">↗</span></Link>
+          {isAdmin && <Link href="/admin/requests" onClick={() => { if (menu.current) menu.current.open = false; }}>Manage Requests <span aria-hidden="true">↗</span></Link>}
           {isAdmin && <Link href="/" onClick={() => { if (menu.current) menu.current.open = false; }}>Generate Manga Audio <span aria-hidden="true">↗</span></Link>}
           <button type="button" disabled={pending} onClick={handleLogout}>{pending ? "Signing out…" : "Sign Out"}<span aria-hidden="true">→</span></button>
         </div>
