@@ -1,0 +1,29 @@
+import "server-only";
+import { randomBytes, randomUUID } from "node:crypto";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { dataRoot } from "../../../lib/python";
+
+let cached: Promise<Buffer> | undefined;
+
+/** Persist a local signing key atomically so restarts and multiple processes agree. */
+export function audioKey(): Promise<Buffer> {
+  if (!cached) cached = loadKey().catch(error => { cached = undefined; throw error; });
+  return cached;
+}
+
+async function loadKey(): Promise<Buffer> {
+  await mkdir(dataRoot, { recursive: true });
+  const target = path.join(dataRoot, ".shared-audio-key");
+  const temporary = path.join(dataRoot, `.shared-audio-key-${randomUUID()}`);
+  try {
+    await writeFile(temporary, randomBytes(32), { mode: 0o600, flag: "wx" });
+    try { await link(temporary, target); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
+  const key = await readFile(target);
+  if (key.length !== 32) throw new Error("Invalid local audio signing key");
+  return key;
+}
