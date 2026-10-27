@@ -27,5 +27,11 @@ test('published audio serves full and byte-range responses from artifact storage
   assert.equal(response.status, 200); assert.equal(await response.text(), 'abcdefghij');
   fs.writeFileSync(audio, 'XXXXXXXXXX');
   await assert.rejects(api.serveAudioFile(root, audio, request()));
+  const privateBytes = 'private artifact';
+  const privatePath = path.join(artifacts, crypto.createHash('sha256').update(privateBytes).digest('hex'));
+  fs.writeFileSync(privatePath, privateBytes);
+  fs.unlinkSync(audio);
+  fs.symlinkSync(privatePath, audio);
+  await assert.rejects(api.serveAudioFile(root, audio, request()));
   await assert.rejects(api.serveAudioFile(root, path.join(root, 'private.wav'), request()));
 });
