@@ -5,6 +5,15 @@ and reader-facing publication.
 
 ## Language
 
+**Chapter work**:
+The shared effort to produce audio for one requested manga chapter and audio
+configuration. Multiple readers can request the same chapter work.
+_Avoid_: Reader request, studio project
+
+**Reader request**:
+One reader's request for a chapter work, including that reader's original notes.
+_Avoid_: Chapter work, production operation
+
 **Take**:
 A recorded version of one audio segment. Multiple takes may exist; a selected
 take is the version chosen for use in an export.

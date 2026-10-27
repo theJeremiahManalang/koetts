@@ -94,6 +94,17 @@ Shared chapter work is keyed by a whitespace-normalized, case-folded manga title
 the positive chapter number, and the single default audio configuration. Each reader
 has a separate request for that work. Reader-facing statuses are pending, approved,
 and published. Removing one reader's request does not remove shared work.
+Repeated requests by the same reader return the existing request and retain its
+original notes. Admins can read all request notes; other readers cannot.
+
+Admins attach an existing studio project to approved chapter work. A project can
+be linked to at most one work item at a time. Relinking creates a new link identity,
+invalidates unpublished reviews of the old link, and does not remove an existing
+publication. Production source images remain private. A later manga API may supply
+reader pages; choosing and integrating that API is outside S4.
+
+Local published-audio URLs require a signed-in reader session and an expiring
+token. A reader can refresh the token and resume playback with byte-range requests.
 
 ### Resolved for S2 — local operation scheduling and recovery
 
