@@ -43,7 +43,12 @@ export function trustedSessionRequest(request: Request) {
     // Hosting may give Next an internal URL. Use an explicit canonical origin,
     // never an untrusted forwarded-host header, for the browser CSRF boundary.
     const configured = process.env.MANGA_APP_ORIGIN;
-    const expected = configured || new URL(request.url).origin;
+    const url = new URL(request.url);
+    const host = request.headers.get("host") || "";
+    // Next can normalize the internal hostname to localhost when the browser
+    // uses 127.0.0.1. Restrict this fallback to explicit loopback hosts.
+    const localOrigin = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? `${url.protocol}//${host}` : null;
+    const expected = configured || localOrigin || url.origin;
     if (new URL(expected).origin !== expected) return false;
     return request.headers.get("origin") === expected;
   } catch {
