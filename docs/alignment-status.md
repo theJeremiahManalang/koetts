@@ -527,3 +527,27 @@ studio linkage, exact export review, atomic publication, catalog, playback, and 
 end-to-end flow have not been implemented or verified. In particular, export review
 must derive the revision, settings, and checksums from trusted studio state rather
 than accepting assertions from a caller. No publication capability is enabled.
+
+### S4 phase 1 — request and project-link contracts
+
+The user approved the four-phase S4 implementation and automatic continuation on
+phase acceptance. Shared work now exposes individual request notes to authorized
+callers, preserves original notes on repeat submission, and supports exclusive
+project links with new identities on relink. The worker validates and locks an
+existing studio project before linking it. Routes and UI do not expose these
+contracts yet; publication and review invalidation remain phase 2 responsibilities.
+
+Focused checks passed: `.venv/bin/python -m unittest tests.unit.engine.test_shared_requests -v`
+and `.venv/bin/python -m unittest tests.unit.worker.test_web_workflow.WebWorkflowTests.test_link_work_requires_existing_valid_studio_project -v`.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check` passed with permitted local
+port access: 110 Python tests, two optional skips, 33 web tests, typecheck, and
+production build. `UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http` passed
+studio and frontend-only HTTP checks. Initial sandboxed and permitted builds failed
+because the existing Next build cache retained a sandbox port error; preserving it at
+`/tmp/manga-s4-phase1-next-cache` and using a fresh cache resolved the build.
+
+Independent standards and spec review found missing existing-project validation and
+negative coverage. The worker service and tests now cover missing, malformed, and
+symlinked projects; both reviewers confirmed their findings resolved. Review and
+publication linkage remain pending for phase 2. No live provider or cloud result is
+claimed.

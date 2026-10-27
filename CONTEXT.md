@@ -30,3 +30,10 @@ work. No S4 acceptance criterion is claimed complete.
 Follow-up: added transactional approval attribution and an admin work-list service
 method. Focused shared-request tests (two tests) and Ruff pass. These methods are
 still not exposed to users; the API and remaining S4 work above remain outstanding.
+
+The user approved the four-phase S4 plan and automatic continuation. Phase 1 now
+passes: individual notes, exclusive project link identity, and a worker boundary
+that validates and locks existing studio projects. See `docs/alignment-status.md`
+for exact checks, skipped tests, initial build failure and independent review.
+Phase 2 is next: trusted immutable export review and atomic publication; then
+phase 3 authenticated APIs and audio delivery and phase 4 UI and acceptance.
