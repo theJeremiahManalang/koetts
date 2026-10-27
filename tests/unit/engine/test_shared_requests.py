@@ -47,6 +47,25 @@ class SharedRequestsTest(unittest.TestCase):
                 {"Alice note", "Bob note"},
             )
 
+    def test_approved_work_has_one_project_and_relink_changes_its_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "shared.sqlite3"
+            store = SharedRequests(database)
+            first = store.submit("alice", "Manga", "1", "")
+            second = store.submit("bob", "Manga", "2", "")
+            with self.assertRaises(ValueError):
+                store.link_project(first["work_id"], "project-one", "admin")
+            store.approve(first["work_id"], "admin")
+            store.approve(second["work_id"], "admin")
+            link = store.link_project(first["work_id"], "project-one", "admin")
+            self.assertEqual(store.link_project(first["work_id"], "project-one", "admin"), link)
+            with self.assertRaises(ValueError):
+                store.link_project(second["work_id"], "project-one", "admin")
+            replacement = store.link_project(first["work_id"], "project-two", "admin")
+            self.assertNotEqual(link["id"], replacement["id"])
+            self.assertEqual(SharedRequests(database).get_link(first["work_id"]), replacement)
+            self.assertEqual(store.link_project(second["work_id"], "project-one", "admin")["project_id"], "project-one")
+
 
 if __name__ == "__main__":
     unittest.main()
