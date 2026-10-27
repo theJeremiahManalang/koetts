@@ -34,6 +34,7 @@ class SharedService:
             for item in work:
                 item["requests"] = store.work_requests(item["id"])
                 item["link"] = store.get_link(item["id"])
+                item.update(store.review_state(item["id"]))
                 publication = store.publication(item["id"])
                 item["publication_id"] = publication["id"] if publication else None
             return work

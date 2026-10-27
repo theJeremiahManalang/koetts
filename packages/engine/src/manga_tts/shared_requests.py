@@ -8,7 +8,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
+import stat
 import tempfile
 import uuid
 from contextlib import contextmanager
@@ -67,6 +69,10 @@ class SharedRequests:
                     id TEXT NOT NULL UNIQUE, review_id TEXT NOT NULL REFERENCES audio_reviews(id),
                     actor TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS verified_artifacts (
+                    checksum TEXT PRIMARY KEY, device INTEGER NOT NULL, inode INTEGER NOT NULL,
+                    size INTEGER NOT NULL, modified_ns INTEGER NOT NULL, changed_ns INTEGER NOT NULL
+                );
             """)
 
     @contextmanager
@@ -96,16 +102,18 @@ class SharedRequests:
                 "SELECT id FROM chapter_work WHERE title_key = ? AND chapter = ? AND configuration = ?",
                 (title.casefold(), int(chapter), "default"),
             ).fetchone()[0]
-            db.execute(
+            inserted = db.execute(
                 "INSERT INTO reader_requests(id, work_id, reader, notes) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(work_id, reader) DO NOTHING",
                 (uuid.uuid4().hex, work_id, reader, notes),
             )
-            return dict(db.execute(
+            result = dict(db.execute(
                 "SELECT r.id, r.work_id, r.notes, r.created_at, w.title, w.chapter, w.status "
                 "FROM reader_requests r JOIN chapter_work w ON r.work_id = w.id "
                 "WHERE r.work_id = ? AND r.reader = ?", (work_id, reader),
             ).fetchone())
+            result["duplicate"] = inserted.rowcount == 0
+            return result
 
     def list_reader(self, reader: str):
         with self._connect() as db:
@@ -201,6 +209,43 @@ class SharedRequests:
                 digest.update(chunk)
         return digest.hexdigest()
 
+    def _verified_artifact(self, checksum: str):
+        """Cache verification only while the immutable file's identity stays unchanged."""
+        if not re.fullmatch(r"[a-f0-9]{64}", checksum):
+            raise ValueError("Invalid artifact checksum")
+        path = self.database.parent / "shared-artifacts" / checksum
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(fd, "rb") as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode):
+                    raise ValueError("Artifact is unavailable")
+                identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                with self._connect() as db:
+                    cached = db.execute(
+                        "SELECT device, inode, size, modified_ns, changed_ns FROM verified_artifacts WHERE checksum = ?",
+                        (checksum,),
+                    ).fetchone()
+                if cached and tuple(cached) == identity:
+                    return path
+                digest = hashlib.sha256()
+                while chunk := source.read(1024 * 1024):
+                    digest.update(chunk)
+                after = os.fstat(source.fileno())
+                after_identity = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                if digest.hexdigest() != checksum or identity != after_identity:
+                    raise ValueError("Artifact checksum mismatch")
+                with self._connect() as db:
+                    db.execute(
+                        "INSERT INTO verified_artifacts VALUES (?, ?, ?, ?, ?, ?) "
+                        "ON CONFLICT(checksum) DO UPDATE SET device = excluded.device, inode = excluded.inode, "
+                        "size = excluded.size, modified_ns = excluded.modified_ns, changed_ns = excluded.changed_ns",
+                        (checksum, *identity),
+                    )
+                return path
+        except OSError:
+            raise ValueError("Artifact is unavailable") from None
+
     def prepare_audio_review(self, work_id, link, actor, revision, export_id, settings_hash, artifacts):
         """Capture immutable artifacts for an administrator to inspect."""
         if not actor or not revision or not export_id or not settings_hash or not artifacts:
@@ -228,10 +273,24 @@ class SharedRequests:
         if not candidate or name not in json.loads(candidate["checksums"]):
             raise ValueError("Candidate artifact not found")
         checksum = json.loads(candidate["checksums"])[name]
-        path = self.database.parent / "shared-artifacts" / checksum
-        if not path.is_file() or self._checksum(path) != checksum:
-            raise ValueError("Candidate artifact unavailable or changed")
-        return path
+        return self._verified_artifact(checksum)
+
+    def review_state(self, work_id):
+        """Recover the latest prepared candidate and its decision for the current link."""
+        with self._connect() as db:
+            candidate = db.execute(
+                "SELECT c.id, c.revision, c.export_id FROM export_candidates c "
+                "JOIN work_projects p ON p.work_id = c.work_id AND p.id = c.link_id "
+                "WHERE c.work_id = ? ORDER BY c.rowid DESC LIMIT 1", (work_id,),
+            ).fetchone()
+            if not candidate:
+                return {"candidate": None, "review": None}
+            review = db.execute(
+                "SELECT r.id, r.revision, r.export_id, rc.candidate_id FROM audio_reviews r "
+                "JOIN review_candidates rc ON rc.review_id = r.id "
+                "WHERE rc.candidate_id = ? ORDER BY r.rowid DESC LIMIT 1", (candidate["id"],),
+            ).fetchone()
+            return {"candidate": dict(candidate), "review": dict(review) if review else None}
 
     def approve_audio_review(self, work_id, candidate_id, link, actor, revision, export_id, settings_hash, checksums):
         """Record an explicit decision only for a still-current prepared snapshot."""
@@ -324,10 +383,7 @@ class SharedRequests:
                 or (expected_publication is not None and publication["id"] != expected_publication)):
             raise ValueError("Published artifact not found")
         checksum = publication["checksums"][name]
-        path = self.database.parent / "shared-artifacts" / checksum
-        if not path.is_file() or self._checksum(path) != checksum:
-            raise ValueError("Published artifact unavailable or changed")
-        return path
+        return self._verified_artifact(checksum)
 
     def approve(self, work_id: str, actor: str):
         if not actor:
