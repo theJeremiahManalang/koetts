@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RequireSignIn } from "../identity/require-sign-in";
 import { useAuth } from "../identity/auth-provider";
+import { getFirebaseAuth } from "../identity/firebase-client";
 
 type Candidate = { id: string; revision: string; export_id: string };
 type Review = Candidate & { candidate_id: string };
@@ -24,10 +25,12 @@ async function jsonRequest(url: string, options?: RequestInit) {
 export default function AdminRequestsPage() {
   const { user, isAdmin, authorizationReady } = useAuth();
   if (!user || !isAdmin) return <main><h1>Administrator access required</h1><Link href="/browse">Return to the library</Link></main>;
-  return <RequireSignIn><AdminWork authorizationReady={authorizationReady} /></RequireSignIn>;
+  return <RequireSignIn><AdminWork uid={user.uid} authorizationReady={authorizationReady} /></RequireSignIn>;
 }
 
-function AdminWork({ authorizationReady }: { authorizationReady: boolean }) {
+function AdminWork({ uid, authorizationReady }: { uid: string; authorizationReady: boolean }) {
+  const authorization = useRef({ uid, ready: authorizationReady });
+  authorization.current = { uid, ready: authorizationReady };
   const [work, setWork] = useState<Work[]>([]);
   const [projects, setProjects] = useState<StudioProject[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Record<string, string>>({});
@@ -55,15 +58,26 @@ function AdminWork({ authorizationReady }: { authorizationReady: boolean }) {
     if (busy || !authorizationReady) return;
     setBusy(item.id); setError(""); setMessage("");
     try {
+      const current = getFirebaseAuth().currentUser;
+      if (!current || current.uid !== uid) throw new Error("Verify your account before continuing.");
+      const token = await current.getIdToken();
+      const verifyActor = () => {
+        if (!authorization.current.ready || authorization.current.uid !== uid || getFirebaseAuth().currentUser?.uid !== uid) {
+          throw new Error("Verify your account before continuing.");
+        }
+      };
+      verifyActor();
       let payload: Record<string, unknown> = { action: command, work_id: item.id, ...fields };
       if (command === "prepare") {
         if (!item.link) throw new Error("Attach a studio project first.");
-        const snapshot = await jsonRequest(`/api/workflow?project=${encodeURIComponent(item.link.project_id)}`);
+        const snapshot = await jsonRequest(`/api/workflow?project=${encodeURIComponent(item.link.project_id)}`, { headers: { Authorization: `Bearer ${token}` } });
         payload = { ...payload, revision: snapshot.revision };
       }
+      verifyActor();
       await jsonRequest("/api/shared/admin", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(payload),
       });
+      verifyActor();
       await refresh();
       setMessage(command === "publish" ? "Reviewed audio is published." : command === "review" ? "Audio review recorded." : command === "prepare" ? "Export is ready to audition." : command === "link" ? "Studio project attached." : "Request approved.");
     } catch (failure) { setError(failure instanceof Error ? failure.message : "The action could not be completed."); }
