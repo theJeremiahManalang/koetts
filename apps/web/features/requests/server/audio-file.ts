@@ -1,8 +1,35 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
+import { open, realpath, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+
+const verified = new Map<string, true>();
+
+async function verifyOpenedArtifact(handle: FileHandle, checksum: string) {
+  const before = await handle.stat({ bigint: true });
+  if (!before.isFile() || before.size > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Invalid artifact");
+  const identity = [checksum, before.dev, before.ino, before.size, before.mtimeNs, before.ctimeNs].join(":");
+  if (process.platform !== "win32" && verified.has(identity)) return Number(before.size);
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  let position = 0;
+  while (true) {
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+    if (!bytesRead) break;
+    hash.update(buffer.subarray(0, bytesRead));
+    position += bytesRead;
+  }
+  const after = await handle.stat({ bigint: true });
+  const afterIdentity = [checksum, after.dev, after.ino, after.size, after.mtimeNs, after.ctimeNs].join(":");
+  if (identity !== afterIdentity || hash.digest("hex") !== checksum) throw new Error("Artifact integrity check failed");
+  if (process.platform !== "win32") {
+    if (verified.size >= 1000) verified.delete(verified.keys().next().value!);
+    verified.set(identity, true);
+  }
+  return Number(before.size);
+}
 
 /** Serve only immutable artifact files; caller must authorize the selected artifact. */
 export async function serveAudioFile(root: string, candidate: string, request: Request): Promise<Response> {
@@ -11,9 +38,8 @@ export async function serveAudioFile(root: string, candidate: string, request: R
   if (path.dirname(target) !== artifacts || !/^[a-f0-9]{64}$/.test(path.basename(target))) throw new Error("Invalid artifact");
   const handle = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
-    const stat = await handle.stat();
-    if (!stat.isFile() || !Number.isSafeInteger(stat.size)) throw new Error("Invalid artifact");
-    const size = stat.size;
+    // Verify and stream the same open descriptor, even if the path is replaced.
+    const size = await verifyOpenedArtifact(handle, path.basename(target));
     const headers: Record<string, string> = {
       "Content-Type": "audio/wav", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Accept-Ranges": "bytes",
     };
