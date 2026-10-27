@@ -52,6 +52,11 @@ class SharedRequests:
                     revision TEXT NOT NULL, export_id TEXT NOT NULL, settings_hash TEXT NOT NULL,
                     checksums TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS publications (
+                    work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
+                    id TEXT NOT NULL UNIQUE, review_id TEXT NOT NULL REFERENCES audio_reviews(id),
+                    actor TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
             """)
 
     @contextmanager
@@ -206,6 +211,63 @@ class SharedRequests:
         return {"id": review_id, "work_id": work_id, "link_id": link["id"], "project_id": link["project_id"],
                 "actor": actor, "revision": revision, "export_id": export_id, "settings_hash": settings_hash,
                 "checksums": checksums}
+
+    def publication(self, work_id):
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT p.id, p.work_id, p.review_id, p.actor, p.created_at, r.checksums "
+                "FROM publications p JOIN audio_reviews r ON r.id = p.review_id WHERE p.work_id = ?",
+                (work_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+            result["checksums"] = json.loads(result["checksums"])
+            return result
+
+    def publish_review(self, work_id, review_id, actor, link, revision, export_id, settings_hash,
+                       checksums, expected_publication):
+        """Atomically promote a reviewed export after validating a locked current snapshot."""
+        if not actor:
+            raise ValueError("Publication actor required")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current_link = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
+            review = db.execute("SELECT * FROM audio_reviews WHERE id = ? AND work_id = ?", (review_id, work_id)).fetchone()
+            if (not current_link or not review or current_link["id"] != link["id"]
+                    or review["link_id"] != current_link["id"]
+                    or review["project_id"] != current_link["project_id"]
+                    or (review["revision"], review["export_id"], review["settings_hash"]) != (revision, export_id, settings_hash)
+                    or json.loads(review["checksums"]) != checksums):
+                raise ValueError("Export no longer matches audio review")
+            for checksum in checksums.values():
+                path = self.database.parent / "shared-artifacts" / checksum
+                if not path.is_file() or self._checksum(path) != checksum:
+                    raise ValueError("Reviewed artifact unavailable or changed")
+            prior = db.execute("SELECT * FROM publications WHERE work_id = ?", (work_id,)).fetchone()
+            if prior and prior["review_id"] == review_id:
+                return {"id": prior["id"], "work_id": work_id, "review_id": review_id}
+            if (prior["id"] if prior else None) != expected_publication:
+                raise ValueError("Publication changed; reload before publishing")
+            publication_id = uuid.uuid4().hex
+            db.execute(
+                "INSERT INTO publications(work_id, id, review_id, actor) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(work_id) DO UPDATE SET id = excluded.id, review_id = excluded.review_id, "
+                "actor = excluded.actor, created_at = CURRENT_TIMESTAMP",
+                (work_id, publication_id, review_id, actor),
+            )
+            db.execute("UPDATE chapter_work SET status = 'published' WHERE id = ?", (work_id,))
+            return {"id": publication_id, "work_id": work_id, "review_id": review_id}
+
+    def published_artifact(self, work_id, name):
+        publication = self.publication(work_id)
+        if not publication or name not in publication["checksums"]:
+            raise ValueError("Published artifact not found")
+        checksum = publication["checksums"][name]
+        path = self.database.parent / "shared-artifacts" / checksum
+        if not path.is_file() or self._checksum(path) != checksum:
+            raise ValueError("Published artifact unavailable or changed")
+        return path
 
     def approve(self, work_id: str, actor: str):
         if not actor:

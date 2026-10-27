@@ -551,6 +551,27 @@ def review_shared_export(store, work_id, actor, expected_revision):
         return store.record_audio_review(work_id, link, actor, revision, export_id, settings_hash, artifacts)
 
 
+def publish_shared_export(store, work_id, review_id, actor, expected_revision, expected_publication):
+    """Publish only a reviewed export that still matches the locked studio project."""
+    link = store.get_link(work_id)
+    if not link:
+        raise ValueError("Work has no linked studio project")
+    project_id = identifier(link["project_id"])
+    workspace = (ROOT / "projects").resolve() / project_id
+    if workspace.is_symlink() or not (workspace / "project.json").is_file():
+        raise ValueError("Studio project not found")
+    with workspace_lock(workspace):
+        revision, export_id, settings_hash, artifacts = _export_snapshot(workspace, expected_revision)
+        checksums = {}
+        for name, path in artifacts.items():
+            with path.open("rb") as source:
+                checksums[name] = hashlib.file_digest(source, "sha256").hexdigest()
+        return store.publish_review(
+            work_id, review_id, actor, link, revision, export_id, settings_hash,
+            checksums, expected_publication,
+        )
+
+
 def source_signature(data):
     return digest({key: data.get(key) for key in ("sources", "page_order", "panel_order")})
 
