@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { open, realpath, type FileHandle } from "node:fs/promises";
+import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
@@ -34,8 +34,10 @@ async function verifyOpenedArtifact(handle: FileHandle, checksum: string) {
 /** Serve only immutable artifact files; caller must authorize the selected artifact. */
 export async function serveAudioFile(root: string, candidate: string, request: Request): Promise<Response> {
   const artifacts = await realpath(path.join(root, "shared-artifacts"));
-  const target = await realpath(candidate);
-  if (path.dirname(target) !== artifacts || !/^[a-f0-9]{64}$/.test(path.basename(target))) throw new Error("Invalid artifact");
+  const target = path.resolve(candidate);
+  if (await realpath(path.dirname(target)) !== artifacts || !/^[a-f0-9]{64}$/.test(path.basename(target))) throw new Error("Invalid artifact");
+  const entry = await lstat(target);
+  if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("Invalid artifact");
   const handle = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     // Verify and stream the same open descriptor, even if the path is replaced.
