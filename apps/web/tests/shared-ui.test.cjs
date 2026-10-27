@@ -95,6 +95,7 @@ test('admin publishes the saved review rather than a newer audition candidate', 
     'next/link': props => React.createElement('a', props),
     '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
     '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'admin' }, isAdmin: true, authorizationReady: true }) },
+    '../identity/firebase-client': { getFirebaseAuth: () => ({ currentUser: { uid: 'admin', getIdToken: async () => 'admin-token' } }) },
   };
   const Page = load('../features/requests/admin-requests-page.tsx', mocks).default;
   const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
@@ -106,6 +107,7 @@ test('admin publishes the saved review rather than a newer audition candidate', 
   await act(async () => publish.click());
   const sent = calls.find(([, options]) => options.method === 'POST');
   assert.deepEqual(JSON.parse(sent[1].body), { action: 'publish', work_id: workId, review_id: reviewId, revision, expected_publication: null });
+  assert.equal(new Headers(sent[1].headers).get('authorization'), 'Bearer admin-token');
 });
 
 test('browse displays only published catalog entries', async t => {
@@ -229,4 +231,37 @@ test('audio refresh waits for session verification and resumes afterward', async
   ready = true;
   await act(async () => render());
   assert.equal(calls, 2);
+});
+
+test('admin action stops if session verification changes while preparing', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/admin/requests' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const workId = 'a'.repeat(32), projectId = 'b'.repeat(32);
+  let ready = true, release;
+  const wait = new Promise(resolve => { release = resolve; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push([url, options]);
+    if (String(url).startsWith('/api/workflow?project=')) { await wait; return { ok: true, json: async () => ({ revision: 'f'.repeat(64) }) }; }
+    if (url === '/api/workflow') return { ok: true, json: async () => ({ projects: [{ id: projectId, name: 'Project' }] }) };
+    return { ok: true, json: async () => ({ work: [{ id: workId, title: 'Manga', chapter: 1, status: 'approved', requests: [], link: { project_id: projectId }, publication_id: null, candidate: null, review: null }] }) };
+  };
+  const mocks = {
+    'next/link': props => React.createElement('a', props),
+    '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
+    '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'admin' }, isAdmin: true, authorizationReady: ready }) },
+    '../identity/firebase-client': { getFirebaseAuth: () => ({ currentUser: { uid: 'admin', getIdToken: async () => 'admin-token' } }) },
+  };
+  const Page = load('../features/requests/admin-requests-page.tsx', mocks).default;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  const render = () => root.render(React.createElement(Page));
+  await act(async () => render());
+  await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Prepare export for audition').click());
+  ready = false;
+  await act(async () => render());
+  await act(async () => { release(); await wait; });
+  assert.equal(calls.filter(([, options]) => options.method === 'POST').length, 0);
 });
