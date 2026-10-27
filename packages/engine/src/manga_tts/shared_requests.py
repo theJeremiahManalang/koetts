@@ -275,6 +275,15 @@ class SharedRequests:
             result["checksums"] = json.loads(result["checksums"])
             return result
 
+    def catalog(self):
+        """Return only chapter work with an accepted publication pointer."""
+        with self._connect() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT w.id AS work_id, w.title, w.chapter, p.id AS publication_id "
+                "FROM chapter_work w JOIN publications p ON p.work_id = w.id "
+                "ORDER BY w.title_key, w.chapter"
+            )]
+
     def publish_review(self, work_id, review_id, actor, link, revision, export_id, settings_hash,
                        checksums, expected_publication):
         """Atomically promote a reviewed export after validating a locked current snapshot."""
