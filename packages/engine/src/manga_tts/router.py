@@ -260,7 +260,7 @@ class PipelineRouter:
     def update_metadata(self, metadata: dict[str, Any]) -> Project:
         """Commit transport-owned project metadata through the normal persistence seam."""
         allowed = {"title", "source_review_signature", "proposal_applied_signature",
-                   "web_export_signature", "web_export_scenes"}
+                   "web_export_signature", "web_export_scenes", "web_export_id"}
         if not isinstance(metadata, dict) or not set(metadata) <= allowed:
             raise ValueError("Unsupported project metadata fields")
         candidate = self._data()

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -181,6 +182,11 @@ def _render_segments(context: WorkflowExecution) -> dict[str, Any]:
 
 
 def _export_audio(context: WorkflowExecution) -> None:
+    # Fixed filenames are overwritten in place. Invalidate the old export before
+    # writing, so an interrupted replacement cannot masquerade as a valid export.
+    context.router.update_metadata({
+        "web_export_signature": None, "web_export_scenes": [], "web_export_id": None,
+    })
     context.router.export_audio(
         schemas.RenderSelection.model_validate(context.command),
         mp3=context.request.get("mp3") is True,
@@ -209,6 +215,7 @@ def _record_export(context: WorkflowExecution) -> None:
         {
             "web_export_signature": export_signature(data),
             "web_export_scenes": context.command["scene_ids"],
+            "web_export_id": uuid.uuid4().hex,
         }
     )
 
