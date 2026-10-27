@@ -1,8 +1,17 @@
+FROM ghcr.io/astral-sh/uv:0.11.16 AS uv
 FROM python:3.11-slim
+COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
-COPY requirements-api.txt ./
-RUN pip install --no-cache-dir -r requirements-api.txt
-COPY manga_tts ./manga_tts
+COPY pyproject.toml uv.lock ./
+COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
+COPY packages/engine/pyproject.toml packages/engine/pyproject.toml
+COPY packages/vision/pyproject.toml packages/vision/pyproject.toml
+RUN uv sync --frozen --no-dev --package manga-worker --extra api --no-install-workspace --no-editable
+COPY apps/worker/src apps/worker/src
+COPY packages/engine/src packages/engine/src
+COPY packages/vision/src packages/vision/src
+RUN uv sync --frozen --no-dev --package manga-worker --extra api --no-editable
 ENV S3_API_MODE=verification PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH" MANGA_DATA_ROOT=/tmp/manga-studio
 USER 65532:65532
-CMD ["sh", "-c", "exec uvicorn manga_tts.http_api:create_app --factory --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "exec uvicorn manga_worker.http_api:create_app --factory --host 0.0.0.0 --port ${PORT:-8080}"]

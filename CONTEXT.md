@@ -1,98 +1,24 @@
-# Task checkpoint
+# Active task handoff
 
-## PR handoff — 22 October 2026
+## Objective and approval
 
-- **Request and authorization:** User requested a PR to main with detailed change documentation. This is the publishing follow-up to the approved S3 implementation and final review. No merge or deployment was requested or performed.
-- **Result:** Pushed six existing commits through `5d51d8f` from `feat/architecture-alignment`. Opened ready-for-review PR #13: https://github.com/theJeremiahManalang/koetts/pull/13, base `main`. GitHub confirms repository was renamed from `manga-to-audio-book-project` to `koetts`; the existing remote redirects successfully and was not rewritten.
-- **Documentation:** PR body records behavior by subsystem, identity/control flow, atomic audit compatibility, regression before/after evidence, 101 Python tests (99 passed/two skipped), 33 web tests, build/type/static/browser results, live S3 acceptance, separate review-fix commits, deployment limits and rollback. It explicitly distinguishes already-deployed S3 verification from the final local review fixes, which are not deployed.
-- **Preparation:** Refreshed origin; main was `7d89726`, branch six commits ahead/zero behind, no existing open PR. Used `gh pr create --body-file` with PR skill Summary/Evidence/Merge Danger structure. Runtime tests were not rerun because this task changed no runtime source. Existing uncommitted checkpoint edits are preserved; this handoff is local metadata.
-- **Next action:** Await human PR review. Do not merge, deploy or start S4 without applicable authorization.
+Identify and fix the CI failure on PR #14. User approved the bounded implementation prompt on 2026-10-26.
 
-## Final S3 review handoff — 22 October 2026
+## Finding and decision
 
-- **Approval and scope:** User approved final review of `7d89726...d3af872`, confirmed fixes with affected checks, separate bounded commits and separate evidence. Preserve existing history and unrelated checkpoint edits; exclude S4/S5 and deployment.
-- **Findings and fixes:** Independent Standards review: zero findings. Spec: P1 polling stopped during same-user renewal; P2 scene ID `cast` was misclassified in audit. Both reproduced red and passed after fixes. Commit `434c81e` owns only studio polling and its rendered regression; `4161dfa` owns only router audit identity and its regression. Independent follow-ups report no remaining findings.
-- **Checks:** Python 3.11.15 full discovery `/tmp/manga-final-review-venv/bin/python -m unittest discover -s tests -v`: 101 run, 99 passed, two expected skips. Web: 33 tests, typecheck/build passed. Scoped Ruff/Pyright passed. Native Chromium polling/failure/recovery/reconciliation test passed without page errors. Exact methods, initial failures and limits: `docs/s3-final-review.md`; linked from `docs/alignment-status.md`.
-- **State and next action:** Review fixes are committed locally on `feat/architecture-alignment`; no rollout, role changes or paid calls occurred. Existing S3 live verification evidence remains separate. Evidence commit follows. Preserve the pre-existing review-only CONTEXT section outside task commits. Final review has no remaining actionable finding; S4 requires its own approved scope.
+The failing job was `verify_fresh_checkout.py`. Its temporary checkout copied `docs/` but omitted root `firebase.json`. The repository checker therefore reported the archived baseline's valid `../../firebase.json` link as broken. Add `firebase.json` to the verifier's copied root files; leave the archived link unchanged.
 
-## S3 completion handoff — 22 October 2026
+## Changed paths
 
-- **Objective and approval:** User approved and requested implementation, authentication-only deployment and commits for S3. Scope excludes hosted generation, publication and S4/S5 processing. The agent made no role changes or paid provider calls.
-- **Implementation:** Draft retention during auth renewal; verified server principals; atomic approval audit; independently authenticated Python HTTP service; default verification-only mode; repaired authenticated HTTP harness; canonical-origin CSRF and private backend diagnostic. Runtime sources: `web/components/auth-provider.tsx`, `web/lib/require-admin.ts`, workflow route/worker, `manga_tts/router.py`, `manga_tts/schemas.py`, `manga_tts/http_api.py`, `manga_tts/http_auth.py`.
-- **Acceptance:** `docs/alignment-status.md` S3 owns durable evidence. Python 3.11.15 full discovery: 100 run, 98 passed, two expected skips. Final web suite: 32 passed; typecheck/build passed. Production HTTP checks, scoped Ruff/Pyright, API-only import smoke and native Chromium draft/session tests passed. Independent Standards/Spec reviews and focused origin-fix follow-ups found zero actionable issues. Initial harness failures and hosted-origin rollback are recorded in that report.
-- **Deployment:** Project `koetts-9bf7f`, `us-east4`; frontend `koetts-build-2026-10-21-002`; private API `koetts-s3-api-00001-gl5`, image `sha256:bd5cf2fac59d9733ee408d847eb80b6795ab9c40b7840534b06163d336a43cc2`. Frontend-only and API verification mode remain enabled. App Hosting is the sole API invoker; temporary verifier grants were removed. Existing Firestore browser deny-all rules remain unchanged. Rollback: `docs/S3_DEPLOYMENT.md`.
-- **Live result:** Anonymous/service/audience/credential denials, session CSRF and real browser checks passed. User first confirmed reader403, then reported live admin diagnostic `{"verified":true,"mode":"verification"}` after trusted account setup. Positive admin acceptance is user-observed, not agent impersonation. Account-access blocker is resolved; no S3 blocker remains in approved scope.
-- **Commits and state:** Implementation `8ae3968`, earlier blocked-acceptance evidence `09a7b1a`; final evidence update follows. Current branch `feat/architecture-alignment`. Prior review-only CONTEXT edits below remain preserved and must stay outside task commits. No deployment process is active.
-- **Next action:** S3 is complete for the approved authentication-only scope. S4 is next eligible; obtain its own scope approval before implementation. S5 production storage/execution and live provider compatibility remain unverified.
+- `tools/verify_fresh_checkout.py`: copy root `firebase.json` into the disposable checkout.
+- `CONTEXT.md`: record this task and its verification.
 
-## Active review: PR #12, 21 October 2026
+## Verification
 
-- **Approval and scope:** User explicitly approved reviewing `cb467f1...7d89726` for standards, specification coverage, correctness, and regressions. No implementation fixes were authorized. Separate Standards and Spec reviewers completed source inspection. This checkpoint is the only intentional tracked edit.
-- **Findings:** P1: `web/components/auth-provider.tsx:27` resets loading on token refresh; `web/app/studio-workspace.tsx:76` unmounts the workspace and loses unsaved drafts. Request forms also unmount through `RequireSignIn`. Firebase SDK documentation confirms token-refresh events invoke this observer. P2: new API guards return anonymous 401, but `tests/verify_local_http.py:105` still waits for anonymous 200/503 and `tests/test_web_http.py` supplies no credentials. HTTP harness incompatibility was established by source inspection, not live execution.
-- **Status:** S3 is partial: Firebase admin claims, server page/API guards, session cookies and CSRF checks exist. Python HTTP/service authorization and persisted approval actors remain absent. S4 requests remain browser-local; real publication/playback and S5 cloud integration remain pending.
-- **Fresh checks:** `npm test` in `web/`: 25 passed. `npm run typecheck`: exit 2, Firebase modules missing with consequent type errors. `npm run build`: exit 1, five Firebase module-resolution errors. Manifests include the dependencies but this checkout's installed dependencies are stale. `git diff --check cb467f1...7d89726`: exit 0. No dependency install, live Firebase, browser, Python or HTTP integration run occurred.
-- **Limits:** `gh pr view 12 --json title,body,comments` could not connect to GitHub; review used commit, repository requirements and runtime source. Build/typecheck need dependency synchronization before a source-level pass/failure conclusion. No paid calls, deployment, publication, or external writes.
-- **Next action:** Report findings and implementation status; fixes require a separate authorized scope. Previous merge handoff below is historical.
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:/home/ssuish/.local/bin:/usr/local/bin:/usr/bin:/bin uv run --locked python tools/verify_fresh_checkout.py`: passed. Fresh checkout install succeeded; `check:repo` passed; 105 Python tests ran (103 passed, 2 optional skips); 33 web tests passed; no-Torch assertion and external-directory CLI help checks passed.
+- `git diff --check`: passed.
+- Initial run with default Node 24/npm 11 stopped at `npm ci` because project requires Node 22/npm 10. Rerun used pinned Node 22.22.3/npm 10.9.8.
 
-## Active handoff: 21 October 2026 merge repair
+## Blockers and next action
 
-- Objective and approval: user explicitly approved restoring the admin-gated page,
-  integrating incoming operation retry/recovery into the authenticated workspace,
-  repairing the API import, and running web checks. Starting tree was clean after
-  merge commit `60bd75b`.
-- Changed: `web/app/page.tsx` restores the server authorization gate and
-  frontend-only `/browse` redirect. `web/app/studio-workspace.tsx` incorporates
-  incoming idempotency, pending-operation lookup, and reconciliation handling while
-  retaining Firebase authorization, the client admin gate, and KoeTTS branding.
-  `web/app/api/workflow/route.ts` restores the missing `requireAdmin` import.
-- Regression checks: `web/tests/studio-page.test.cjs` covers anonymous/non-admin
-  redirects, authorized rendering, and frontend-only short-circuiting.
-  `web/tests/workflow-route.test.cjs` mocks authorization for existing enqueue tests
-  and verifies GET/POST denial before processing.
-- Results from `web/`: `npm.cmd test` passed all 25 tests; `npm.cmd run typecheck`
-  passed; `npm.cmd run build` passed. `git diff --check` passed.
-  PowerShell blocked the initial `npm` script launcher; using `npm.cmd` succeeded
-  without changing execution policy. Build warned about an outside-repository lockfile.
-  Generated `web/next-env.d.ts` changes were reverted.
-- Limits: no Python source changed; Python tests and live Firebase/browser checks
-  were not run. No deployment or paid generation occurred.
-- Next action: user review/commit. No implementation blocker remains.
-  [Recovery notes](docs/merge-recovery-2026-10-21.md) preserve pre-resolution sources.
-  The earlier checkpoint below is historical.
-
-Updated 20 October 2026. S1/S2 review and remediation completed on
-`feat/architecture-alignment`, starting from `b7d4ff2`.
-
-- **Objective and approval:** The user approved independent standards/spec reviews,
-  fixes, regression checks, documentation, and a commit. The user selected the
-  parent of the first S1 commit as the review baseline: `6423d44dd495d79de6eb6073875c98ad374ee8cb`.
-  No deployment, paid inference, or publication was authorized or performed.
-  The user subsequently authorized pushing this branch and opening a PR to `main`.
-- **Scope and decisions:** Preserve the local studio and S1/S2 contracts. Render
-  retries retain the original take baseline and reuse replacements already accepted
-  by the operation. Planning retries recognize the checkpointed completion hash.
-  Ambiguous enqueue failures retain staged inputs. Explicit reconciliation refreshes
-  accepted render state only after worker stoppage and workspace ownership checks.
-- **Changed source/tests:** `manga_tts/operations.py`, `web_workflow.py`,
-  `web/app/api/workflow/route.ts`, `tests/test_operations.py`,
-  `tests/test_operation_worker_process.py`, `tests/operation_worker_process.py`,
-  and `web/tests/workflow-route.test.cjs`. Includes the stopped-process termination
-  race fix and shared fenced failure handling.
-- **Evidence:** `docs/alignment-status.md` links `docs/s1-s2-review.md`, which owns
-  the initial findings, remediation, acceptance evidence, and limitations.
-  Final independent standards and spec reviews report zero remaining findings
-  within the reviewed fixes.
-- **Checks:** `/tmp/manga-s2-venv/bin/python -m unittest discover -s tests -v`:
-  85 tests, 83 passed, two optional skips (external sample and HTTP server).
-  Focused operation tests: 12 passed; worker process tests: six passed.
-  `npm test`: 12 passed; `npm run typecheck` and `npm run build`: passed in `web/`.
-  Scoped Ruff and import ordering passed. Scoped Pyright with
-  `/tmp/manga-s2-pyrightconfig.json`: zero diagnostics. Initial Pyright without the
-  environment config reported three psutil source warnings; the configured run
-  resolves them. `git diff --check` passed.
-- **Limits:** Synthetic audio only; no live provider or cloud verification.
-  Ambiguous enqueue failures can retain orphan uploads pending a separate cleanup
-  policy. No supplied samples, model caches, or results were changed.
-- **Blockers:** None within the approved scope.
-- **Next action:** Push the branch and open the authorized PR to `main`, including
-  S2 and the review fixes. S1 is already on `origin/main`. S3 remains outside scope.
+No local blockers. Commit and push the fix to PR #14 to rerun hosted CI; no commit or push performed.
