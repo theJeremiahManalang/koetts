@@ -88,6 +88,13 @@ hosting remains enabled; private API project, asset and operation access stays
 unavailable until S5 supplies durable storage and hosted execution. This restriction
 does not prevent local testing of short-operation HTTP contracts.
 
+### Resolved for S4 — request identity and reader status
+
+Shared chapter work is keyed by a whitespace-normalized, case-folded manga title,
+the positive chapter number, and the single default audio configuration. Each reader
+has a separate request for that work. Reader-facing statuses are pending, approved,
+and published. Removing one reader's request does not remove shared work.
+
 ### Resolved for S2 — local operation scheduling and recovery
 
 The local studio stores durable operations in a SQLite database under
@@ -121,7 +128,6 @@ SQLite; old queued/running jobs are not imported or automatically restarted.
 | Decision or measurement | Must be resolved before |
 | --- | --- |
 | Production global stage capacities, dispatcher, timeout/retry policy, and hosted execution reconciliation | S5 cloud integration |
-| Request deduplication identity, chapter/configuration key, lifecycle/status rules | S4 request persistence |
 | Dispatcher choice; Workflows/Eventarc/scheduler use; bucket layout | S5 infrastructure integration |
 | Retention periods, reference tracking, deletion and recovery policy | S5 cleanup implementation |
 | Project/regions, budget, service IAM, secrets, actual deployed state | S5 provisioning/deployment |

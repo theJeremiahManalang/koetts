@@ -18,3 +18,11 @@ pinned build dependencies.
 Next: complete request API and UI integration, trusted export review, atomic
 publication, authenticated reader playback, end-to-end tests, scope evidence, and
 required review. Preserve existing project state; no live publication or paid calls.
+
+Review against `ede54cd946143fa6f9c2a1fc847aacff6520b479` found that SQLite
+connections were not closed; fixed with explicit closing and reran the focused test
+and Ruff successfully. The spec review confirmed all missing S4 integrations above.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check:repo` passed; without that
+cache override the sandbox could not write the default uv cache. `git diff --check`
+passed. Production HTTP and full `npm run check` have not been run for this partial
+work. No S4 acceptance criterion is claimed complete.

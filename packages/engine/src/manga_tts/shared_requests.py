@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -32,11 +33,16 @@ class SharedRequests:
                 );
             """)
 
+    @contextmanager
     def _connect(self):
         db = sqlite3.connect(self.database, timeout=30)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys = ON")
-        return db
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def submit(self, reader: str, title: str, chapter: str, notes: str):
         title = " ".join(title.split())
