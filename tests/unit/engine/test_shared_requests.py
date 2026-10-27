@@ -36,6 +36,17 @@ class SharedRequestsTest(unittest.TestCase):
             store.approve(work["work_id"], "administrator")
             self.assertEqual(store.list_work()[0]["approved_by"], "administrator")
 
+    def test_admin_sees_each_readers_original_note(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SharedRequests(Path(directory) / "shared.sqlite3")
+            first = store.submit("alice", "Manga", "1", "Alice note")
+            store.submit("bob", "Manga", "1", "Bob note")
+            store.submit("alice", "Manga", "1", "Replacement note")
+            self.assertEqual(
+                {request["notes"] for request in store.work_requests(first["work_id"])},
+                {"Alice note", "Bob note"},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
