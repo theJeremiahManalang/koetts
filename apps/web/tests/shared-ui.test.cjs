@@ -34,6 +34,9 @@ test('reader submits shared request and sees duplicate feedback', async t => {
     'next/navigation': { useSearchParams: () => new URLSearchParams('manga=Manga&chapter=1') },
     '../library/library-ui': { LibraryHeader: () => null },
     '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
+    '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
+    './auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
+    './firebase-client': { getFirebaseAuth: () => ({ currentUser: { uid: 'reader', getIdToken: async () => 'reader-token' } }) },
   };
   const Page = load('../features/requests/request-page.tsx', mocks).default;
   const { createRoot } = require('react-dom/client');
@@ -43,6 +46,7 @@ test('reader submits shared request and sees duplicate feedback', async t => {
   await act(async () => document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })));
   assert.equal(calls[0][0], '/api/shared/requests');
   assert.deepEqual(JSON.parse(calls[0][1].body), { title: 'Manga', chapter: '1', notes: '' });
+  assert.equal(new Headers(calls[0][1].headers).get('authorization'), 'Bearer reader-token');
   assert.match(document.body.textContent, /already requested/i);
 });
 
@@ -63,6 +67,8 @@ test('reader sees persisted requests and can remove only their own entry', async
     '../library/library-ui': { LibraryHeader: () => null },
     '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
     '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
+    './auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
+    './firebase-client': { getFirebaseAuth: () => ({ currentUser: { uid: 'reader', getIdToken: async () => 'reader-token' } }) },
   };
   const Page = load('../features/requests/requests-page.tsx', mocks).default;
   const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
@@ -74,6 +80,7 @@ test('reader sees persisted requests and can remove only their own entry', async
   await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Delete request').click());
   assert.equal(calls.at(-1)[1].method, 'DELETE');
   assert.deepEqual(JSON.parse(calls.at(-1)[1].body), { id: 'a'.repeat(32) });
+  assert.equal(new Headers(calls.at(-1)[1].headers).get('authorization'), 'Bearer reader-token');
   assert.match(document.body.textContent, /No requests yet/);
 });
 

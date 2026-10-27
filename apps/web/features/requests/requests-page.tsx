@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { LibraryHeader } from "../library/library-ui";
 import { RequireSignIn } from "../identity/require-sign-in";
 import { useAuth } from "../identity/auth-provider";
+import { useVerifiedFetch } from "../identity/use-verified-fetch";
 
 type ReaderRequest = {
   id: string; work_id: string; manga_id: string; title: string; chapter: number; notes: string;
@@ -17,6 +18,7 @@ export default function RequestsPage() {
 
 function RequestsTable() {
   const { user, authorizationReady } = useAuth();
+  const verifiedFetch = useVerifiedFetch();
   const [requests, setRequests] = useState<ReaderRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -61,7 +63,7 @@ function RequestsTable() {
     if (!selected || pending) return;
     setPending(true);
     try {
-      const response = await fetch("/api/shared/requests", {
+      const response = await verifiedFetch("/api/shared/requests", {
         method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: selected.id }),
       });
       if (!response.ok) throw new Error();

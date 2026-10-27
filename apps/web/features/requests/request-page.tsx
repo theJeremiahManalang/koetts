@@ -5,12 +5,14 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LibraryHeader } from "../library/library-ui";
 import { RequireSignIn } from "../identity/require-sign-in";
+import { useVerifiedFetch } from "../identity/use-verified-fetch";
 
 export default function RequestMangaPage() {
   return <RequireSignIn><RequestForm /></RequireSignIn>;
 }
 
 function RequestForm() {
+  const verifiedFetch = useVerifiedFetch();
   const searchParams = useSearchParams();
   const [selectedManga, setSelectedManga] = useState(() => searchParams.get("manga") || "");
   const [selectedChapter, setSelectedChapter] = useState(() =>
@@ -28,7 +30,7 @@ function RequestForm() {
     setMessage("");
     setPending(true);
     try {
-      const response = await fetch("/api/shared/requests", {
+      const response = await verifiedFetch("/api/shared/requests", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: selectedManga.trim(), chapter: selectedChapter, notes }),
       });
@@ -49,15 +51,15 @@ function RequestForm() {
           <form onSubmit={handleSubmit} className="request-form">
             <div className="request-fields">
               <label htmlFor="request-manga">Manga title <span className="request-required">Required</span>
-                <input id="request-manga" type="text" required value={selectedManga} onChange={event => { setSelectedManga(event.target.value); setMessage(""); }} placeholder="e.g. Echoes of Tomorrow" autoComplete="off" />
+                <input id="request-manga" type="text" required disabled={pending} value={selectedManga} onChange={event => { setSelectedManga(event.target.value); setMessage(""); }} placeholder="e.g. Echoes of Tomorrow" autoComplete="off" />
               </label>
               <label htmlFor="request-chapter">Chapter <span className="request-required">Required</span>
-                <input id="request-chapter" type="text" inputMode="numeric" pattern="[0-9]{1,4}" maxLength={4} required value={selectedChapter} onChange={event => { setSelectedChapter(event.target.value.replace(/[^0-9]/g, "").slice(0, 4)); setMessage(""); }} placeholder="e.g. 12" aria-describedby="chapter-hint" />
+                <input id="request-chapter" type="text" inputMode="numeric" pattern="[0-9]{1,4}" maxLength={4} required disabled={pending} value={selectedChapter} onChange={event => { setSelectedChapter(event.target.value.replace(/[^0-9]/g, "").slice(0, 4)); setMessage(""); }} placeholder="e.g. 12" aria-describedby="chapter-hint" />
                 <small id="chapter-hint">Up to 4 digits.</small>
               </label>
             </div>
             <label htmlFor="request-notes"><span>Additional notes <span className="request-required">Optional</span></span>
-              <textarea id="request-notes" value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything we should know about this chapter or your narration preferences?" rows={4} />
+              <textarea id="request-notes" disabled={pending} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything we should know about this chapter or your narration preferences?" rows={4} />
             </label>
             <div className="request-submit-area"><p>One chapter per request. You can track it in My requests.</p><button type="submit" className="submit-request" disabled={!valid || pending}>{pending ? "Saving…" : "Submit request"} <span aria-hidden="true">↗</span></button></div>
             {error && <p className="notice error" role="alert">{error}</p>}
