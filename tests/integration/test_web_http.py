@@ -15,7 +15,8 @@ from urllib.parse import urlencode, urlparse
 
 from tests.unit.engine import test_audio_pipeline as fixtures
 
-from manga_tts.schemas import RenderCommand
+from manga_tts.cli import review_document
+from manga_tts.schemas import Project, RenderCommand
 
 
 @unittest.skipUnless(os.environ.get("MANGA_WEB_TEST_URL"), "No local web test server configured")
@@ -148,6 +149,19 @@ class WebHTTPTests(unittest.TestCase):
         selected = next(item for item in work if item["id"] == first_request["work_id"])
         self.assertEqual({item["notes"] for item in selected["requests"]}, {"first reader note", "second reader note"})
         self.assertIn("fixture-admin", selected["approved_by"])
+        with request("/api/workflow?project=" + project_id) as response:
+            snapshot = json.load(response)
+        script_review = review_document(Project.model_validate(snapshot["project"]), "script", "scene_001")["command"]
+        script_review["approve"] = True
+        payload = {"project": project_id, "revision": snapshot["revision"], "action": "script", "command": script_review}
+        with request("/api/workflow", json.dumps(payload).encode(), {**mutation_headers, "Idempotency-Key": uuid.uuid4().hex}) as response:
+            poll(json.load(response))
+        for action in ("render", "export"):
+            with request("/api/workflow?project=" + project_id) as response:
+                revision = json.load(response)["revision"]
+            payload = {"project": project_id, "revision": revision, "action": action, "command": {"scene_ids": ["scene_001"]}}
+            with request("/api/workflow", json.dumps(payload).encode(), {**mutation_headers, "Idempotency-Key": uuid.uuid4().hex}) as response:
+                poll(json.load(response))
         with request("/api/workflow?project=" + project_id) as response:
             revision = json.load(response)["revision"]
         candidate = admin_action("prepare", revision=revision)
