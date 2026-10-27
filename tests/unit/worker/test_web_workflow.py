@@ -3,8 +3,10 @@ import hashlib
 import json
 import shutil
 import sqlite3
+import threading
 import unittest
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from tests.unit.engine import test_audio_pipeline as fixtures
@@ -431,6 +433,11 @@ class WebWorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", current["revision"])
         audio.write_bytes(original)
+        captured = store.candidate_artifact(candidate["id"], "chapter_narration.wav")
+        captured.write_bytes(b"corrupted snapshot")
+        with self.assertRaises(ValueError):
+            web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", current["revision"])
+        captured.write_bytes(original)
         review = web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", current["revision"])
         self.assertEqual(review["revision"], current["revision"])
         self.assertEqual(review["export_id"], current["project"]["web_export_id"])
@@ -504,13 +511,52 @@ class WebWorkflowTests(unittest.TestCase):
         publication = web_workflow.publish_shared_export(store, work["work_id"], first["id"], "admin", revision, None)
         old_candidate = web_workflow.prepare_shared_export(store, work["work_id"], "admin", revision)
         old_review = web_workflow.approve_shared_export(store, work["work_id"], old_candidate["id"], "admin", revision)
+        pending_candidate = web_workflow.prepare_shared_export(store, work["work_id"], "admin", revision)
         other_project = uuid.uuid4().hex
         shutil.copytree(self.workspace, self.root / "projects" / other_project)
         web_workflow.link_shared_project(store, work["work_id"], other_project, "admin")
         with self.assertRaises(ValueError):
+            web_workflow.approve_shared_export(store, work["work_id"], pending_candidate["id"], "admin", revision)
+        with self.assertRaises(ValueError):
             web_workflow.publish_shared_export(store, work["work_id"], old_review["id"], "admin", revision, publication["id"])
         self.assertEqual(store.publication(work["work_id"])["id"], publication["id"])
         self.assertTrue(store.published_artifact(work["work_id"], "chapter_narration.wav").is_file())
+
+    def test_competing_publications_have_one_winner(self):
+        from manga_tts.shared_requests import SharedRequests
+
+        store = SharedRequests(self.root / "shared.sqlite3")
+        work = store.submit("reader", "Manga", "1", "")
+        store.approve(work["work_id"], "admin")
+        web_workflow.link_shared_project(store, work["work_id"], self.project_id, "admin")
+        real_router = PipelineRouter
+        patch.object(web_workflow, "PipelineRouter", lambda config: real_router(
+            config, client_factory=lambda: object(),
+            renderer_factory=lambda c, m: lambda request: fixtures.wav_bytes(),
+        )).start()
+        self.assertEqual(self.job("render", {"scene_ids": ["scene_001"], "regenerate": []})["status"], "complete")
+        self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "complete")
+        revision = self.current()["revision"]
+        with self.assertRaises(ValueError):
+            web_workflow.publish_shared_export(store, work["work_id"], uuid.uuid4().hex, "admin", revision, None)
+        reviews = []
+        for _ in range(2):
+            candidate = web_workflow.prepare_shared_export(store, work["work_id"], "admin", revision)
+            reviews.append(web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", revision))
+        barrier = threading.Barrier(2)
+
+        def publish(review):
+            barrier.wait()
+            try:
+                return web_workflow.publish_shared_export(store, work["work_id"], review["id"], "admin", revision, None)
+            except ValueError:
+                return None
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(publish, reviews))
+        winners = [result for result in results if result]
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(store.publication(work["work_id"])["id"], winners[0]["id"])
 
     def test_stale_edits_fail_without_changing_project(self):
         before = (self.workspace / "project.json").read_bytes()
