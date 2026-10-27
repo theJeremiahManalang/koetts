@@ -41,6 +41,16 @@ class WebWorkflowTests(unittest.TestCase):
         store.approve(work["work_id"], "admin")
         with self.assertRaises(ValueError):
             web_workflow.link_shared_project(store, work["work_id"], uuid.uuid4().hex, "admin")
+        bad_id = uuid.uuid4().hex
+        bad_workspace = self.root / "projects" / bad_id
+        bad_workspace.mkdir()
+        (bad_workspace / "project.json").write_text("{}", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            web_workflow.link_shared_project(store, work["work_id"], bad_id, "admin")
+        symlink_id = uuid.uuid4().hex
+        (self.root / "projects" / symlink_id).symlink_to(self.workspace, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            web_workflow.link_shared_project(store, work["work_id"], symlink_id, "admin")
         self.assertIsNone(store.get_link(work["work_id"]))
         link = web_workflow.link_shared_project(store, work["work_id"], self.project_id, "admin")
         self.assertEqual(link["project_id"], self.project_id)
