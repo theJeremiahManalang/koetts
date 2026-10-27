@@ -43,3 +43,9 @@ export version and artifact hashes, and atomic publication with prior-pointer
 conflict checks. Export identity is shared across CLI and worker calls. Review
 found and verified the CLI invalidation fix. Exact phase checks and limitations are
 in `docs/alignment-status.md`. Next: authenticated local APIs and reader playback.
+
+Phase 3 passed authenticated API, playback, full check, HTTP integration and
+independent review; exact results and local filesystem limitation are in
+`docs/alignment-status.md`. Phase 4 remains: integrate request/admin/studio and
+published catalog/reader screens, preserve reviewed candidate identity on reload,
+and verify user interactions and full S4 acceptance.

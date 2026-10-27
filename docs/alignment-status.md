@@ -574,3 +574,28 @@ pointer commits, competing publication attempts, relinks, and restart lookup.
 Both independent reviews found CLI exports bypassed worker-only export identity;
 the shared-router fix and CLI regression resolved that finding. No real human
 decisions, paid calls, or cloud integrations were performed.
+
+### S4 phase 3 — authenticated local APIs and audio delivery
+
+Verified Firebase readers and admins now reach the local shared service through
+server routes; mutations enforce the trusted origin and server-pinned identity.
+Frontend-only hosting rejects the new shared endpoints. Admin audio candidates are
+private. Reader URLs bind an expiring token to the verified reader and publication;
+audio delivery supports byte ranges and checks the original artifact checksum on
+the opened descriptor. Integrity verification is cached by unchanged local file
+identity on platforms with reliable change times; Windows rechecks bytes.
+
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check` passed: 117 Python tests,
+two optional skips, 43 web tests, typecheck and production build.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http` passed studio and
+frontend-only checks, including synthetic request, two-reader isolation, admin
+approval, project linkage, export audition/review/publication, catalog and ranged
+playback. The first HTTP attempt exposed local Next hostname normalization;
+loopback origin handling was corrected and the final checks passed.
+
+Independent reviews found missing duplicate feedback, unrecoverable review IDs,
+private response caching, repeated full-audio hashing, a Windows timestamp issue,
+and same-directory symlink substitution. Follow-up fixes and regression checks
+resolved the findings. A separate local process with write access can still modify
+an already opened inode during streaming; application-managed artifacts are treated
+as immutable. S5 must establish cloud-object immutability independently.
