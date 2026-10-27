@@ -31,6 +31,11 @@ class SharedRequests:
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(work_id, reader)
                 );
+                CREATE TABLE IF NOT EXISTS work_approvals (
+                    work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
+                    actor TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
             """)
 
     @contextmanager
@@ -79,7 +84,17 @@ class SharedRequests:
                 "WHERE r.reader = ? ORDER BY r.created_at, r.id", (reader,),
             )]
 
-    def approve(self, work_id: str):
+    def list_work(self):
+        with self._connect() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT w.id, w.title, w.chapter, w.status, a.actor AS approved_by "
+                "FROM chapter_work w LEFT JOIN work_approvals a ON a.work_id = w.id "
+                "ORDER BY w.title_key, w.chapter"
+            )]
+
+    def approve(self, work_id: str, actor: str):
+        if not actor:
+            raise ValueError("Approval actor required")
         with self._connect() as db:
             cursor = db.execute(
                 "UPDATE chapter_work SET status = 'approved' WHERE id = ? AND status = 'pending'",
@@ -87,6 +102,7 @@ class SharedRequests:
             )
             if cursor.rowcount != 1:
                 raise ValueError("Pending work not found")
+            db.execute("INSERT INTO work_approvals(work_id, actor) VALUES (?, ?)", (work_id, actor))
 
     def delete(self, reader: str, request_id: str):
         with self._connect() as db:

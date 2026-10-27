@@ -18,7 +18,7 @@ class SharedRequestsTest(unittest.TestCase):
             self.assertEqual([item["id"] for item in store.list_reader("alice")], [first["id"]])
             self.assertEqual([item["id"] for item in store.list_reader("bob")], [second["id"]])
             self.assertEqual(store.submit("alice", "echoes of tomorrow", "1", "")["id"], first["id"])
-            store.approve(first["work_id"])
+            store.approve(first["work_id"], "administrator")
             self.assertEqual(store.list_reader("bob")[0]["status"], "approved")
             store.delete("alice", first["id"])
             self.assertEqual(store.list_reader("alice"), [])
@@ -26,6 +26,15 @@ class SharedRequestsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 store.delete("alice", second["id"])
             self.assertEqual(SharedRequests(Path(directory) / "shared.sqlite3").list_reader("bob")[0]["id"], second["id"])
+
+    def test_admin_lists_shared_work_and_approvals_are_audited(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SharedRequests(Path(directory) / "shared.sqlite3")
+            work = store.submit("alice", "Manga", "1", "")
+            store.submit("bob", "Manga", "1", "")
+            self.assertEqual(len(store.list_work()), 1)
+            store.approve(work["work_id"], "administrator")
+            self.assertEqual(store.list_work()[0]["approved_by"], "administrator")
 
 
 if __name__ == "__main__":

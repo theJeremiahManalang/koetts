@@ -26,3 +26,7 @@ and Ruff successfully. The spec review confirmed all missing S4 integrations abo
 cache override the sandbox could not write the default uv cache. `git diff --check`
 passed. Production HTTP and full `npm run check` have not been run for this partial
 work. No S4 acceptance criterion is claimed complete.
+
+Follow-up: added transactional approval attribution and an admin work-list service
+method. Focused shared-request tests (two tests) and Ruff pass. These methods are
+still not exposed to users; the API and remaining S4 work above remain outstanding.
