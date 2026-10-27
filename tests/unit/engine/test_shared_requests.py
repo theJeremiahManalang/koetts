@@ -16,6 +16,7 @@ class SharedRequestsTest(unittest.TestCase):
             self.assertEqual(first["work_id"], second["work_id"])
             self.assertNotEqual(first["id"], second["id"])
             self.assertEqual([item["id"] for item in store.list_reader("alice")], [first["id"]])
+            self.assertEqual(store.list_reader("alice")[0]["manga_id"], "738c39fe73bd514480841509f501a0dd")
             self.assertEqual([item["id"] for item in store.list_reader("bob")], [second["id"]])
             self.assertEqual(store.submit("alice", "echoes of tomorrow", "1", "")["id"], first["id"])
             store.approve(first["work_id"], "administrator")

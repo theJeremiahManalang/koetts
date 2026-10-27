@@ -56,7 +56,7 @@ test('reader sees persisted requests and can remove only their own entry', async
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push([url, options]);
-    return { ok: true, json: async () => options.method === 'DELETE' ? { deleted: true } : { requests: [{ id: 'a'.repeat(32), work_id: 'b'.repeat(32), title: 'Shared Manga', chapter: 3, notes: '', status: 'published', created_at: '2026-10-20 00:00:00' }] } };
+    return { ok: true, json: async () => options.method === 'DELETE' ? { deleted: true } : { requests: [{ id: 'a'.repeat(32), work_id: 'b'.repeat(32), manga_id: 'c'.repeat(32), title: 'Shared Manga', chapter: 3, notes: '', status: 'published', created_at: '2026-10-20 00:00:00' }] } };
   };
   const mocks = {
     'next/link': props => React.createElement('a', props),
