@@ -165,8 +165,10 @@ Export never synthesizes missing audio. It writes:
 
 Export follows scene order, not argument order. Fixed export filenames are replaced;
 save a bundle outside the workspace before replacing a deliverable you need to keep.
-MP3 conversion failure may leave valid WAV/JSON output. Export publication is not a
-multi-file transaction. The bundle contains applied state/assets, not unapplied drafts.
+MP3 conversion failure may leave valid WAV/JSON output. Export itself is not a
+multi-file transaction. A separate admin review and atomic publication step snapshots
+the exact export and preserves the previous published audio on replacement failure.
+The bundle contains applied state/assets, not unapplied drafts.
 
 ## Recovery and advanced edits
 
