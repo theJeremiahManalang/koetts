@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const denied = await requireAdmin(request); if (denied) return denied;
   const unavailable = localSharedOnly(); if (unavailable) return unavailable;
-  try { return Response.json({ work: await sharedCall({ action: "work" }) }); }
+  try { return Response.json({ work: await sharedCall({ action: "work" }) }, { headers: { "Cache-Control": "private, no-store" } }); }
   catch { return Response.json({ error: "Shared work is unavailable." }, { status: 503 }); }
 }
 
@@ -38,6 +38,6 @@ export async function POST(request: Request) {
         payload = { action: "publish", ...base, revision: body.revision, review_id: body.review_id, expected_publication: body.expected_publication }; break;
       default: return Response.json({ error: "Invalid action." }, { status: 400 });
     }
-    return Response.json({ result: await sharedCall(payload) });
+    return Response.json({ result: await sharedCall(payload) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return Response.json({ error: "Shared work could not be updated. Reload and try again." }, { status: 409 }); }
 }

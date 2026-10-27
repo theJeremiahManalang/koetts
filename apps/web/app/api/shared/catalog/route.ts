@@ -6,6 +6,6 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const principal = await requireUser(request); if (principal instanceof Response) return principal;
   const unavailable = localSharedOnly(); if (unavailable) return unavailable;
-  try { return Response.json({ chapters: await sharedCall({ action: "catalog" }) }); }
+  try { return Response.json({ chapters: await sharedCall({ action: "catalog" }) }, { headers: { "Cache-Control": "private, no-store" } }); }
   catch { return Response.json({ error: "Catalog is unavailable." }, { status: 503 }); }
 }

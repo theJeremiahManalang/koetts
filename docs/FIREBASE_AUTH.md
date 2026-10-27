@@ -77,8 +77,9 @@ and clears it on sign-out. Session sync must succeed before admin navigation app
 Behind App Hosting, `MANGA_APP_ORIGIN` pins the exact public HTTPS origin for
 session CSRF checks. This avoids comparing the browser origin with Next's internal
 proxy URL. Forwarded-host headers never define trusted origins. Local execution
-without this setting compares against the request URL; invalid configured origins
-fail closed.
+without this setting accepts the exact loopback Host and scheme when Next normalizes
+the internal hostname, otherwise it compares against the request URL. Invalid
+configured origins fail closed.
 
 Same-user token renewal preserves mounted studio and request drafts. While session
 verification is pending or fails, protected controls are inert and studio requests

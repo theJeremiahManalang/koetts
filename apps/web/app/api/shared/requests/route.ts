@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const principal = await requireUser(request); if (principal instanceof Response) return principal;
   const unavailable = localSharedOnly(); if (unavailable) return unavailable;
-  try { return Response.json({ requests: await sharedCall({ action: "requests", reader: principalKey(principal) }) }); }
+  try { return Response.json({ requests: await sharedCall({ action: "requests", reader: principalKey(principal) }) }, { headers: { "Cache-Control": "private, no-store" } }); }
   catch { return Response.json({ error: "Requests are unavailable." }, { status: 503 }); }
 }
 
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
         typeof body.chapter !== "string" || !/^[0-9]{1,4}$/.test(body.chapter) || Number(body.chapter) < 1 ||
         typeof body.notes !== "string" || body.notes.length > 4000) return Response.json({ error: "Invalid request." }, { status: 400 });
     const result = await sharedCall({ action: "submit", reader: principalKey(principal), title: body.title, chapter: body.chapter, notes: body.notes });
-    return Response.json({ request: result });
+    return Response.json({ request: result }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return Response.json({ error: "Request could not be saved." }, { status: 400 }); }
 }
 
