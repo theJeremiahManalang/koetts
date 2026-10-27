@@ -405,6 +405,30 @@ class WebWorkflowTests(unittest.TestCase):
             self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "failed")
         self.assertEqual(self.current()["workflow_status"]["exported_scenes"], [])
 
+    def test_audio_review_captures_exact_export_from_linked_project(self):
+        from manga_tts.shared_requests import SharedRequests
+
+        store = SharedRequests(self.root / "shared.sqlite3")
+        work = store.submit("reader", "Manga", "1", "")
+        store.approve(work["work_id"], "admin")
+        web_workflow.link_shared_project(store, work["work_id"], self.project_id, "admin")
+        with self.assertRaises(ValueError):
+            web_workflow.review_shared_export(store, work["work_id"], "admin", self.current()["revision"])
+        real_router = PipelineRouter
+        patch.object(web_workflow, "PipelineRouter", lambda config: real_router(
+            config, client_factory=lambda: object(),
+            renderer_factory=lambda c, m: lambda request: fixtures.wav_bytes(),
+        )).start()
+        self.assertEqual(self.job("render", {"scene_ids": ["scene_001"], "regenerate": []})["status"], "complete")
+        self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "complete")
+        current = self.current()
+        review = web_workflow.review_shared_export(store, work["work_id"], "admin", current["revision"])
+        self.assertEqual(review["revision"], current["revision"])
+        self.assertEqual(review["export_id"], current["project"]["web_export_id"])
+        self.assertEqual(set(review["checksums"]), {
+            "chapter_narration.wav", "timeline.json", "cast.json", "approved_script.json", "render_manifest.json",
+        })
+
     def test_stale_edits_fail_without_changing_project(self):
         before = (self.workspace / "project.json").read_bytes()
         state = self.job("settings", {}, revision="outdated")
