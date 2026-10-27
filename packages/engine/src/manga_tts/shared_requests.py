@@ -92,6 +92,14 @@ class SharedRequests:
                 "ORDER BY w.title_key, w.chapter"
             )]
 
+    def work_requests(self, work_id: str):
+        """List individual requests for an authorized administrator."""
+        with self._connect() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT id, reader, notes, created_at FROM reader_requests "
+                "WHERE work_id = ? ORDER BY created_at, id", (work_id,),
+            )]
+
     def approve(self, work_id: str, actor: str):
         if not actor:
             raise ValueError("Approval actor required")
