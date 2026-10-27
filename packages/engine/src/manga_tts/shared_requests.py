@@ -5,7 +5,11 @@ SQLite coordinates one host. Cloud persistence is a separate adapter.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import sqlite3
+import tempfile
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -41,6 +45,12 @@ class SharedRequests:
                     id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL UNIQUE,
                     actor TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS audio_reviews (
+                    id TEXT PRIMARY KEY, work_id TEXT NOT NULL REFERENCES chapter_work(id),
+                    link_id TEXT NOT NULL, project_id TEXT NOT NULL, actor TEXT NOT NULL,
+                    revision TEXT NOT NULL, export_id TEXT NOT NULL, settings_hash TEXT NOT NULL,
+                    checksums TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             """)
 
@@ -135,6 +145,67 @@ class SharedRequests:
                 (work_id, uuid.uuid4().hex, project_id, actor),
             )
             return dict(db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone())
+
+    def _store_artifact(self, source: Path):
+        """Copy immutable content before recording any review or publication pointer."""
+        directory = self.database.parent / "shared-artifacts"
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            digest = hashlib.sha256()
+            with source.open("rb") as incoming, tempfile.NamedTemporaryFile(dir=directory, delete=False) as output:
+                temporary = Path(output.name)
+                while chunk := incoming.read(1024 * 1024):
+                    digest.update(chunk)
+                    output.write(chunk)
+                output.flush()
+                os.fsync(output.fileno())
+            checksum = digest.hexdigest()
+            target = directory / checksum
+            try:
+                os.link(temporary, target)
+            except FileExistsError:
+                if self._checksum(target) != checksum:
+                    raise ValueError("Stored artifact checksum mismatch") from None
+            if hasattr(os, "O_DIRECTORY"):
+                directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            return checksum
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _checksum(path: Path):
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def record_audio_review(self, work_id, link, actor, revision, export_id, settings_hash, artifacts):
+        """Persist an explicit decision using a trusted, locked studio snapshot."""
+        if not actor or not revision or not export_id or not settings_hash or not artifacts:
+            raise ValueError("Incomplete audio review")
+        checksums = {name: self._store_artifact(path) for name, path in artifacts.items()}
+        review_id = uuid.uuid4().hex
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
+            if not current or current["id"] != link["id"] or current["project_id"] != link["project_id"]:
+                raise ValueError("Project link changed during review")
+            db.execute(
+                "INSERT INTO audio_reviews(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (review_id, work_id, link["id"], link["project_id"], actor, revision, export_id,
+                 settings_hash, json.dumps(checksums, sort_keys=True)),
+            )
+        return {"id": review_id, "work_id": work_id, "link_id": link["id"], "project_id": link["project_id"],
+                "actor": actor, "revision": revision, "export_id": export_id, "settings_hash": settings_hash,
+                "checksums": checksums}
 
     def approve(self, work_id: str, actor: str):
         if not actor:
