@@ -151,3 +151,82 @@ test('manga details links published chapters to playback', async t => {
   const listen = document.querySelector(`a[href="/read/${mangaId}/${workId}"]`);
   assert.ok(listen); assert.match(listen.textContent, /Listen/);
 });
+
+test('audio player refreshes its URL and restores the listening position', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/read' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch', 'setTimeout', 'clearTimeout'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  let calls = 0, played = 0, scheduled;
+  const realSetTimeout = globalThis.setTimeout, realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay === 270000) { scheduled = callback; return 2147483647; }
+    return realSetTimeout(callback, delay, ...args);
+  };
+  globalThis.clearTimeout = timer => { if (timer !== 2147483647) realClearTimeout(timer); };
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ url: `/api/shared/audio?token=${calls}`, expires_in: 300 }) }; };
+  const Player = load('../features/library/published-audio-player.tsx', { '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) } }).PublishedAudioPlayer;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  await act(async () => root.render(React.createElement(Player, { workId: 'a'.repeat(32) })));
+  const audio = document.querySelector('audio');
+  assert.ok(audio); assert.match(audio.getAttribute('src'), /token=1/);
+  audio.currentTime = 42;
+  Object.defineProperty(audio, 'paused', { configurable: true, get: () => false });
+  audio.play = async () => { played++; };
+  assert.ok(scheduled, 'refresh should be scheduled before expiry');
+  await act(async () => scheduled());
+  assert.equal(calls, 2); assert.match(audio.getAttribute('src'), /token=2/);
+  audio.currentTime = 0;
+  await act(async () => audio.dispatchEvent(new dom.window.Event('loadedmetadata')));
+  assert.equal(audio.currentTime, 42); assert.equal(played, 1);
+  await act(async () => audio.dispatchEvent(new dom.window.Event('error')));
+  assert.equal(calls, 3);
+});
+
+test('reader plays a published chapter without exposing studio images', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/read' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const mangaId = 'b'.repeat(32), workId = 'a'.repeat(32);
+  globalThis.fetch = async url => url === '/api/shared/catalog'
+    ? { ok: true, json: async () => ({ chapters: [{ work_id: workId, manga_id: mangaId, title: 'Published Manga', chapter: 3, publication_id: 'c'.repeat(32) }] }) }
+    : { ok: true, json: async () => ({ url: '/api/shared/audio?token=signed', expires_in: 300 }) };
+  const mocks = {
+    'next/link': props => React.createElement('a', props),
+    'next/navigation': { useParams: () => ({ mangaId, chapterId: workId }) },
+    '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
+    '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
+  };
+  const Page = load('../features/library/reader-page.tsx', mocks).default;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  await act(async () => root.render(React.createElement(Page)));
+  assert.match(document.body.textContent, /Chapter 3/);
+  assert.equal(document.querySelector('audio').getAttribute('src'), '/api/shared/audio?token=signed');
+  assert.match(document.body.textContent, /pages are not available/i);
+  assert.equal(document.querySelector('img'), null);
+});
+
+test('audio refresh waits for session verification and resumes afterward', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/read' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  let ready = true, calls = 0;
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ url: `/api/shared/audio?token=${calls}`, expires_in: 300 }) }; };
+  const Player = load('../features/library/published-audio-player.tsx', { '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: ready }) } }).PublishedAudioPlayer;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  const render = () => root.render(React.createElement(Player, { workId: 'a'.repeat(32) }));
+  await act(async () => render());
+  assert.equal(calls, 1);
+  ready = false;
+  await act(async () => render());
+  await act(async () => document.querySelector('audio').dispatchEvent(new dom.window.Event('error')));
+  assert.equal(calls, 1);
+  ready = true;
+  await act(async () => render());
+  assert.equal(calls, 2);
+});
