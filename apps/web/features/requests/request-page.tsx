@@ -18,21 +18,26 @@ function RequestForm() {
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const valid = !!selectedManga.trim() && /^[0-9]{1,4}$/.test(selectedChapter);
+  const [pending, setPending] = useState(false);
+  const valid = !!selectedManga.trim() && selectedManga.length <= 200 && /^[0-9]{1,4}$/.test(selectedChapter) && Number(selectedChapter) > 0 && notes.length <= 4000;
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!valid) return;
+    if (!valid || pending) return;
     setError("");
     setMessage("");
+    setPending(true);
     try {
-      const existing: unknown = JSON.parse(localStorage.getItem("mangaRequests") || "[]");
-      if (!Array.isArray(existing)) throw new Error();
-      const newRequest = { id: crypto.randomUUID(), mangaTitle: selectedManga.trim(), chapter: selectedChapter, notes, status: "PENDING", createdAt: new Date().toISOString() };
-      localStorage.setItem("mangaRequests", JSON.stringify([...existing, newRequest]));
-      setMessage(`Your request for ${selectedManga.trim()}, chapter ${selectedChapter}, has been saved.`);
-      setNotes("");
-    } catch { setError("Your request could not be saved. Check that browser storage is available and try again."); }
+      const response = await fetch("/api/shared/requests", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: selectedManga.trim(), chapter: selectedChapter, notes }),
+      });
+      if (!response.ok) throw new Error();
+      const data = await response.json() as { request: { duplicate: boolean } };
+      if (data.request.duplicate) setMessage(`You already requested ${selectedManga.trim()}, chapter ${selectedChapter}. Your original notes are unchanged.`);
+      else { setMessage(`Your request for ${selectedManga.trim()}, chapter ${selectedChapter}, has been saved.`); setNotes(""); }
+    } catch { setError("Your request could not be saved. Your draft is retained; please try again."); }
+    finally { setPending(false); }
   }
 
   return <div className="library-shell"><LibraryHeader />
@@ -54,7 +59,7 @@ function RequestForm() {
             <label htmlFor="request-notes"><span>Additional notes <span className="request-required">Optional</span></span>
               <textarea id="request-notes" value={notes} onChange={event => setNotes(event.target.value)} placeholder="Anything we should know about this chapter or your narration preferences?" rows={4} />
             </label>
-            <div className="request-submit-area"><p>One chapter per request. You can track it in My requests.</p><button type="submit" className="submit-request" disabled={!valid}>Submit request <span aria-hidden="true">↗</span></button></div>
+            <div className="request-submit-area"><p>One chapter per request. You can track it in My requests.</p><button type="submit" className="submit-request" disabled={!valid || pending}>{pending ? "Saving…" : "Submit request"} <span aria-hidden="true">↗</span></button></div>
             {error && <p className="notice error" role="alert">{error}</p>}
             {message && <div className="request-saved" role="status"><span aria-hidden="true">✓</span><div><strong>Request saved</strong><p>{message}</p><Link href="/requests">View my requests →</Link></div></div>}
           </form>
@@ -65,7 +70,7 @@ function RequestForm() {
           <div className="request-guide-footer"><p>Looking for your next story?</p><Link href="/browse">Explore the collection <span aria-hidden="true">↗</span></Link></div>
         </aside>
       </div>
-      <p className="request-storage-note">Requests are currently saved in this browser.</p>
+      <p className="request-storage-note">Requests are shared with the studio and visible to your account.</p>
     </main>
   </div>;
 }
