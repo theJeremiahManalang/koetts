@@ -52,6 +52,16 @@ class SharedRequests:
                     revision TEXT NOT NULL, export_id TEXT NOT NULL, settings_hash TEXT NOT NULL,
                     checksums TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS export_candidates (
+                    id TEXT PRIMARY KEY, work_id TEXT NOT NULL REFERENCES chapter_work(id),
+                    link_id TEXT NOT NULL, project_id TEXT NOT NULL, actor TEXT NOT NULL,
+                    revision TEXT NOT NULL, export_id TEXT NOT NULL, settings_hash TEXT NOT NULL,
+                    checksums TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS review_candidates (
+                    review_id TEXT PRIMARY KEY REFERENCES audio_reviews(id),
+                    candidate_id TEXT NOT NULL REFERENCES export_candidates(id)
+                );
                 CREATE TABLE IF NOT EXISTS publications (
                     work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
                     id TEXT NOT NULL UNIQUE, review_id TEXT NOT NULL REFERENCES audio_reviews(id),
@@ -191,26 +201,66 @@ class SharedRequests:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def record_audio_review(self, work_id, link, actor, revision, export_id, settings_hash, artifacts):
-        """Persist an explicit decision using a trusted, locked studio snapshot."""
+    def prepare_audio_review(self, work_id, link, actor, revision, export_id, settings_hash, artifacts):
+        """Capture immutable artifacts for an administrator to inspect."""
         if not actor or not revision or not export_id or not settings_hash or not artifacts:
             raise ValueError("Incomplete audio review")
         checksums = {name: self._store_artifact(path) for name, path in artifacts.items()}
-        review_id = uuid.uuid4().hex
+        candidate_id = uuid.uuid4().hex
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
             if not current or current["id"] != link["id"] or current["project_id"] != link["project_id"]:
                 raise ValueError("Project link changed during review")
             db.execute(
+                "INSERT INTO export_candidates(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (candidate_id, work_id, link["id"], link["project_id"], actor, revision, export_id,
+                 settings_hash, json.dumps(checksums, sort_keys=True)),
+            )
+        return {"id": candidate_id, "work_id": work_id, "link_id": link["id"], "project_id": link["project_id"],
+                "actor": actor, "revision": revision, "export_id": export_id, "settings_hash": settings_hash,
+                "checksums": checksums}
+
+    def candidate_artifact(self, candidate_id, name):
+        with self._connect() as db:
+            candidate = db.execute("SELECT checksums FROM export_candidates WHERE id = ?", (candidate_id,)).fetchone()
+        if not candidate or name not in json.loads(candidate["checksums"]):
+            raise ValueError("Candidate artifact not found")
+        checksum = json.loads(candidate["checksums"])[name]
+        path = self.database.parent / "shared-artifacts" / checksum
+        if not path.is_file() or self._checksum(path) != checksum:
+            raise ValueError("Candidate artifact unavailable or changed")
+        return path
+
+    def approve_audio_review(self, work_id, candidate_id, link, actor, revision, export_id, settings_hash, checksums):
+        """Record an explicit decision only for a still-current prepared snapshot."""
+        if not actor:
+            raise ValueError("Audio review actor required")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
+            candidate = db.execute("SELECT * FROM export_candidates WHERE id = ? AND work_id = ?", (candidate_id, work_id)).fetchone()
+            if (not current or not candidate or current["id"] != link["id"]
+                    or candidate["link_id"] != current["id"] or candidate["project_id"] != current["project_id"]
+                    or (candidate["revision"], candidate["export_id"], candidate["settings_hash"]) != (revision, export_id, settings_hash)
+                    or json.loads(candidate["checksums"]) != checksums):
+                raise ValueError("Export no longer matches prepared audio")
+            for checksum in checksums.values():
+                path = self.database.parent / "shared-artifacts" / checksum
+                if not path.is_file() or self._checksum(path) != checksum:
+                    raise ValueError("Candidate artifact unavailable or changed")
+            review_id = uuid.uuid4().hex
+            db.execute(
                 "INSERT INTO audio_reviews(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (review_id, work_id, link["id"], link["project_id"], actor, revision, export_id,
                  settings_hash, json.dumps(checksums, sort_keys=True)),
             )
-        return {"id": review_id, "work_id": work_id, "link_id": link["id"], "project_id": link["project_id"],
-                "actor": actor, "revision": revision, "export_id": export_id, "settings_hash": settings_hash,
-                "checksums": checksums}
+            db.execute("INSERT INTO review_candidates(review_id, candidate_id) VALUES (?, ?)", (review_id, candidate_id))
+        return {"id": review_id, "candidate_id": candidate_id, "work_id": work_id, "link_id": link["id"],
+                "project_id": link["project_id"], "actor": actor, "revision": revision, "export_id": export_id,
+                "settings_hash": settings_hash, "checksums": checksums}
 
     def publication(self, work_id):
         with self._connect() as db:

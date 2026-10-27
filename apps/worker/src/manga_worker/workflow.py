@@ -537,8 +537,8 @@ def _export_snapshot(workspace, expected_revision):
     return revision, export_id, digest(data["settings"]), artifacts
 
 
-def review_shared_export(store, work_id, actor, expected_revision):
-    """Record a human decision against a current, immutable export snapshot."""
+def prepare_shared_export(store, work_id, actor, expected_revision):
+    """Prepare a current immutable export snapshot for an administrator to inspect."""
     link = store.get_link(work_id)
     if not link:
         raise ValueError("Work has no linked studio project")
@@ -548,7 +548,25 @@ def review_shared_export(store, work_id, actor, expected_revision):
         raise ValueError("Studio project not found")
     with workspace_lock(workspace):
         revision, export_id, settings_hash, artifacts = _export_snapshot(workspace, expected_revision)
-        return store.record_audio_review(work_id, link, actor, revision, export_id, settings_hash, artifacts)
+        return store.prepare_audio_review(work_id, link, actor, revision, export_id, settings_hash, artifacts)
+
+
+def approve_shared_export(store, work_id, candidate_id, actor, expected_revision):
+    """Record a human decision against the prepared, still-current export."""
+    link = store.get_link(work_id)
+    if not link:
+        raise ValueError("Work has no linked studio project")
+    project_id = identifier(link["project_id"])
+    workspace = (ROOT / "projects").resolve() / project_id
+    if workspace.is_symlink() or not (workspace / "project.json").is_file():
+        raise ValueError("Studio project not found")
+    with workspace_lock(workspace):
+        revision, export_id, settings_hash, artifacts = _export_snapshot(workspace, expected_revision)
+        checksums = {}
+        for name, path in artifacts.items():
+            with path.open("rb") as source:
+                checksums[name] = hashlib.file_digest(source, "sha256").hexdigest()
+        return store.approve_audio_review(work_id, candidate_id, link, actor, revision, export_id, settings_hash, checksums)
 
 
 def publish_shared_export(store, work_id, review_id, actor, expected_revision, expected_publication):
