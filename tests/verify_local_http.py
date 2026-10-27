@@ -141,6 +141,9 @@ export function getAdminAuth() {
                                               ("/api/asset", "GET"), ("/api/extract", "POST")]:
                             with fetch(base, route, method) as response:
                                 check(response.status == 503, "Processing guard failed: " + route)
+                        for route in ("/api/shared/requests", "/api/shared/catalog", "/api/shared/playback"):
+                            with fetch(base, route, identity="reader") as response:
+                                check(response.status == 503, "Shared processing guard failed: " + route)
                     else:
                         for route in ("/", "/browse", "/request", "/manga/echoes-of-tomorrow",
                                       "/read/echoes-of-tomorrow/chapter-1"):

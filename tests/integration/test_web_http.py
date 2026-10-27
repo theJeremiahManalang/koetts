@@ -112,6 +112,9 @@ class WebHTTPTests(unittest.TestCase):
         reader_headers = {"Authorization": "Bearer fixture-reader", "Content-Type": "application/json", "Origin": base}
         other_headers = {**reader_headers, "Authorization": "Bearer fixture-reader-two"}
         shared_body = {"title": "HTTP Manga", "chapter": "01", "notes": "first reader note", "reader": "forged"}
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request("/api/shared/requests", json.dumps(shared_body).encode(), {**reader_headers, "Origin": "https://attacker.invalid"})
+        self.assertEqual(denied.exception.code, 403)
         with request("/api/shared/requests", json.dumps(shared_body).encode(), reader_headers) as response:
             first_request = json.load(response)["request"]
         shared_body.update(title="  http  manga ", chapter="1", notes="second reader note")
@@ -157,6 +160,12 @@ class WebHTTPTests(unittest.TestCase):
             self.assertEqual(json.load(response)["requests"][0]["status"], "published")
         with request("/api/shared/playback?" + urlencode({"work": first_request["work_id"]}), headers=reader_headers) as response:
             audio_url = json.load(response)["url"]
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request(audio_url, headers={"Authorization": ""})
+        self.assertEqual(denied.exception.code, 401)
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request(audio_url + "x", headers=reader_headers)
+        self.assertEqual(denied.exception.code, 403)
         with request(audio_url, headers={"Cookie": "koetts-session=fixture-reader", "Range": "bytes=0-43", "Authorization": ""}) as response:
             self.assertEqual(response.status, 206)
             self.assertEqual(response.read()[:4], b"RIFF")
