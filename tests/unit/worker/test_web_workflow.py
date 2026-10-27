@@ -459,6 +459,8 @@ class WebWorkflowTests(unittest.TestCase):
         original = store.published_artifact(work["work_id"], "chapter_narration.wav").read_bytes()
         self.assertEqual(original, (self.workspace / "exports/chapter_narration.wav").read_bytes())
         self.assertEqual(store.list_reader("reader")[0]["status"], "published")
+        self.assertEqual(store.catalog(), [{"work_id": work["work_id"], "title": "Manga", "chapter": 1,
+                                            "publication_id": published["id"]}])
         candidate = web_workflow.prepare_shared_export(store, work["work_id"], "admin", revision)
         competing = web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", revision)
         with self.assertRaises(ValueError):
