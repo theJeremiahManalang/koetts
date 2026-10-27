@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -520,8 +521,9 @@ def _export_snapshot(workspace, expected_revision):
     return revision, export_id, digest(data["settings"]), artifacts
 
 
-def prepare_shared_export(store, work_id, actor, expected_revision):
-    """Prepare a current immutable export snapshot for an administrator to inspect."""
+@contextmanager
+def _locked_shared_export(store, work_id, expected_revision):
+    """Hold the project lock through inspection and the caller's store mutation."""
     link = store.get_link(work_id)
     if not link:
         raise ValueError("Work has no linked studio project")
@@ -530,46 +532,39 @@ def prepare_shared_export(store, work_id, actor, expected_revision):
     if workspace.is_symlink() or not (workspace / "project.json").is_file():
         raise ValueError("Studio project not found")
     with workspace_lock(workspace):
-        revision, export_id, settings_hash, artifacts = _export_snapshot(workspace, expected_revision)
+        yield link, _export_snapshot(workspace, expected_revision)
+
+
+def _export_checksums(artifacts):
+    checksums = {}
+    for name, path in artifacts.items():
+        with path.open("rb") as source:
+            checksums[name] = hashlib.file_digest(source, "sha256").hexdigest()
+    return checksums
+
+
+def prepare_shared_export(store, work_id, actor, expected_revision):
+    """Prepare a current immutable export snapshot for an administrator to inspect."""
+    with _locked_shared_export(store, work_id, expected_revision) as (link, snapshot):
+        revision, export_id, settings_hash, artifacts = snapshot
         return store.prepare_audio_review(work_id, link, actor, revision, export_id, settings_hash, artifacts)
 
 
 def approve_shared_export(store, work_id, candidate_id, actor, expected_revision):
     """Record a human decision against the prepared, still-current export."""
-    link = store.get_link(work_id)
-    if not link:
-        raise ValueError("Work has no linked studio project")
-    project_id = identifier(link["project_id"])
-    workspace = (ROOT / "projects").resolve() / project_id
-    if workspace.is_symlink() or not (workspace / "project.json").is_file():
-        raise ValueError("Studio project not found")
-    with workspace_lock(workspace):
-        revision, export_id, settings_hash, artifacts = _export_snapshot(workspace, expected_revision)
-        checksums = {}
-        for name, path in artifacts.items():
-            with path.open("rb") as source:
-                checksums[name] = hashlib.file_digest(source, "sha256").hexdigest()
-        return store.approve_audio_review(work_id, candidate_id, link, actor, revision, export_id, settings_hash, checksums)
+    with _locked_shared_export(store, work_id, expected_revision) as (link, snapshot):
+        revision, export_id, settings_hash, artifacts = snapshot
+        return store.approve_audio_review(work_id, candidate_id, link, actor, revision, export_id, settings_hash,
+                                          _export_checksums(artifacts))
 
 
 def publish_shared_export(store, work_id, review_id, actor, expected_revision, expected_publication):
     """Publish only a reviewed export that still matches the locked studio project."""
-    link = store.get_link(work_id)
-    if not link:
-        raise ValueError("Work has no linked studio project")
-    project_id = identifier(link["project_id"])
-    workspace = (ROOT / "projects").resolve() / project_id
-    if workspace.is_symlink() or not (workspace / "project.json").is_file():
-        raise ValueError("Studio project not found")
-    with workspace_lock(workspace):
-        revision, export_id, settings_hash, artifacts = _export_snapshot(workspace, expected_revision)
-        checksums = {}
-        for name, path in artifacts.items():
-            with path.open("rb") as source:
-                checksums[name] = hashlib.file_digest(source, "sha256").hexdigest()
+    with _locked_shared_export(store, work_id, expected_revision) as (link, snapshot):
+        revision, export_id, settings_hash, artifacts = snapshot
         return store.publish_review(
             work_id, review_id, actor, link, revision, export_id, settings_hash,
-            checksums, expected_publication,
+            _export_checksums(artifacts), expected_publication,
         )
 
 
