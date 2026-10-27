@@ -318,9 +318,10 @@ class SharedRequests:
             db.execute("UPDATE chapter_work SET status = 'published' WHERE id = ?", (work_id,))
             return {"id": publication_id, "work_id": work_id, "review_id": review_id}
 
-    def published_artifact(self, work_id, name):
+    def published_artifact(self, work_id, name, expected_publication=None):
         publication = self.publication(work_id)
-        if not publication or name not in publication["checksums"]:
+        if (not publication or name not in publication["checksums"]
+                or (expected_publication is not None and publication["id"] != expected_publication)):
             raise ValueError("Published artifact not found")
         checksum = publication["checksums"][name]
         path = self.database.parent / "shared-artifacts" / checksum
