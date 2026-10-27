@@ -145,8 +145,8 @@ export function getAdminAuth() {
                             with fetch(base, route, identity="reader") as response:
                                 check(response.status == 503, "Shared processing guard failed: " + route)
                     else:
-                        for route in ("/", "/browse", "/request", "/manga/echoes-of-tomorrow",
-                                      "/read/echoes-of-tomorrow/chapter-1"):
+                        for route in ("/", "/browse", "/request", "/requests", "/manga/" + "a" * 32,
+                                      "/read/" + "a" * 32 + "/" + "b" * 32):
                             with fetch(base, route) as response:
                                 check(response.status == 200, "Route failed: " + route)
                                 check(b"<html" in response.read(), "Missing HTML: " + route)
