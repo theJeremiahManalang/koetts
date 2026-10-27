@@ -1,5 +1,6 @@
 """Web worker integration without network, model weights, or API credentials."""
 import hashlib
+import io
 import json
 import shutil
 import sqlite3
@@ -7,6 +8,7 @@ import threading
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from tests.unit.engine import test_audio_pipeline as fixtures
@@ -404,8 +406,7 @@ class WebWorkflowTests(unittest.TestCase):
         first = self.current()["project"]["web_export_id"]
         self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "complete")
         self.assertNotEqual(self.current()["project"]["web_export_id"], first)
-        with patch.object(real_router, "export_audio", side_effect=ValueError("synthetic failure")):
-            self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "failed")
+        self.assertEqual(self.job("export", {"scene_ids": ["missing_scene"]})["status"], "failed")
         self.assertEqual(self.current()["workflow_status"]["exported_scenes"], [])
 
     def test_audio_review_captures_exact_export_from_linked_project(self):
@@ -557,6 +558,34 @@ class WebWorkflowTests(unittest.TestCase):
         winners = [result for result in results if result]
         self.assertEqual(len(winners), 1)
         self.assertEqual(store.publication(work["work_id"])["id"], winners[0]["id"])
+
+    def test_cli_reexport_invalidates_old_audio_review_even_with_identical_audio(self):
+        from manga_tts.cli import main
+        from manga_tts.shared_requests import SharedRequests
+
+        store = SharedRequests(self.root / "shared.sqlite3")
+        work = store.submit("reader", "Manga", "1", "")
+        store.approve(work["work_id"], "admin")
+        web_workflow.link_shared_project(store, work["work_id"], self.project_id, "admin")
+        real_router = PipelineRouter
+        patch.object(web_workflow, "PipelineRouter", lambda config: real_router(
+            config, client_factory=lambda: object(),
+            renderer_factory=lambda c, m: lambda request: fixtures.wav_bytes(),
+        )).start()
+        self.assertEqual(self.job("render", {"scene_ids": ["scene_001"], "regenerate": []})["status"], "complete")
+        self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "complete")
+        revision = self.current()["revision"]
+        candidate = web_workflow.prepare_shared_export(store, work["work_id"], "admin", revision)
+        review = web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", revision)
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["export", "--workspace", str(self.workspace), "--scenes", "scene_001"]), 0)
+        new_revision = self.current()["revision"]
+        self.assertNotEqual(new_revision, revision)
+        with self.assertRaises(ValueError):
+            web_workflow.publish_shared_export(store, work["work_id"], review["id"], "admin", new_revision, None)
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(main(["export", "--workspace", str(self.workspace), "--scenes", "missing_scene"]), 1)
+        self.assertEqual(self.current()["workflow_status"]["exported_scenes"], [])
 
     def test_stale_edits_fail_without_changing_project(self):
         before = (self.workspace / "project.json").read_bytes()

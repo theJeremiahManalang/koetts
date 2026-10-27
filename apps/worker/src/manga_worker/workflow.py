@@ -10,7 +10,6 @@ import subprocess
 import sys
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,7 +33,7 @@ from manga_tts.operations import (
 )
 from manga_tts.resolution import page_image
 from manga_tts.script import cast_signature, scene_signature
-from manga_tts.storage import asset, digest, read_json, write_json
+from manga_tts.storage import asset, digest, export_signature, read_json, write_json
 
 from .paths import data_root
 
@@ -182,11 +181,6 @@ def _render_segments(context: WorkflowExecution) -> dict[str, Any]:
 
 
 def _export_audio(context: WorkflowExecution) -> None:
-    # Fixed filenames are overwritten in place. Invalidate the old export before
-    # writing, so an interrupted replacement cannot masquerade as a valid export.
-    context.router.update_metadata({
-        "web_export_signature": None, "web_export_scenes": [], "web_export_id": None,
-    })
     context.router.export_audio(
         schemas.RenderSelection.model_validate(context.command),
         mp3=context.request.get("mp3") is True,
@@ -209,17 +203,6 @@ def _record_proposal_application(context: WorkflowExecution) -> None:
     )
 
 
-def _record_export(context: WorkflowExecution) -> None:
-    data = schemas.dump(context.router.project)
-    context.router.update_metadata(
-        {
-            "web_export_signature": export_signature(data),
-            "web_export_scenes": context.command["scene_ids"],
-            "web_export_id": uuid.uuid4().hex,
-        }
-    )
-
-
 WORKFLOW_ACTIONS = {
     "create": WorkflowAction(_create_project),
     "rename": WorkflowAction(_rename_project),
@@ -237,7 +220,7 @@ WORKFLOW_ACTIONS = {
     "take": WorkflowAction(_typed_command(schemas.TakeSelection, "select_take")),
     "inspect": WorkflowAction(_inspect_segments),
     "render": WorkflowAction(_render_segments),
-    "export": WorkflowAction(_export_audio, _record_export),
+    "export": WorkflowAction(_export_audio),
     "bundle": WorkflowAction(_bundle_project),
 }
 
@@ -592,10 +575,6 @@ def publish_shared_export(store, work_id, review_id, actor, expected_revision, e
 
 def source_signature(data):
     return digest({key: data.get(key) for key in ("sources", "page_order", "panel_order")})
-
-
-def export_signature(data):
-    return digest({key: data[key] for key in ("cast", "appearances", "sources", "scenes", "settings", "selected_takes", "approvals", "cast_approval")})
 
 
 def workflow_status(data, root):
