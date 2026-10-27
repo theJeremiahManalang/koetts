@@ -17,6 +17,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+def _manga_id(title_key: str) -> str:
+    return hashlib.sha256(title_key.encode("utf-8")).hexdigest()[:32]
+
+
 class SharedRequests:
     """Store reader requests and their shared chapter work."""
 
@@ -117,11 +121,17 @@ class SharedRequests:
 
     def list_reader(self, reader: str):
         with self._connect() as db:
-            return [dict(row) for row in db.execute(
-                "SELECT r.id, r.work_id, r.notes, r.created_at, w.title, w.chapter, w.status "
+            rows = db.execute(
+                "SELECT r.id, r.work_id, r.notes, r.created_at, w.title, w.title_key, w.chapter, w.status "
                 "FROM reader_requests r JOIN chapter_work w ON r.work_id = w.id "
                 "WHERE r.reader = ? ORDER BY r.created_at, r.id", (reader,),
-            )]
+            )
+            result = []
+            for row in rows:
+                entry = dict(row)
+                entry["manga_id"] = _manga_id(entry.pop("title_key"))
+                result.append(entry)
+            return result
 
     def list_work(self):
         with self._connect() as db:
@@ -348,7 +358,7 @@ class SharedRequests:
             result = []
             for row in rows:
                 entry = dict(row)
-                entry["manga_id"] = hashlib.sha256(entry.pop("title_key").encode("utf-8")).hexdigest()[:32]
+                entry["manga_id"] = _manga_id(entry.pop("title_key"))
                 result.append(entry)
             return result
 

@@ -7,7 +7,7 @@ import { RequireSignIn } from "../identity/require-sign-in";
 import { useAuth } from "../identity/auth-provider";
 
 type ReaderRequest = {
-  id: string; work_id: string; title: string; chapter: number; notes: string;
+  id: string; work_id: string; manga_id: string; title: string; chapter: number; notes: string;
   status: "pending" | "approved" | "published"; created_at: string;
 };
 
@@ -88,7 +88,7 @@ function RequestsTable() {
               <th scope="row"><strong>{request.title}</strong></th>
               <td>{request.chapter}</td><td><span className="request-status">{request.status}</span></td>
               <td>{Number.isNaN(timestamp) ? "—" : new Date(timestamp).toLocaleDateString()}</td>
-              <td><div className="request-row-actions">{request.status === "published" ? <Link className="button" href={`/manga/${request.work_id}`}>View audiobook <span aria-hidden="true">↗</span></Link> : <span className="request-unavailable">Not published yet</span>}
+              <td><div className="request-row-actions">{request.status === "published" ? <Link className="button" href={`/manga/${request.manga_id}`}>View audiobook <span aria-hidden="true">↗</span></Link> : <span className="request-unavailable">Not published yet</span>}
                 <button type="button" className="button request-delete" aria-label={`Delete request for ${request.title}, chapter ${request.chapter}`} onClick={event => { deleteTrigger.current = event.currentTarget; setError(""); setSelected(request); }}>Delete</button>
               </div></td>
             </tr>;
