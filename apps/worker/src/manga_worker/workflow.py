@@ -494,6 +494,19 @@ def identifier(value):
     return value
 
 
+def link_shared_project(store, work_id, project_id, actor):
+    """Link approved work only to an existing, valid local studio project."""
+    project_id = identifier(project_id)
+    projects = (ROOT / "projects").resolve()
+    workspace = projects / project_id
+    if workspace.is_symlink() or not (workspace / "project.json").is_file():
+        raise ValueError("Studio project not found")
+    with workspace_lock(workspace):
+        router = PipelineRouter(operation_pipeline_config(workspace))
+        router.load_project()
+        return store.link_project(work_id, project_id, actor)
+
+
 def source_signature(data):
     return digest({key: data.get(key) for key in ("sources", "page_order", "panel_order")})
 
