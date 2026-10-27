@@ -226,7 +226,9 @@ class SharedRequests:
                         "SELECT device, inode, size, modified_ns, changed_ns FROM verified_artifacts WHERE checksum = ?",
                         (checksum,),
                     ).fetchone()
-                if cached and tuple(cached) == identity:
+                # Windows reports creation time as ctime on supported Python
+                # versions, so it cannot prove that file contents are unchanged.
+                if os.name != "nt" and cached and tuple(cached) == identity:
                     return path
                 digest = hashlib.sha256()
                 while chunk := source.read(1024 * 1024):
@@ -288,7 +290,8 @@ class SharedRequests:
             review = db.execute(
                 "SELECT r.id, r.revision, r.export_id, rc.candidate_id FROM audio_reviews r "
                 "JOIN review_candidates rc ON rc.review_id = r.id "
-                "WHERE rc.candidate_id = ? ORDER BY r.rowid DESC LIMIT 1", (candidate["id"],),
+                "JOIN work_projects p ON p.work_id = r.work_id AND p.id = r.link_id "
+                "WHERE r.work_id = ? ORDER BY r.rowid DESC LIMIT 1", (work_id,),
             ).fetchone()
             return {"candidate": dict(candidate), "review": dict(review) if review else None}
 
