@@ -33,12 +33,12 @@ class WebHTTPTests(unittest.TestCase):
         fixture.router._commit(project)
         bundle = fixture.router.bundle_project(fixture.root / "http-input.zip")
 
-        def request(route, data=None, headers=None):
+        def request(route, data=None, headers=None, method=None):
             request_headers = dict(headers or {})
             token = os.environ.get("MANGA_WEB_TEST_TOKEN")
             if token:
                 request_headers.setdefault("Authorization", "Bearer " + token)
-            req = urllib.request.Request(base + route, data=data, headers=request_headers)
+            req = urllib.request.Request(base + route, data=data, headers=request_headers, method=method)
             return urllib.request.urlopen(req, timeout=45)
 
         def poll(job, expected="complete"):
@@ -108,6 +108,61 @@ class WebHTTPTests(unittest.TestCase):
             self.assertEqual(header[:4], b"RIFF")
         with request("/api/asset?" + urlencode({"project": project_id, "path": "bundle.zip", "download": "1"})) as response:
             self.assertEqual(response.read(2), b"PK")
+
+        reader_headers = {"Authorization": "Bearer fixture-reader", "Content-Type": "application/json", "Origin": base}
+        other_headers = {**reader_headers, "Authorization": "Bearer fixture-reader-two"}
+        shared_body = {"title": "HTTP Manga", "chapter": "01", "notes": "first reader note", "reader": "forged"}
+        with request("/api/shared/requests", json.dumps(shared_body).encode(), reader_headers) as response:
+            first_request = json.load(response)["request"]
+        shared_body.update(title="  http  manga ", chapter="1", notes="second reader note")
+        with request("/api/shared/requests", json.dumps(shared_body).encode(), other_headers) as response:
+            second_request = json.load(response)["request"]
+        self.assertEqual(first_request["work_id"], second_request["work_id"])
+        with request("/api/shared/requests", headers=reader_headers) as response:
+            self.assertEqual([item["id"] for item in json.load(response)["requests"]], [first_request["id"]])
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request("/api/shared/admin", headers=reader_headers)
+        self.assertEqual(denied.exception.code, 403)
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request("/api/shared/requests", json.dumps({"id": second_request["id"]}).encode(), reader_headers, "DELETE")
+        self.assertEqual(denied.exception.code, 404)
+        admin_headers = {"Content-Type": "application/json", "Origin": base}
+
+        def admin_action(action, **fields):
+            payload = {"action": action, "work_id": first_request["work_id"], "actor": "forged", **fields}
+            with request("/api/shared/admin", json.dumps(payload).encode(), admin_headers) as response:
+                return json.load(response)["result"]
+
+        admin_action("approve")
+        admin_action("link", project_id=project_id)
+        with request("/api/shared/admin") as response:
+            work = json.load(response)["work"]
+        selected = next(item for item in work if item["id"] == first_request["work_id"])
+        self.assertEqual({item["notes"] for item in selected["requests"]}, {"first reader note", "second reader note"})
+        self.assertIn("fixture-admin", selected["approved_by"])
+        with request("/api/workflow?project=" + project_id) as response:
+            revision = json.load(response)["revision"]
+        candidate = admin_action("prepare", revision=revision)
+        candidate_url = "/api/shared/candidate?" + urlencode({"id": candidate["id"]})
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request(candidate_url, headers=reader_headers)
+        self.assertEqual(denied.exception.code, 403)
+        with request(candidate_url, headers={"Range": "bytes=0-3"}) as response:
+            self.assertEqual(response.read(), b"RIFF")
+        review = admin_action("review", revision=revision, candidate_id=candidate["id"])
+        published = admin_action("publish", revision=revision, review_id=review["id"], expected_publication=None)
+        with request("/api/shared/catalog", headers=reader_headers) as response:
+            self.assertTrue(any(item["publication_id"] == published["id"] for item in json.load(response)["chapters"]))
+        with request("/api/shared/requests", headers=reader_headers) as response:
+            self.assertEqual(json.load(response)["requests"][0]["status"], "published")
+        with request("/api/shared/playback?" + urlencode({"work": first_request["work_id"]}), headers=reader_headers) as response:
+            audio_url = json.load(response)["url"]
+        with request(audio_url, headers={"Cookie": "koetts-session=fixture-reader", "Range": "bytes=0-43", "Authorization": ""}) as response:
+            self.assertEqual(response.status, 206)
+            self.assertEqual(response.read()[:4], b"RIFF")
+        with self.assertRaises(urllib.error.HTTPError) as denied:
+            request(audio_url, headers=other_headers)
+        self.assertEqual(denied.exception.code, 403)
         with self.assertRaises(urllib.error.HTTPError) as context:
             request("/api/workflow", b"{}", {"Content-Type": "application/json"})
         self.assertEqual(context.exception.code, 403)

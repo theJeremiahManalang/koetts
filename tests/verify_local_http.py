@@ -80,7 +80,7 @@ def main():
         (runtime / "apps/web/features/identity/firebase-admin.ts").write_text('''
 export function getAdminAuth() {
   async function verify(value: string, _checkRevoked?: boolean) {
-    if (value !== "fixture-admin" && value !== "fixture-reader") throw new Error("Invalid fixture");
+    if (value !== "fixture-admin" && value !== "fixture-reader" && value !== "fixture-reader-two") throw new Error("Invalid fixture");
     return { uid: value, aud: "offline-fixture", admin: value === "fixture-admin" };
   }
   return { verifyIdToken: verify, verifySessionCookie: verify,
@@ -108,11 +108,13 @@ export function getAdminAuth() {
                 sock.bind(("127.0.0.1", 0))
                 port = sock.getsockname()[1]
             base = f"http://127.0.0.1:{port}"
+            server_env = {**env}
+            server_env.pop("MANGA_APP_ORIGIN", None)
             command = ["npm", "run", "dev" if args.dev else "start", "--", "--port", str(port)]
             if args.webpack:
                 command.append("--webpack")
             with (runtime / (label + ".log")).open("w+") as log:
-                server = subprocess.Popen(command, cwd=runtime / "apps/web", env=env,
+                server = subprocess.Popen(command, cwd=runtime / "apps/web", env=server_env,
                                           stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 try:
                     deadline = time.monotonic() + 90
@@ -147,7 +149,7 @@ export function getAdminAuth() {
                                 check(b"<html" in response.read(), "Missing HTML: " + route)
                         subprocess.run([str(interpreter), "-m", "unittest", "discover", "-s", "tests/integration", "-t", ".",
                                         "-p", "test_web_http.py", "-v"], cwd=runtime,
-                                       env={**env, "MANGA_WEB_TEST_URL": base,
+                                       env={**server_env, "MANGA_WEB_TEST_URL": base,
                                             "MANGA_WEB_TEST_TOKEN": "fixture-admin"}, check=True, timeout=120)
                     print(label + " HTTP checks passed", flush=True)
                 finally:
