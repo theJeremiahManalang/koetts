@@ -1,245 +1,100 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { RequireSignIn } from "../identity/require-sign-in";
+import { useAuth } from "../identity/auth-provider";
 
-type MangaRequest = {
-  id: string;
-  mangaId?: string;
-  chapterId?: string;
-  mangaTitle: string;
-  chapter: string;
-  notes?: string;
-  status: string;
-  createdAt: string;
+type Candidate = { id: string; revision: string; export_id: string };
+type Review = Candidate & { candidate_id: string };
+type Work = {
+  id: string; title: string; chapter: number; status: "pending" | "approved" | "published";
+  requests: { id: string; notes: string }[];
+  link: { project_id: string } | null; publication_id: string | null;
+  candidate: Candidate | null; review: Review | null;
 };
+type StudioProject = { id: string; name: string };
+
+async function jsonRequest(url: string, options?: RequestInit) {
+  const response = await fetch(url, { ...options, cache: "no-store" });
+  if (!response.ok) throw new Error("The action could not be completed. Reload and try again.");
+  return response.json();
+}
 
 export default function AdminRequestsPage() {
-  const [requests, setRequests] = useState<MangaRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, isAdmin, authorizationReady } = useAuth();
+  if (!user || !isAdmin) return <main><h1>Administrator access required</h1><Link href="/browse">Return to the library</Link></main>;
+  return <RequireSignIn><AdminWork authorizationReady={authorizationReady} /></RequireSignIn>;
+}
 
-  useEffect(() => {
-    loadRequests();
+function AdminWork({ authorizationReady }: { authorizationReady: boolean }) {
+  const [work, setWork] = useState<Work[]>([]);
+  const [projects, setProjects] = useState<StudioProject[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const refresh = useCallback(async () => {
+    const [shared, studio] = await Promise.all([jsonRequest("/api/shared/admin"), jsonRequest("/api/workflow")]);
+    setWork(shared.work as Work[]);
+    setProjects(studio.projects as StudioProject[]);
   }, []);
 
-  function loadRequests() {
+  useEffect(() => {
+    if (!authorizationReady) return;
+    let active = true;
+    setLoading(true);
+    void refresh().catch(() => { if (active) setError("Shared work could not be loaded. Please reload."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [authorizationReady, refresh]);
+
+  async function action(item: Work, command: string, fields: Record<string, unknown> = {}) {
+    if (busy || !authorizationReady) return;
+    setBusy(item.id); setError(""); setMessage("");
     try {
-      const savedRequests = JSON.parse(
-        localStorage.getItem("mangaRequests") || "[]"
-      );
-
-      setRequests(savedRequests.reverse());
-    } catch (error) {
-      console.error("Could not load manga requests:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function updateRequestStatus(
-    requestId: string,
-    newStatus: string
-  ) {
-    const savedRequests: MangaRequest[] = JSON.parse(
-      localStorage.getItem("mangaRequests") || "[]"
-    );
-
-    const updatedRequests = savedRequests.map((request) =>
-      request.id === requestId
-        ? {
-            ...request,
-            status: newStatus,
-          }
-        : request
-    );
-
-    localStorage.setItem(
-      "mangaRequests",
-      JSON.stringify(updatedRequests)
-    );
-
-    setRequests([...updatedRequests].reverse());
-  }
-
-  function handleGenerateAudio(requestId: string) {
-    /*
-      Later, your teammate can replace this with:
-
-      await fetch(`/api/admin/requests/${requestId}/generate`, {
-        method: "POST",
+      let payload: Record<string, unknown> = { action: command, work_id: item.id, ...fields };
+      if (command === "prepare") {
+        if (!item.link) throw new Error("Attach a studio project first.");
+        const snapshot = await jsonRequest(`/api/workflow?project=${encodeURIComponent(item.link.project_id)}`);
+        payload = { ...payload, revision: snapshot.revision };
+      }
+      await jsonRequest("/api/shared/admin", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
-
-      For now we simulate generation by changing
-      the status to PROCESSING.
-    */
-
-    updateRequestStatus(requestId, "PROCESSING");
+      await refresh();
+      setMessage(command === "publish" ? "Reviewed audio is published." : command === "review" ? "Audio review recorded." : command === "prepare" ? "Export is ready to audition." : command === "link" ? "Studio project attached." : "Request approved.");
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "The action could not be completed."); }
+    finally { setBusy(""); }
   }
 
-  function formatDate(date: string) {
-    return new Date(date).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  if (loading) {
-    return (
-      <main className="admin-requests-page">
-        <p>Loading requests...</p>
-      </main>
-    );
-  }
-
-  return (
-    <main className="admin-requests-page">
-      <header className="admin-header">
-        <div>
-          <p className="browse-eyebrow">Admin</p>
-          <h1>Audiobook Requests</h1>
-          <p>
-            Review and manage manga audiobook generation requests.
-          </p>
-        </div>
-
-        <Link href="/browse" className="header-link">
-          View Manga Reader
-        </Link>
-      </header>
-
-      {requests.length === 0 ? (
-        <section className="empty-requests">
-          <h2>No requests yet</h2>
-          <p>
-            User audiobook requests will appear here.
-          </p>
-        </section>
-      ) : (
-        <section className="admin-request-list">
-          {requests.map((request) => (
-            <article
-              key={request.id}
-              className="admin-request-card"
-            >
-              <div className="admin-request-info">
-                <div className="admin-request-heading">
-                  <div>
-                    <p className="request-manga">
-                      {request.mangaTitle}
-                    </p>
-
-                    <h2>{request.chapter}</h2>
-                  </div>
-
-                  <span
-                    className={`request-status status-${request.status.toLowerCase()}`}
-                  >
-                    {request.status}
-                  </span>
-                </div>
-
-                {request.notes && (
-                  <div className="request-notes">
-                    <span>User Note</span>
-                    <p>{request.notes}</p>
-                  </div>
-                )}
-
-                <p className="request-date">
-                  Requested {formatDate(request.createdAt)}
-                </p>
-
-                <p className="request-id">
-                  Request ID: {request.id}
-                </p>
-              </div>
-
-              <div className="admin-actions">
-                {request.status === "PENDING" && (
-                  <>
-                    <button
-                      type="button"
-                      className="reject-button"
-                      onClick={() =>
-                        updateRequestStatus(
-                          request.id,
-                          "REJECTED"
-                        )
-                      }
-                    >
-                      Reject
-                    </button>
-
-                    <button
-                      type="button"
-                      className="approve-button"
-                      onClick={() =>
-                        updateRequestStatus(
-                          request.id,
-                          "APPROVED"
-                        )
-                      }
-                    >
-                      Approve
-                    </button>
-                  </>
-                )}
-
-                {request.status === "APPROVED" && (
-                  <button
-                    type="button"
-                    className="generate-button"
-                    onClick={() =>
-                      handleGenerateAudio(request.id)
-                    }
-                  >
-                    Generate Audio
-                  </button>
-                )}
-
-                {request.status === "PROCESSING" && (
-                  <button
-                    type="button"
-                    className="ready-button"
-                    onClick={() =>
-                      updateRequestStatus(
-                        request.id,
-                        "READY"
-                      )
-                    }
-                  >
-                    Mark Ready
-                  </button>
-                )}
-
-                {request.status === "READY" && (
-                  <span className="admin-complete">
-                    ✓ Audiobook Ready
-                  </span>
-                )}
-
-                {request.status === "REJECTED" && (
-                  <button
-                    type="button"
-                    className="approve-button"
-                    onClick={() =>
-                      updateRequestStatus(
-                        request.id,
-                        "APPROVED"
-                      )
-                    }
-                  >
-                    Reopen Request
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
-    </main>
-  );
+  return <main className="admin-requests-page">
+    <header className="admin-header"><div><p className="browse-eyebrow">Admin</p><h1>Audiobook requests</h1><p>Approve chapter work, attach a studio project, and review its export before publication.</p></div><Link href="/browse" className="header-link">View library</Link></header>
+    {message && <p role="status" className="notice">{message}</p>}
+    {error && <p role="alert" className="notice error">{error}</p>}
+    {loading ? <p role="status">Loading requests…</p> : work.length === 0 ? <section className="empty-requests"><h2>No requests yet</h2><p>Reader requests will appear here.</p></section> :
+      <section className="admin-request-list">{work.map(item => {
+        const project = selectedProjects[item.id] ?? item.link?.project_id ?? "";
+        const reviewMatchesCandidate = !!item.review && !!item.candidate && item.review.revision === item.candidate.revision && item.review.export_id === item.candidate.export_id;
+        return <article key={item.id} className="admin-request-card">
+          <div className="admin-request-info"><div className="admin-request-heading"><div><p className="request-manga">{item.title}</p><h2>Chapter {item.chapter}</h2></div><span className={`request-status status-${item.status}`}>{item.status}</span></div>
+            <p>{item.requests.length} {item.requests.length === 1 ? "reader request" : "reader requests"}</p>
+            {item.requests.some(request => request.notes) && <div className="request-notes"><strong>Reader notes</strong><ul>{item.requests.filter(request => request.notes).map(request => <li key={request.id}>{request.notes}</li>)}</ul></div>}
+            {item.status === "pending" && <button type="button" className="approve-button" disabled={!!busy} onClick={() => void action(item, "approve")}>Approve request</button>}
+            {item.status !== "pending" && <>
+              <label>Studio project <select value={project} disabled={!!busy} onChange={event => setSelectedProjects(current => ({ ...current, [item.id]: event.target.value }))}><option value="">Select a saved project</option>{projects.map(saved => <option key={saved.id} value={saved.id}>{saved.name} · {saved.id.slice(0, 6)}</option>)}</select></label>
+              <div className="admin-actions"><button type="button" className="button" disabled={!!busy || !project || project === item.link?.project_id} onClick={() => void action(item, "link", { project_id: project })}>{item.link ? "Replace project link" : "Attach project"}</button>
+                {item.link && <Link className="button" href={`/?project=${encodeURIComponent(item.link.project_id)}`}>Open linked studio project</Link>}</div>
+              <p className="control-note">Upload authorized images in the studio. Replacing a project link invalidates earlier reviews; published audio remains available.</p>
+              {item.link && <><button type="button" className="button" disabled={!!busy} onClick={() => void action(item, "prepare")}>Prepare export for audition</button>
+                {item.candidate && <div className="request-notes"><strong>Latest audition candidate</strong><audio controls preload="none" src={`/api/shared/candidate?id=${encodeURIComponent(item.candidate.id)}`} /><button type="button" className="button" disabled={!!busy} onClick={() => void action(item, "review", { candidate_id: item.candidate!.id, revision: item.candidate!.revision })}>Record audio review</button><p className="control-note">Record your decision after reviewing this exact export.</p></div>}
+                {item.review && <div className="request-notes"><strong>Reviewed export</strong><audio controls preload="none" src={`/api/shared/candidate?id=${encodeURIComponent(item.review.candidate_id)}`} /><button type="button" className="approve-button" disabled={!!busy || !reviewMatchesCandidate} onClick={() => void action(item, "publish", { review_id: item.review!.id, revision: item.review!.revision, expected_publication: item.publication_id })}>Publish reviewed audio</button>{!reviewMatchesCandidate && <p className="control-note">The latest candidate differs from this review. Record a review for the current export before publishing.</p>}</div>}
+              </>}
+            </>}
+          </div>
+        </article>;
+      })}</section>}
+  </main>;
 }
