@@ -513,3 +513,17 @@ in local polling recovery and audit subject identity, red/green regression evide
 separate fixes `434c81e` and `4161dfa`, fresh verification and clean independent
 follow-up reviews. It supersedes earlier no-findings claims for those paths.
 These local review fixes were not deployed; hosted processing remains disabled.
+
+## S4 — In progress
+
+The approved request identity is a whitespace-normalized, case-folded manga title,
+positive chapter number, and the single default audio configuration. Readers see
+pending, approved, or published status. The local request-store foundation currently
+persists shared chapter work and reader-specific requests in SQLite. It is not wired
+into the web application, and its approval method is not an authorization boundary.
+
+S4 acceptance remains incomplete: authenticated API and UI integration, source and
+studio linkage, exact export review, atomic publication, catalog, playback, and the
+end-to-end flow have not been implemented or verified. In particular, export review
+must derive the revision, settings, and checksums from trusted studio state rather
+than accepting assertions from a caller. No publication capability is enabled.

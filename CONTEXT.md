@@ -1,24 +1,20 @@
-# Active task handoff
+# Active task: S4 shared requests and publication
 
-## Objective and approval
+The user approved the S4 plan and requested implementation on
+`feat/shared-managed-request`. Decisions: deduplicate by normalized title, chapter,
+and the default audio configuration; reader statuses are pending, approved, and
+published. Agreed TDD seams: shared service, authenticated HTTP, and fake-backed
+end-to-end flow.
 
-Identify and fix the CI failure on PR #14. User approved the bounded implementation prompt on 2026-10-26.
+Work so far: added a local SQLite request-store foundation and a focused behavior
+test. The store is not connected to routes or UI, and is not an authorization
+boundary. `docs/alignment-status.md` records S4 as in progress. Publication was not
+implemented: it must bind trusted studio revision, settings, and export artifacts.
 
-## Finding and decision
+Checks: focused Python test and Ruff passed; `npm run typecheck` passed. `npm test` passed; Python skipped the external sample and HTTP server tests, and all 33 web tests passed. An initial sandboxed uv run
+failed to download hatchling because DNS was unavailable; escalated uv restored the
+pinned build dependencies.
 
-The failing job was `verify_fresh_checkout.py`. Its temporary checkout copied `docs/` but omitted root `firebase.json`. The repository checker therefore reported the archived baseline's valid `../../firebase.json` link as broken. Add `firebase.json` to the verifier's copied root files; leave the archived link unchanged.
-
-## Changed paths
-
-- `tools/verify_fresh_checkout.py`: copy root `firebase.json` into the disposable checkout.
-- `CONTEXT.md`: record this task and its verification.
-
-## Verification
-
-- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:/home/ssuish/.local/bin:/usr/local/bin:/usr/bin:/bin uv run --locked python tools/verify_fresh_checkout.py`: passed. Fresh checkout install succeeded; `check:repo` passed; 105 Python tests ran (103 passed, 2 optional skips); 33 web tests passed; no-Torch assertion and external-directory CLI help checks passed.
-- `git diff --check`: passed.
-- Initial run with default Node 24/npm 11 stopped at `npm ci` because project requires Node 22/npm 10. Rerun used pinned Node 22.22.3/npm 10.9.8.
-
-## Blockers and next action
-
-No local blockers. Commit and push the fix to PR #14 to rerun hosted CI; no commit or push performed.
+Next: complete request API and UI integration, trusted export review, atomic
+publication, authenticated reader playback, end-to-end tests, scope evidence, and
+required review. Preserve existing project state; no live publication or paid calls.
