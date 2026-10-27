@@ -76,3 +76,34 @@ test('reader sees persisted requests and can remove only their own entry', async
   assert.deepEqual(JSON.parse(calls.at(-1)[1].body), { id: 'a'.repeat(32) });
   assert.match(document.body.textContent, /No requests yet/);
 });
+
+test('admin publishes the saved review rather than a newer audition candidate', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/admin/requests' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const workId = 'a'.repeat(32), projectId = 'b'.repeat(32), reviewId = 'c'.repeat(32);
+  const reviewedCandidate = 'd'.repeat(32), latestCandidate = 'e'.repeat(32), revision = 'f'.repeat(64);
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push([url, options]);
+    if (options.method === 'POST') return { ok: true, json: async () => ({ result: { id: '1'.repeat(32) } }) };
+    if (url === '/api/workflow') return { ok: true, json: async () => ({ projects: [{ id: projectId, name: 'Studio project' }] }) };
+    return { ok: true, json: async () => ({ work: [{ id: workId, title: 'Manga', chapter: 1, status: 'approved', requests: [{ id: '2'.repeat(32), notes: 'Reader note' }], link: { project_id: projectId }, publication_id: null, candidate: { id: latestCandidate, revision, export_id: '3'.repeat(32) }, review: { id: reviewId, candidate_id: reviewedCandidate, revision, export_id: '3'.repeat(32) } }] }) };
+  };
+  const mocks = {
+    'next/link': props => React.createElement('a', props),
+    '../identity/require-sign-in': { RequireSignIn: ({ children }) => children },
+    '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'admin' }, isAdmin: true, authorizationReady: true }) },
+  };
+  const Page = load('../features/requests/admin-requests-page.tsx', mocks).default;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  await act(async () => root.render(React.createElement(Page)));
+  assert.match(document.body.textContent, /Reader note/);
+  const publish = [...document.querySelectorAll('button')].find(button => button.textContent === 'Publish reviewed audio');
+  assert.ok(publish);
+  await act(async () => publish.click());
+  const sent = calls.find(([, options]) => options.method === 'POST');
+  assert.deepEqual(JSON.parse(sent[1].body), { action: 'publish', work_id: workId, review_id: reviewId, revision, expected_publication: null });
+});
