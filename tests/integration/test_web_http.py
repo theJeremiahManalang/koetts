@@ -117,11 +117,15 @@ class WebHTTPTests(unittest.TestCase):
         self.assertEqual(denied.exception.code, 403)
         with request("/api/shared/requests", json.dumps(shared_body).encode(), reader_headers) as response:
             first_request = json.load(response)["request"]
+        self.assertFalse(first_request["duplicate"])
+        with request("/api/shared/requests", json.dumps(shared_body).encode(), reader_headers) as response:
+            self.assertTrue(json.load(response)["request"]["duplicate"])
         shared_body.update(title="  http  manga ", chapter="1", notes="second reader note")
         with request("/api/shared/requests", json.dumps(shared_body).encode(), other_headers) as response:
             second_request = json.load(response)["request"]
         self.assertEqual(first_request["work_id"], second_request["work_id"])
         with request("/api/shared/requests", headers=reader_headers) as response:
+            self.assertIn("no-store", response.headers["Cache-Control"])
             self.assertEqual([item["id"] for item in json.load(response)["requests"]], [first_request["id"]])
         with self.assertRaises(urllib.error.HTTPError) as denied:
             request("/api/shared/admin", headers=reader_headers)
@@ -139,6 +143,7 @@ class WebHTTPTests(unittest.TestCase):
         admin_action("approve")
         admin_action("link", project_id=project_id)
         with request("/api/shared/admin") as response:
+            self.assertIn("no-store", response.headers["Cache-Control"])
             work = json.load(response)["work"]
         selected = next(item for item in work if item["id"] == first_request["work_id"])
         self.assertEqual({item["notes"] for item in selected["requests"]}, {"first reader note", "second reader note"})
@@ -153,6 +158,10 @@ class WebHTTPTests(unittest.TestCase):
         with request(candidate_url, headers={"Range": "bytes=0-3"}) as response:
             self.assertEqual(response.read(), b"RIFF")
         review = admin_action("review", revision=revision, candidate_id=candidate["id"])
+        with request("/api/shared/admin") as response:
+            recovered = next(item for item in json.load(response)["work"] if item["id"] == first_request["work_id"])
+        self.assertEqual(recovered["candidate"]["id"], candidate["id"])
+        self.assertEqual(recovered["review"]["id"], review["id"])
         published = admin_action("publish", revision=revision, review_id=review["id"], expected_publication=None)
         with request("/api/shared/catalog", headers=reader_headers) as response:
             self.assertTrue(any(item["publication_id"] == published["id"] for item in json.load(response)["chapters"]))

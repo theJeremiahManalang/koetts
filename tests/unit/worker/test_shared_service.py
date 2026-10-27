@@ -15,6 +15,10 @@ class SharedServiceTests(unittest.TestCase):
             with patch.object(workflow, "ROOT", root):
                 service = SharedService(root)
                 alice = service.execute({"action": "submit", "reader": "alice", "title": "Manga", "chapter": "1", "notes": "first"})
+                self.assertFalse(alice["duplicate"])
+                duplicate = service.execute({"action": "submit", "reader": "alice", "title": "manga", "chapter": "01", "notes": "ignored"})
+                self.assertTrue(duplicate["duplicate"])
+                self.assertEqual(duplicate["notes"], "first")
                 bob = service.execute({"action": "submit", "reader": "bob", "title": "manga", "chapter": "01", "notes": "second"})
                 self.assertEqual(alice["work_id"], bob["work_id"])
                 self.assertEqual([item["id"] for item in service.execute({"action": "requests", "reader": "alice"})], [alice["id"]])

@@ -442,6 +442,10 @@ class WebWorkflowTests(unittest.TestCase):
         review = web_workflow.approve_shared_export(store, work["work_id"], candidate["id"], "admin", current["revision"])
         self.assertEqual(review["revision"], current["revision"])
         self.assertEqual(review["export_id"], current["project"]["web_export_id"])
+        from manga_worker.shared import SharedService
+        recovered = SharedService(self.root).execute({"action": "work"})[0]
+        self.assertEqual(recovered["candidate"]["id"], candidate["id"])
+        self.assertEqual(recovered["review"]["id"], review["id"])
         self.assertEqual(set(review["checksums"]), {
             "chapter_narration.wav", "timeline.json", "cast.json", "approved_script.json", "render_manifest.json",
         })
@@ -466,6 +470,11 @@ class WebWorkflowTests(unittest.TestCase):
         published = web_workflow.publish_shared_export(store, work["work_id"], review["id"], "admin", revision, None)
         original = store.published_artifact(work["work_id"], "chapter_narration.wav").read_bytes()
         self.assertEqual(original, (self.workspace / "exports/chapter_narration.wav").read_bytes())
+        saved_artifact = store.published_artifact(work["work_id"], "chapter_narration.wav")
+        saved_artifact.write_bytes(b"corrupted published audio")
+        with self.assertRaises(ValueError):
+            SharedRequests(self.root / "shared.sqlite3").published_artifact(work["work_id"], "chapter_narration.wav")
+        saved_artifact.write_bytes(original)
         self.assertEqual(store.list_reader("reader")[0]["status"], "published")
         self.assertEqual(store.catalog(), [{"work_id": work["work_id"], "title": "Manga", "chapter": 1,
                                             "publication_id": published["id"]}])
@@ -516,6 +525,7 @@ class WebWorkflowTests(unittest.TestCase):
         other_project = uuid.uuid4().hex
         shutil.copytree(self.workspace, self.root / "projects" / other_project)
         web_workflow.link_shared_project(store, work["work_id"], other_project, "admin")
+        self.assertEqual(store.review_state(work["work_id"]), {"candidate": None, "review": None})
         with self.assertRaises(ValueError):
             web_workflow.approve_shared_export(store, work["work_id"], pending_candidate["id"], "admin", revision)
         with self.assertRaises(ValueError):
