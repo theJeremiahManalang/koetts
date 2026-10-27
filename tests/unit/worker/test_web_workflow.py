@@ -33,6 +33,18 @@ class WebWorkflowTests(unittest.TestCase):
         router.load_project()
         return web_workflow.snapshot(router)
 
+    def test_link_work_requires_existing_valid_studio_project(self):
+        from manga_tts.shared_requests import SharedRequests
+
+        store = SharedRequests(self.root / "shared.sqlite3")
+        work = store.submit("reader", "Manga", "1", "")
+        store.approve(work["work_id"], "admin")
+        with self.assertRaises(ValueError):
+            web_workflow.link_shared_project(store, work["work_id"], uuid.uuid4().hex, "admin")
+        self.assertIsNone(store.get_link(work["work_id"]))
+        link = web_workflow.link_shared_project(store, work["work_id"], self.project_id, "admin")
+        self.assertEqual(link["project_id"], self.project_id)
+
     def job(self, action, command=None, **extra):
         job_id = uuid.uuid4().hex
         data = {"action": action, "project": self.project_id, "revision": self.current()["revision"], "command": command or {}, **extra}
