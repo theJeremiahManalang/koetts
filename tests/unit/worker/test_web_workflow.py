@@ -390,6 +390,21 @@ class WebWorkflowTests(unittest.TestCase):
         (self.workspace / take["path"]).write_bytes(b"corrupted audio")
         self.assertEqual(self.current()["workflow_status"]["audio_ready_scenes"], [])
 
+    def test_each_export_has_new_identity_and_failed_replacement_invalidates_draft(self):
+        real_router = PipelineRouter
+        patch.object(web_workflow, "PipelineRouter", lambda config: real_router(
+            config, client_factory=lambda: object(),
+            renderer_factory=lambda c, m: lambda request: fixtures.wav_bytes(),
+        )).start()
+        self.assertEqual(self.job("render", {"scene_ids": ["scene_001"], "regenerate": []})["status"], "complete")
+        self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "complete")
+        first = self.current()["project"]["web_export_id"]
+        self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "complete")
+        self.assertNotEqual(self.current()["project"]["web_export_id"], first)
+        with patch.object(real_router, "export_audio", side_effect=ValueError("synthetic failure")):
+            self.assertEqual(self.job("export", {"scene_ids": ["scene_001"]})["status"], "failed")
+        self.assertEqual(self.current()["workflow_status"]["exported_scenes"], [])
+
     def test_stale_edits_fail_without_changing_project(self):
         before = (self.workspace / "project.json").read_bytes()
         state = self.job("settings", {}, revision="outdated")
