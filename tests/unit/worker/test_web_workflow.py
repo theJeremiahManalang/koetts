@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import os
 import shutil
 import sqlite3
 import threading
@@ -446,6 +447,10 @@ class WebWorkflowTests(unittest.TestCase):
         recovered = SharedService(self.root).execute({"action": "work"})[0]
         self.assertEqual(recovered["candidate"]["id"], candidate["id"])
         self.assertEqual(recovered["review"]["id"], review["id"])
+        newer = web_workflow.prepare_shared_export(store, work["work_id"], "other-admin", current["revision"])
+        recovered = SharedService(self.root).execute({"action": "work"})[0]
+        self.assertEqual(recovered["candidate"]["id"], newer["id"])
+        self.assertEqual(recovered["review"]["id"], review["id"])
         self.assertEqual(set(review["checksums"]), {
             "chapter_narration.wav", "timeline.json", "cast.json", "approved_script.json", "render_manifest.json",
         })
@@ -471,6 +476,13 @@ class WebWorkflowTests(unittest.TestCase):
         original = store.published_artifact(work["work_id"], "chapter_narration.wav").read_bytes()
         self.assertEqual(original, (self.workspace / "exports/chapter_narration.wav").read_bytes())
         saved_artifact = store.published_artifact(work["work_id"], "chapter_narration.wav")
+        original_metadata = saved_artifact.stat()
+        saved_artifact.write_bytes(b"x" * len(original))
+        # Windows exposes creation time as ctime on supported Python versions.
+        # Simulate a same-size rewrite with unchanged reported cache metadata.
+        with patch.object(os, "name", "nt"), patch.object(os, "fstat", return_value=original_metadata):
+            with self.assertRaises(ValueError):
+                store.published_artifact(work["work_id"], "chapter_narration.wav")
         saved_artifact.write_bytes(b"corrupted published audio")
         with self.assertRaises(ValueError):
             SharedRequests(self.root / "shared.sqlite3").published_artifact(work["work_id"], "chapter_narration.wav")
