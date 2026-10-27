@@ -37,3 +37,9 @@ that validates and locks existing studio projects. See `docs/alignment-status.md
 for exact checks, skipped tests, initial build failure and independent review.
 Phase 2 is next: trusted immutable export review and atomic publication; then
 phase 3 authenticated APIs and audio delivery and phase 4 UI and acceptance.
+
+Phase 2 passes: immutable audition candidates, explicit review tied to trusted
+export version and artifact hashes, and atomic publication with prior-pointer
+conflict checks. Export identity is shared across CLI and worker calls. Review
+found and verified the CLI invalidation fix. Exact phase checks and limitations are
+in `docs/alignment-status.md`. Next: authenticated local APIs and reader playback.

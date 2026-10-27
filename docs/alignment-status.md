@@ -551,3 +551,26 @@ negative coverage. The worker service and tests now cover missing, malformed, an
 symlinked projects; both reviewers confirmed their findings resolved. Review and
 publication linkage remain pending for phase 2. No live provider or cloud result is
 claimed.
+
+### S4 phase 2 — export review and publication storage
+
+The shared router invalidates export metadata before replacing fixed filenames and
+records a fresh export identity only after success, for both CLI and worker calls.
+The local service captures a locked export into checksum-addressed artifacts for
+admin audition, records an explicit review only while the prepared export still
+matches, and atomically promotes a publication pointer with an expected prior
+pointer. Relinking invalidates candidates and reviews by link identity. Catalog
+and request status read the accepted pointer; prior published audio survives failed
+replacement. These contracts have not yet been exposed by authenticated routes.
+
+`.venv/bin/python -m unittest tests.unit.worker.test_web_workflow tests.unit.engine.test_shared_requests -q`
+passed focused service checks. The final permitted
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check` passed 116 Python tests (two
+optional skips), 33 web tests, typecheck and production build.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http` passed studio and
+frontend-only checks. Synthetic tests cover stale and corrupt artifacts, failed
+pointer commits, competing publication attempts, relinks, and restart lookup.
+
+Both independent reviews found CLI exports bypassed worker-only export identity;
+the shared-router fix and CLI regression resolved that finding. No real human
+decisions, paid calls, or cloud integrations were performed.
