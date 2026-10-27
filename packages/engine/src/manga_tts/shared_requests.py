@@ -36,6 +36,12 @@ class SharedRequests:
                     actor TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS work_projects (
+                    work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
+                    id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL UNIQUE,
+                    actor TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
             """)
 
     @contextmanager
@@ -99,6 +105,36 @@ class SharedRequests:
                 "SELECT id, reader, notes, created_at FROM reader_requests "
                 "WHERE work_id = ? ORDER BY created_at, id", (work_id,),
             )]
+
+    def get_link(self, work_id: str):
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT id, work_id, project_id, actor, created_at FROM work_projects WHERE work_id = ?",
+                (work_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def link_project(self, work_id: str, project_id: str, actor: str):
+        """Attach an existing project; the caller verifies the project and actor."""
+        if not project_id or not actor:
+            raise ValueError("Project and actor required")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            work = db.execute("SELECT status FROM chapter_work WHERE id = ?", (work_id,)).fetchone()
+            if not work or work["status"] not in ("approved", "published"):
+                raise ValueError("Approved work required")
+            previous = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
+            if previous and previous["project_id"] == project_id:
+                return dict(previous)
+            if db.execute("SELECT 1 FROM work_projects WHERE project_id = ?", (project_id,)).fetchone():
+                raise ValueError("Project already linked")
+            db.execute(
+                "INSERT INTO work_projects(work_id, id, project_id, actor) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(work_id) DO UPDATE SET id = excluded.id, project_id = excluded.project_id, "
+                "actor = excluded.actor, created_at = CURRENT_TIMESTAMP",
+                (work_id, uuid.uuid4().hex, project_id, actor),
+            )
+            return dict(db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone())
 
     def approve(self, work_id: str, actor: str):
         if not actor:
