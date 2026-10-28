@@ -126,20 +126,18 @@ def bind_firestore(root: Path, client, settings: FirestoreSettings):
         raise ValueError("SQLite contains workflow data; explicit reconciliation required")
     existing = read_binding(root)
     if existing == asdict(settings):
+        from .shared_local import sync_parent
+
+        sync_parent(root / ".shared-backend.json")
         return
     report = inspect_cutover(root, client, settings, include_legacy=False)
     if not report["ready"]:
         raise ValueError("Shared backend activation blocked; run cutover preflight")
-    root.mkdir(parents=True, exist_ok=True)
-    target = root / ".shared-backend.json"
-    try:
-        with target.open("x") as output:
-            json.dump(asdict(settings), output, sort_keys=True)
-            output.flush()
-            os.fsync(output.fileno())
-    except FileExistsError:
-        if read_binding(root) != asdict(settings):
-            raise ValueError("Shared backend binding changed") from None
+    from .shared_local import persist_once
+
+    persist_once(root / ".shared-backend.json", json.dumps(asdict(settings), sort_keys=True))
+    if read_binding(root) != asdict(settings):
+        raise ValueError("Shared backend binding changed")
 
 
 def release_empty_binding(root: Path, client, settings: FirestoreSettings):
@@ -149,7 +147,11 @@ def release_empty_binding(root: Path, client, settings: FirestoreSettings):
     target = target_inventory(client, settings)
     if target["exists"] or any(target["counts"].values()):
         raise ValueError("Firestore has been initialized; reconciliation is required")
-    (root / ".shared-backend.json").unlink()
+    from .shared_local import sync_parent
+
+    target_file = root / ".shared-backend.json"
+    target_file.unlink()
+    sync_parent(target_file)
 
 
 def main():

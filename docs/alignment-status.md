@@ -757,3 +757,28 @@ was required or applied. Thirteen emulator/service tests passed; root Python
 acceptance passed 137 tests with twelve skips (ten emulator tests plus existing
 external sample/HTTP prerequisites). Live writes, deployment and IAM/rules changes
 were not performed. Final acceptance and independent review remain phase 5.
+
+### Firestore shared workflow — phase 5
+
+Added root `npm run test:firestore` and CI invocation. Its disposable loopback
+emulator is version/checksum pinned and uses only a demo project. Reused the same
+request contract cases across SQLite and Firestore; the runner also exercises the
+actual worker backend selector, restart recovery, concurrency, review/publication,
+read-only cutover and refusal of unsafe rollback. Twenty-four tests passed.
+
+Independent Standards and Spec review identified and resolved local marker startup
+atomicity/crash durability. Both backend binding and artifact ownership now publish
+complete temporary files by hardlink, fsync file contents and parent directories,
+and synchronize an already-existing binding before remote work. Explicit rollback
+also synchronizes deletion. A concurrent-publication regression covers complete
+local markers. Both review axes report zero remaining findings.
+
+Final pinned `npm run check` passed repository checks, Ruff, 143 Python tests
+(seventeen optional skips), 58 web tests, typecheck and production build. Fifteen
+emulator cases skipped during normal discovery ran under the dedicated emulator
+gate; external sample compatibility remains skipped. Frozen fresh-checkout installs,
+checks/tests, lightweight environment and external-directory commands passed.
+HTTP acceptance uses emulator-backed Firestore metadata for the complete local S4
+flow; frontend-only refusal is checked separately. Exact logs/results and limitations
+are recorded in `CONTEXT.md`. No live data migration, publication, deployment or
+IAM/rules change was performed; six legacy requests remain outside the new namespace.

@@ -143,23 +143,12 @@ class _FirestoreTransaction:
 
 def artifact_store_identity(root: Path) -> str:
     """Persist one identity atomically across local application processes."""
-    import os
     import uuid
 
-    root.mkdir(parents=True, exist_ok=True)
+    from .shared_local import persist_once
+
     target = root / ".shared-artifact-store-id"
-    temporary = root / f".shared-artifact-store-id-{uuid.uuid4().hex}"
-    try:
-        with temporary.open("x") as output:
-            output.write(uuid.uuid4().hex)
-            output.flush()
-            os.fsync(output.fileno())
-        try:
-            os.link(temporary, target)
-        except FileExistsError:
-            pass
-    finally:
-        temporary.unlink(missing_ok=True)
+    persist_once(target, uuid.uuid4().hex)
     if target.is_symlink():
         raise ValueError("Invalid artifact store identity file")
     value = target.read_text()

@@ -50,6 +50,23 @@ class SharedServiceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 artifact_store_identity(root)
 
+    def test_concurrent_local_binding_publication_is_atomic_and_durable(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import json
+        from manga_worker.shared_local import persist_once
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "binding.json"
+            values = [json.dumps({"dataset": str(index), "padding": "x" * 100000}) for index in range(8)]
+            def write(value):
+                persist_once(target, value)
+                return json.loads(target.read_text())["dataset"]
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                observed = list(pool.map(write, values))
+            self.assertEqual(len(set(observed)), 1)
+            self.assertIn(target.read_text(), values)
+            self.assertEqual([entry.name for entry in target.parent.iterdir()], ["binding.json"])
+
 
 if __name__ == "__main__":
     unittest.main()

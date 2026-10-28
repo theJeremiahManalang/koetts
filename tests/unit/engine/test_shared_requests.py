@@ -7,10 +7,13 @@ from pathlib import Path
 from manga_tts.shared_requests import SharedRequests
 
 
-class SharedRequestsTest(unittest.TestCase):
+class SharedRequestsContract:
+    def make_store(self, path):
+        return SharedRequests(path)
+
     def test_readers_share_work_but_only_see_their_own_requests(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = SharedRequests(Path(directory) / "shared.sqlite3")
+            store = self.make_store(Path(directory) / "shared.sqlite3")
             first = store.submit("alice", "  Echoes   of Tomorrow ", "001", "")
             second = store.submit("bob", "echoes of tomorrow", "1", "note")
             self.assertEqual(first["work_id"], second["work_id"])
@@ -26,11 +29,11 @@ class SharedRequestsTest(unittest.TestCase):
             self.assertEqual(store.list_reader("bob")[0]["status"], "approved")
             with self.assertRaises(ValueError):
                 store.delete("alice", second["id"])
-            self.assertEqual(SharedRequests(Path(directory) / "shared.sqlite3").list_reader("bob")[0]["id"], second["id"])
+            self.assertEqual(self.make_store(Path(directory) / "shared.sqlite3").list_reader("bob")[0]["id"], second["id"])
 
     def test_admin_lists_shared_work_and_approvals_are_audited(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = SharedRequests(Path(directory) / "shared.sqlite3")
+            store = self.make_store(Path(directory) / "shared.sqlite3")
             work = store.submit("alice", "Manga", "1", "")
             store.submit("bob", "Manga", "1", "")
             self.assertEqual(len(store.list_work()), 1)
@@ -39,7 +42,7 @@ class SharedRequestsTest(unittest.TestCase):
 
     def test_admin_sees_each_readers_original_note(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = SharedRequests(Path(directory) / "shared.sqlite3")
+            store = self.make_store(Path(directory) / "shared.sqlite3")
             first = store.submit("alice", "Manga", "1", "Alice note")
             store.submit("bob", "Manga", "1", "Bob note")
             store.submit("alice", "Manga", "1", "Replacement note")
@@ -51,7 +54,7 @@ class SharedRequestsTest(unittest.TestCase):
     def test_approved_work_has_one_project_and_relink_changes_its_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "shared.sqlite3"
-            store = SharedRequests(database)
+            store = self.make_store(database)
             first = store.submit("alice", "Manga", "1", "")
             second = store.submit("bob", "Manga", "2", "")
             with self.assertRaises(ValueError):
@@ -64,9 +67,12 @@ class SharedRequestsTest(unittest.TestCase):
                 store.link_project(second["work_id"], "project-one", "admin")
             replacement = store.link_project(first["work_id"], "project-two", "admin")
             self.assertNotEqual(link["id"], replacement["id"])
-            self.assertEqual(SharedRequests(database).get_link(first["work_id"]), replacement)
+            self.assertEqual(self.make_store(database).get_link(first["work_id"]), replacement)
             self.assertEqual(store.link_project(second["work_id"], "project-one", "admin")["project_id"], "project-one")
 
+
+
+class SharedRequestsTest(SharedRequestsContract, unittest.TestCase):
     def test_metadata_retry_reuses_candidate_identity_without_recopying_artifacts(self):
         from unittest.mock import patch
 

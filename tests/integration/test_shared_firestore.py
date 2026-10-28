@@ -162,6 +162,9 @@ class FirestoreSharedTests(unittest.TestCase):
 
         settings = FirestoreSettings("demo-shared-workflow", "shared-tests", self.dataset)
         bind_firestore(self.root, self.client, settings)
+        with patch("manga_worker.shared_local.sync_parent") as sync:
+            bind_firestore(self.root, self.client, settings)
+            sync.assert_called_once_with(self.root / ".shared-backend.json")
         with patch.dict(os.environ, {"MANGA_SHARED_BACKEND": "sqlite"}):
             with self.assertRaises(ValueError):
                 SharedService(self.root)
@@ -198,3 +201,40 @@ class FirestoreSharedTests(unittest.TestCase):
         self.assertTrue(inspect_cutover(self.root, self.client, settings)["ready"])
         (self.root / ".shared-artifact-store-id").write_text(uuid.uuid4().hex)
         self.assertFalse(inspect_cutover(self.root, self.client, settings)["ready"])
+
+    def test_service_backend_selection_survives_restart_without_sqlite(self):
+        from unittest.mock import patch
+        from manga_worker.shared import SharedService
+
+        environment = {"MANGA_SHARED_BACKEND": "firestore", "FIREBASE_PROJECT_ID": "demo-shared-workflow",
+                       "FIRESTORE_DATABASE_ID": "shared-tests", "MANGA_SHARED_DATASET": self.dataset}
+        with patch.dict(os.environ, environment):
+            service = SharedService(self.root)
+            request = service.execute({"action": "submit", "reader": "alice", "title": "Manga", "chapter": "1", "notes": "original"})
+            recovered = SharedService(self.root)
+            self.assertEqual(recovered.execute({"action": "requests", "reader": "alice"})[0]["id"], request["id"])
+            self.assertFalse((self.root / "shared.sqlite3").exists())
+            self.assertTrue((self.root / ".shared-backend.json").exists())
+
+
+from tests.unit.engine.test_shared_requests import SharedRequestsContract
+
+
+@unittest.skipUnless(os.environ.get("FIRESTORE_EMULATOR_HOST"), "No Firestore emulator configured")
+class FirestoreSharedContractTests(SharedRequestsContract, unittest.TestCase):
+    def setUp(self):
+        from google.cloud import firestore
+
+        if os.environ["FIRESTORE_EMULATOR_HOST"].split(":")[0] not in {"127.0.0.1", "localhost"}:
+            raise ValueError("Firestore tests require a loopback emulator")
+        self.client = firestore.Client(project="demo-shared-workflow", database="shared-tests")
+        self.addCleanup(self.client.close)
+        self.stores = {}
+
+    def make_store(self, path):
+        from manga_worker.shared_firestore import FirestoreSharedMetadata
+
+        key = str(path)
+        if key not in self.stores:
+            self.stores[key] = FirestoreSharedMetadata(self.client, "test-" + uuid.uuid4().hex, uuid.uuid4().hex)
+        return SharedRequests(path, metadata=self.stores[key])

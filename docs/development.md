@@ -173,3 +173,18 @@ completely empty. Then unset `MANGA_SHARED_BACKEND` to return to SQLite. Once th
 Firestore target exists or contains metadata, the command refuses rollback;
 reconciliation is required. Do not delete binding files to bypass that protection.
 This feature does not deploy the app, change IAM/rules or migrate live data.
+
+Run shared backend acceptance from the repository root:
+
+```bash
+npm run test:firestore
+```
+
+The runner starts a disposable loopback Firestore emulator, uses only the
+`demo-shared-workflow` project and a synthetic named database, and runs the same
+request contract against SQLite and Firestore alongside review/publication and
+cutover regressions. It requires Java 11 or newer. It reuses or downloads the
+SHA-256-verified emulator version pinned in the runner; set
+`FIRESTORE_EMULATOR_JAR` to supply that exact jar offline. CI runs this command.
+Ordinary Python discovery skips emulator tests when no emulator is configured;
+those skips are not Firestore acceptance evidence.
