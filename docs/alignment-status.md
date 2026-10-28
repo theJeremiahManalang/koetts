@@ -513,3 +513,272 @@ in local polling recovery and audit subject identity, red/green regression evide
 separate fixes `434c81e` and `4161dfa`, fresh verification and clean independent
 follow-up reviews. It supersedes earlier no-findings claims for those paths.
 These local review fixes were not deployed; hosted processing remains disabled.
+
+## S4 — Complete locally, 28 October 2026
+
+All four approved implementation phases are complete for the same-host local
+service. Final acceptance evidence and limitations follow the phase records below.
+
+### Initial incomplete checkpoint
+
+The approved request identity is a whitespace-normalized, case-folded manga title,
+positive chapter number, and the single default audio configuration. Readers see
+pending, approved, or published status. The local request-store foundation currently
+persists shared chapter work and reader-specific requests in SQLite. It is not wired
+into the web application, and its approval method is not an authorization boundary.
+
+At this initial checkpoint, authenticated API and UI integration, source and studio
+linkage, exact export review, atomic publication, catalog, playback, and the end-to-end
+flow were incomplete. The subsequent phase records supersede that checkpoint.
+
+### S4 phase 1 — request and project-link contracts
+
+The user approved the four-phase S4 implementation and automatic continuation on
+phase acceptance. Shared work now exposes individual request notes to authorized
+callers, preserves original notes on repeat submission, and supports exclusive
+project links with new identities on relink. The worker validates and locks an
+existing studio project before linking it. Routes and UI do not expose these
+contracts yet; publication and review invalidation remain phase 2 responsibilities.
+
+Focused checks passed: `.venv/bin/python -m unittest tests.unit.engine.test_shared_requests -v`
+and `.venv/bin/python -m unittest tests.unit.worker.test_web_workflow.WebWorkflowTests.test_link_work_requires_existing_valid_studio_project -v`.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check` passed with permitted local
+port access: 110 Python tests, two optional skips, 33 web tests, typecheck, and
+production build. `UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http` passed
+studio and frontend-only HTTP checks. Initial sandboxed and permitted builds failed
+because the existing Next build cache retained a sandbox port error; preserving it at
+`/tmp/manga-s4-phase1-next-cache` and using a fresh cache resolved the build.
+
+Independent standards and spec review found missing existing-project validation and
+negative coverage. The worker service and tests now cover missing, malformed, and
+symlinked projects; both reviewers confirmed their findings resolved. Review and
+publication linkage remain pending for phase 2. No live provider or cloud result is
+claimed.
+
+### S4 phase 2 — export review and publication storage
+
+The shared router invalidates export metadata before replacing fixed filenames and
+records a fresh export identity only after success, for both CLI and worker calls.
+The local service captures a locked export into checksum-addressed artifacts for
+admin audition, records an explicit review only while the prepared export still
+matches, and atomically promotes a publication pointer with an expected prior
+pointer. Relinking invalidates candidates and reviews by link identity. Catalog
+and request status read the accepted pointer; prior published audio survives failed
+replacement. These contracts have not yet been exposed by authenticated routes.
+
+`.venv/bin/python -m unittest tests.unit.worker.test_web_workflow tests.unit.engine.test_shared_requests -q`
+passed focused service checks. The final permitted
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check` passed 116 Python tests (two
+optional skips), 33 web tests, typecheck and production build.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http` passed studio and
+frontend-only checks. Synthetic tests cover stale and corrupt artifacts, failed
+pointer commits, competing publication attempts, relinks, and restart lookup.
+
+Both independent reviews found CLI exports bypassed worker-only export identity;
+the shared-router fix and CLI regression resolved that finding. No real human
+decisions, paid calls, or cloud integrations were performed.
+
+### S4 phase 3 — authenticated local APIs and audio delivery
+
+Verified Firebase readers and admins now reach the local shared service through
+server routes; mutations enforce the trusted origin and server-pinned identity.
+Frontend-only hosting rejects the new shared endpoints. Admin audio candidates are
+private. Reader URLs bind an expiring token to the verified reader and publication;
+audio delivery supports byte ranges and checks the original artifact checksum on
+the opened descriptor. Integrity verification is cached by unchanged local file
+identity on platforms with reliable change times; Windows rechecks bytes.
+
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check` passed: 117 Python tests,
+two optional skips, 43 web tests, typecheck and production build.
+`UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http` passed studio and
+frontend-only checks, including synthetic request, two-reader isolation, admin
+approval, project linkage, export audition/review/publication, catalog and ranged
+playback. The first HTTP attempt exposed local Next hostname normalization;
+loopback origin handling was corrected and the final checks passed.
+
+Independent reviews found missing duplicate feedback, unrecoverable review IDs,
+private response caching, repeated full-audio hashing, a Windows timestamp issue,
+and same-directory symlink substitution. Follow-up fixes and regression checks
+resolved the findings. A separate local process with write access can still modify
+an already opened inode during streaming; application-managed artifacts are treated
+as immutable. S5 must establish cloud-object immutability independently.
+
+### S4 phase 4 — UI integration and final acceptance
+
+The request form and account request list use shared persistence, including duplicate
+feedback and owner-only deletion. Admins approve chapter work, attach a saved project,
+open the linked studio, audition an immutable export, record its review, and explicitly
+publish that reviewed version. The catalog, chapter details, Listen links and reader
+use accepted publications. Browser-local demo records remain untouched and are not
+imported; unused source fixtures were removed after checking consumers.
+
+Reader and admin audition players remain mounted through same-user reauthentication.
+The reader refreshes expiring URLs while retaining listening position, and preserves
+high-contrast and larger-control preferences. Production source images remain private;
+reader page delivery awaits the separately scoped manga API.
+
+| S4 acceptance criterion | Current evidence | Result |
+| --- | --- | --- |
+| Shared requests and chapter/configuration deduplication | Engine/service tests and the HTTP flow submit two readers' normalized references, preserve original notes, isolate lists and deny cross-reader deletion | Passed locally |
+| Admin approval and authorized production linkage | Worker tests reject missing, malformed and symlinked projects; HTTP performs admin approval, links a real synthetic project, then applies a script review and renders/exports through the existing workflow | Passed locally |
+| Exact immutable export review | Tests bind candidate/review to project revision, export ID, settings and every artifact checksum; altered files, relinks and CLI re-exports invalidate promotion | Passed locally |
+| Atomic publication and replacement retention | Concurrent publication has one winner; injected SQLite pointer failure, changed exports and relinks preserve the previous published pointer and audio | Passed locally |
+| Reader-safe catalog and audio | Route and HTTP tests verify reader/admin separation, session-bound expiring tokens, tampering rejection, private cache headers and byte ranges; reader DOM contains no studio images | Passed locally |
+| Complete reader/admin experience | React tests and Chromium exercise request submission/duplicate/deletion, linked studio navigation, audition/review/publication, catalog/Listen/playback, session renewal and accessibility | Passed with synthetic identities/audio |
+
+#### Final verification
+
+Final acceptance used Node **22.22.3**, npm **10.9.8**, uv **0.11.16** and the
+repository Python **3.11.15** environment. Earlier exploratory runs used the shell's
+Node 24 default; the gates below were repeated with the pinned runtime.
+
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:$PATH UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check`
+  passed: repository boundaries/pointers, Ruff, 117 Python tests (115 passed, two
+  optional skips), 55 web tests, typecheck and the production build.
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:$PATH UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http`
+  passed studio and frontend-only production checks. The HTTP integration test ran
+  successfully against its disposable server. The two full-suite skips were the
+  separately executed HTTP test and the external sample compatibility test; no
+  external sample was supplied.
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:$PATH UV_CACHE_DIR=/tmp/manga-s4-uv-cache .venv/bin/python /tmp/manga-s4-browser-runner.py`
+  passed Chromium checks at **1440×900** and **390×844**. Browser plugin was unavailable;
+  regular Playwright reused an installed package and browser. The disposable copy
+  alone replaced external identity SDK/provider dependencies. Real app screens loaded
+  the synthetic 0.32-second WAV, played and sought it, retained reader and admin audio
+  through session renewal, handled requests and publication, and showed no relevant
+  app console errors or framework overlay. Mobile width was 390 pixels with no
+  horizontal overflow. The missing favicon was excluded from app-error findings.
+- Screenshots and browser scripts are temporary session artifacts under `/tmp`,
+  including `manga-s4-browse.png`, `manga-s4-reader.png`,
+  `manga-s4-reader-mobile.png` and `manga-s4-admin.png`; they are not required project data.
+- After the final contrast adjustment, pinned `npm run build` passed again.
+  Pinned `npm run check:repo` and `git diff --check` also passed after the completion
+  documentation was updated.
+
+#### Final review
+
+Standards and Spec reviewed the full branch against
+`ede54cd946143fa6f9c2a1fc847aacff6520b479`. Final review found and resolved admin audition
+reset during renewal; the reviewer confirmed the fix and all 11 shared UI tests.
+There are no unresolved blocking correctness findings. A possible data-clump smell
+in the trusted export arguments was accepted as nonblocking; all values are derived
+at the common locked snapshot boundary. Spec review reported no remaining S4 gaps
+or scope creep. Earlier reader renewal and removed-accessibility findings were also
+fixed and checked at the complete ReaderPage boundary and in Chromium.
+
+The small web-guide correction preserves root approval policy. A manual instruction
+walkthrough checked substantial tasks, quick questions, approved follow-ups, material
+scope changes and explicit bypasses; all still route through the unchanged root guide.
+Web-guide text changed from 218 to 215 words. This is a text inspection, not a model
+behavior evaluation. Repository pointer validation passed.
+
+No real human approval, live publication, paid generation, model inference, deployment,
+Firestore/GCS semantics or production listening quality is claimed. Saved user results,
+source samples and credentials were not changed. The next eligible scope is S5;
+its cloud inputs and rollout gates remain unresolved in the target design.
+
+#### Review hardening follow-up
+
+The trusted export arguments now travel in an immutable `ExportSnapshot`, resolving
+the earlier Data Clumps observation while preserving locked checksum verification.
+FastAPI authentication, JSON decoding and persistence run outside the event loop;
+requests reject ambiguous or oversized input before persistence, credentials are
+bounded, private responses disable caching, and Firebase cold-start initialization
+is serialized. Hosted verification remains processing-disabled. Focused HTTP tests
+cover concurrency, sanitization, body limits, strict parsing and credential rejection.
+Pinned full acceptance passed 123 Python tests (two optional skips), 55 web tests,
+Ruff, repository checks, typecheck and production build; the final race regression
+passed within the 14-test HTTP suite. No live-provider or deployment claim is made.
+
+### Firestore shared workflow — phase 1
+
+The approved follow-up preserves S4 behavior while separating shared metadata
+transactions from local immutable artifact storage. `SharedRequests` retains engine
+validation and review/publication decisions. `SQLiteSharedMetadata` owns SQL and
+transaction rollback; `LocalSharedArtifacts` owns bytes and a disposable local
+verification cache. Existing metadata tables and artifact paths remain readable.
+Mutation identities are allocated before transaction callbacks, and callbacks do
+not copy or verify files. A rollback/retry regression confirms one artifact copy,
+the same candidate identity across attempts, and recovery through a fresh service.
+
+The 35 existing shared engine/worker tests passed after extraction. Full Python
+acceptance and the added retry regression passed; exact results are recorded in
+`CONTEXT.md`. No Firestore adapter, live data migration or deployment is claimed
+by this phase. The next phase is the explicitly selected Firestore metadata adapter.
+
+### Firestore shared workflow — phase 2
+
+The optional worker Firestore adapter implements shared metadata transactions with
+explicit project/database/dataset selection, transactionally protected uniqueness
+records, monotonic candidate/review sequences, atomic publication/status changes,
+and binding to one local artifact-store identity. SQLite remains the default and
+configuration/connection failures never select a fallback store. The SDK is an
+explicit optional worker dependency; the uv lockfile was regenerated with pinned uv.
+
+Root Python acceptance passed 133 tests with eight skips (six emulator-only tests
+and the two existing external HTTP/sample prerequisites). Emulator acceptance covers
+concurrent duplicate intake, reader isolation and deletion, relinking, exact reviewed
+publication, recovery, failed replacement, competing publication, dataset binding
+and commit-conflict retries without repeated artifact copies. Retry fault injection
+releases the server transaction before raising its synthetic commit conflict.
+No live Firestore record was written. Live durability and hosted delivery remain
+outside this same-host implementation. Cutover preflight is the later phase 4 gate.
+
+### Firestore shared workflow — phase 3
+
+Selected PR #15 presentation/navigation changes now use PR #16's existing shared
+contracts. The admin response adds project-scoped requester display names through
+batched Firebase Auth lookups; unavailable/deleted/unnamed profiles have explicit
+fallbacks and never expose emails. Individual notes, readable action labels with
+icons/tooltips, and active admin navigation retain all project linking, audition,
+review and publication actions. No processing/ready/rejected statuses were added.
+Studio context uses a shared work ID and preserves saved projects and unfinished
+operation recovery. Unlinked work can prepare a new project without an implicit link.
+
+All 17 web test files passed, including new profile batching/failure and Studio
+context regressions. Pinned typecheck and production build passed. Existing reader
+server deletion and playback tests remain passing. HTTP fixture profile lookup is
+synthetic; this phase makes no live Firebase profile or hosted processing claim.
+
+### Firestore shared workflow — phase 4
+
+Read-only `manga_worker.shared_cutover` reports source/target counts, schema, local
+artifact identity, binding and blockers. Activation refuses populated SQLite,
+foreign/schema-mismatched or orphan target metadata, and unexpected collections.
+An explicit local binding prevents automatic SQLite fallback. With clients stopped,
+`--release-empty-binding` permits rollback only before any remote initialization;
+initialized targets require explicit reconciliation. Legacy records are never imported
+or deleted. Configuration and stop/preflight/activation/rollback steps are documented.
+
+Read-only live preflight on `koetts-9bf7f/koetts-default`, dataset `local-studio`, found
+no SQLite shared database, no target namespace, and six legacy requests. It returned
+ready without creating local identity/binding files or remote metadata. No migration
+was required or applied. Thirteen emulator/service tests passed; root Python
+acceptance passed 137 tests with twelve skips (ten emulator tests plus existing
+external sample/HTTP prerequisites). Live writes, deployment and IAM/rules changes
+were not performed. Final acceptance and independent review remain phase 5.
+
+### Firestore shared workflow — phase 5
+
+Added root `npm run test:firestore` and CI invocation. Its disposable loopback
+emulator is version/checksum pinned and uses only a demo project. Reused the same
+request contract cases across SQLite and Firestore; the runner also exercises the
+actual worker backend selector, restart recovery, concurrency, review/publication,
+read-only cutover and refusal of unsafe rollback. Twenty-four tests passed.
+
+Independent Standards and Spec review identified and resolved local marker startup
+atomicity/crash durability. Both backend binding and artifact ownership now publish
+complete temporary files by hardlink, fsync file contents and parent directories,
+and synchronize an already-existing binding before remote work. Explicit rollback
+also synchronizes deletion. A concurrent-publication regression covers complete
+local markers. Both review axes report zero remaining findings.
+
+Final pinned `npm run check` passed repository checks, Ruff, 143 Python tests
+(seventeen optional skips), 58 web tests, typecheck and production build. Fifteen
+emulator cases skipped during normal discovery ran under the dedicated emulator
+gate; external sample compatibility remains skipped. Frozen fresh-checkout installs,
+checks/tests, lightweight environment and external-directory commands passed.
+HTTP acceptance uses emulator-backed Firestore metadata for the complete local S4
+flow; frontend-only refusal is checked separately. Exact logs/results and limitations
+are recorded in `CONTEXT.md`. No live data migration, publication, deployment or
+IAM/rules change was performed; six legacy requests remain outside the new namespace.

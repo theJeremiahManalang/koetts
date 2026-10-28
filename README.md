@@ -1,6 +1,6 @@
 # Manga audiobook studio
 
-A uv/npm monorepo for reviewed manga-to-audio production and an intentional reader demo. Humans approve cast and scripts before synthesis. Export and publication remain separate decisions.
+A uv/npm monorepo for reviewed manga-to-audio production and local shared audiobook playback. Humans approve cast and scripts before synthesis. Export, audio review, and publication remain separate decisions.
 
 ## Start developing
 
@@ -27,7 +27,7 @@ Configure Firebase login and a trusted admin account before using the studio. Co
 | `tests/unit`, `tests/integration` | Domain tests and cross-process/HTTP acceptance |
 | `tools` | Workspace checks and disposable onboarding verification |
 
-Dependency direction: worker imports engine and vision; engine imports vision utilities; vision imports no application package. Features own browser behavior and demo fixtures; Next.js route files are adapters. Architecture checks run in CI.
+Dependency direction: worker imports engine and vision; engine imports vision utilities; vision imports no application package. Features own browser behavior; Next.js route files are adapters. Architecture checks run in CI.
 
 ## Commands
 
@@ -43,4 +43,4 @@ uv run manga-vision --help
 uv run manga-worker --help
 ```
 
-[Documentation index](docs/README.md) routes developer, domain, operational, and agent guidance. [Contribution guide](CONTRIBUTING.md) defines the review workflow. Saved projects remain under `results/web` by default; preserve them during cleanup. Reader/catalog/request flows remain explicit demos; shared publication and distributed processing are future migration scopes.
+[Documentation index](docs/README.md) routes developer, domain, operational, and agent guidance. [Contribution guide](CONTRIBUTING.md) defines the review workflow. Saved projects and local shared publications remain under `results/web` by default; preserve them during cleanup. Shared state coordinates one host only; distributed processing and cloud storage remain future migration scopes.

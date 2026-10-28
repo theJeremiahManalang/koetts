@@ -30,7 +30,7 @@ A separate reader-facing surface exists:
 - `/request` saves requests only in browser `localStorage`; it does not submit them to a backend.
 - “My Requests” links to `/requests`, which has no route.
 
-Sources: [sample catalog](../../apps/web/features/library/fixtures/catalog.ts), [browse page](../../apps/web/app/browse/page.tsx), [manga details](../../apps/web/app/manga/[id]/page.tsx), [reader](../../apps/web/app/read/[mangaId]/[chapterId]/page.tsx), and [request form](../../apps/web/app/request/page.tsx).
+Sources: the former sample catalog at `apps/web/features/library/fixtures/catalog.ts`, [browse page](../../apps/web/app/browse/page.tsx), [manga details](../../apps/web/app/manga/[id]/page.tsx), [reader](../../apps/web/app/read/[mangaId]/[chapterId]/page.tsx), and [request form](../../apps/web/app/request/page.tsx). The fixture was removed when the published catalog replaced it.
 
 ## 2. Structure and execution
 

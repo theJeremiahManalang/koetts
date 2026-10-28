@@ -28,6 +28,13 @@ def digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8", errors="backslashreplace")).hexdigest()
 
 
+def export_signature(data: dict[str, Any]) -> str:
+    """Fingerprint the production state used to assemble an export."""
+    return digest({key: data[key] for key in (
+        "cast", "appearances", "sources", "scenes", "settings", "selected_takes", "approvals", "cast_approval",
+    )})
+
+
 def read_json(path: PathLike) -> Any:
     """Read strict UTF-8 JSON, accepting an optional leading UTF-8 BOM.
 

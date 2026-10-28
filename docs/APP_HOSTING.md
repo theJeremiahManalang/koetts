@@ -52,10 +52,11 @@ reject anonymous/reader requests with 401/403. Verified admins receive HTTP 503
 before reading uploads, accessing project files, or starting Python.
 The local studio remains available at `/` when this variable is unset.
 
-The deployed catalog and reader use sample data and placeholder artwork. The
-request form stores requests only in the visitor's browser; it does not submit
-requests to an operator or shared database. No Python processing or Gemini calls
-are provided by this frontend deployment.
+The checked-in reader and request screens use the local shared API, which is
+unavailable in frontend-only mode. They show an unavailable state rather than a
+shared catalog or browser-local request submission. A previously deployed version
+may differ; inspect deployed behavior before rollout. No Python processing or
+Gemini calls are provided by this frontend deployment.
 
 For an operational hosted studio, first add a deployed processing backend,
 durable storage, and authentication/authorization. Keep frontend-only mode enabled
@@ -63,13 +64,8 @@ until that integration is ready.
 
 Validate the production website before rollout:
 
-```powershell
-cd web
-npm ci
-npm test
-npm run typecheck
-npm run build
-```
+From the repository root, run `npm ci` and `npm run check`. Run
+`npm run test:http` for the local production HTTP boundary.
 
 Verify the adapter-generated production startup accepts the assigned port on the
 container network interface. The existing local `start` script binds to loopback;

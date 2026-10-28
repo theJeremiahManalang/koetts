@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -33,7 +34,8 @@ from manga_tts.operations import (
 )
 from manga_tts.resolution import page_image
 from manga_tts.script import cast_signature, scene_signature
-from manga_tts.storage import asset, digest, read_json, write_json
+from manga_tts.shared_requests import ExportSnapshot
+from manga_tts.storage import asset, digest, export_signature, read_json, write_json
 
 from .paths import data_root
 
@@ -203,16 +205,6 @@ def _record_proposal_application(context: WorkflowExecution) -> None:
     )
 
 
-def _record_export(context: WorkflowExecution) -> None:
-    data = schemas.dump(context.router.project)
-    context.router.update_metadata(
-        {
-            "web_export_signature": export_signature(data),
-            "web_export_scenes": context.command["scene_ids"],
-        }
-    )
-
-
 WORKFLOW_ACTIONS = {
     "create": WorkflowAction(_create_project),
     "rename": WorkflowAction(_rename_project),
@@ -230,7 +222,7 @@ WORKFLOW_ACTIONS = {
     "take": WorkflowAction(_typed_command(schemas.TakeSelection, "select_take")),
     "inspect": WorkflowAction(_inspect_segments),
     "render": WorkflowAction(_render_segments),
-    "export": WorkflowAction(_export_audio, _record_export),
+    "export": WorkflowAction(_export_audio),
     "bundle": WorkflowAction(_bundle_project),
 }
 
@@ -494,12 +486,79 @@ def identifier(value):
     return value
 
 
+def link_shared_project(store, work_id, project_id, actor):
+    """Link approved work only to an existing, valid local studio project."""
+    project_id = identifier(project_id)
+    projects = (ROOT / "projects").resolve()
+    workspace = projects / project_id
+    if workspace.is_symlink() or not (workspace / "project.json").is_file():
+        raise ValueError("Studio project not found")
+    with workspace_lock(workspace):
+        router = PipelineRouter(operation_pipeline_config(workspace))
+        router.load_project()
+        return store.link_project(work_id, project_id, actor)
+
+
+def _export_snapshot(workspace, expected_revision, *, work_id, link):
+    """Resolve current export metadata and files while the workspace lock is held."""
+    router = PipelineRouter(operation_pipeline_config(workspace))
+    router.load_project()
+    data = schemas.dump(router.project)
+    revision = digest(data)
+    if revision != expected_revision:
+        raise ValueError("Project revision changed; reload before reviewing")
+    export_id = data.get("web_export_id")
+    if not export_id or not workflow_status(data, workspace)["exported_scenes"]:
+        raise ValueError("Current export is unavailable; export the reviewed project first")
+    names = ["chapter_narration.wav", "timeline.json", "cast.json", "approved_script.json", "render_manifest.json"]
+    if (workspace / "exports" / "chapter_narration.mp3").is_file():
+        names.append("chapter_narration.mp3")
+    artifacts = {}
+    for name in names:
+        path = workspace / "exports" / name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Export artifact is unavailable")
+        artifacts[name] = asset(workspace, f"exports/{name}")
+    return ExportSnapshot(work_id=work_id, link_id=link["id"], project_id=link["project_id"],
+                          revision=revision, export_id=export_id, settings_hash=digest(data["settings"]),
+                          artifacts=artifacts)
+
+
+@contextmanager
+def _locked_shared_export(store, work_id, expected_revision):
+    """Hold the project lock through inspection and the caller's store mutation."""
+    link = store.get_link(work_id)
+    if not link:
+        raise ValueError("Work has no linked studio project")
+    project_id = identifier(link["project_id"])
+    workspace = (ROOT / "projects").resolve() / project_id
+    if workspace.is_symlink() or not (workspace / "project.json").is_file():
+        raise ValueError("Studio project not found")
+    with workspace_lock(workspace):
+        yield _export_snapshot(workspace, expected_revision, work_id=work_id, link=link)
+
+
+def prepare_shared_export(store, work_id, actor, expected_revision):
+    """Prepare a current immutable export snapshot for an administrator to inspect."""
+    with _locked_shared_export(store, work_id, expected_revision) as snapshot:
+        return store.prepare_audio_review(snapshot, actor=actor)
+
+
+def approve_shared_export(store, work_id, candidate_id, actor, expected_revision):
+    """Record a human decision against the prepared, still-current export."""
+    with _locked_shared_export(store, work_id, expected_revision) as snapshot:
+        return store.approve_audio_review(snapshot, candidate_id=candidate_id, actor=actor)
+
+
+def publish_shared_export(store, work_id, review_id, actor, expected_revision, expected_publication):
+    """Publish only a reviewed export that still matches the locked studio project."""
+    with _locked_shared_export(store, work_id, expected_revision) as snapshot:
+        return store.publish_review(snapshot, review_id=review_id, actor=actor,
+                                    expected_publication=expected_publication)
+
+
 def source_signature(data):
     return digest({key: data.get(key) for key in ("sources", "page_order", "panel_order")})
-
-
-def export_signature(data):
-    return digest({key: data[key] for key in ("cast", "appearances", "sources", "scenes", "settings", "selected_takes", "approvals", "cast_approval")})
 
 
 def workflow_status(data, root):

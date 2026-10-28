@@ -1,10 +1,10 @@
 # Web agent guide
 
-Root `AGENTS.md` owns task gates. `app/` is the Next.js route boundary. `features/` owns studio, identity, library/reader, and requests; feature code imports no route adapter. Demo fixtures live with their feature. `lib/` owns Python transport only.
+Root `AGENTS.md` owns task gates. `app/` is the Next.js route boundary. `features/` owns studio, identity, library/reader, and requests; feature code imports no route adapter. `lib/` owns Python transport only.
 
 For worker snapshots, polling, expected-state rejection, or review mutations, read `../worker/AGENTS.md` and `../../packages/engine/AGENTS.md`. Preserve drafts on failed mutations and stale-state rejection. Server routes verify identity before private assets or processing; read `../../docs/FIREBASE_AUTH.md` for identity changes.
 
-For hosted frontend-only mode, read `../../docs/APP_HOSTING.md`. Preserve root redirect and processing guards. Keep credentials server-side and demo/browser-local request behavior explicit.
+For hosted frontend-only mode, read `../../docs/APP_HOSTING.md`. Preserve root redirect and processing guards. Keep credentials server-side and distinguish local shared state from hosted behavior.
 
 Use root npm scripts. Imports/routes require tests, typecheck, and build; transport/auth/runtime changes also require `npm run test:http`. Resolve Next.js's installed docs through the root dependency tree after npm hoisting.
 

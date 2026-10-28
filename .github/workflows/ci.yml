@@ -25,4 +25,5 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run test:http
+      - run: npm run test:firestore
       - run: uv run --locked python tools/verify_fresh_checkout.py

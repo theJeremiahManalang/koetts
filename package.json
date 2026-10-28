@@ -21,7 +21,8 @@
     "lint": "uv run --locked ruff check .",
     "check:repo": "uv run --locked python tools/check_repo.py",
     "check": "npm run check:repo && npm run lint && npm test && npm run typecheck && npm run build",
-    "test:http": "uv run --locked python tests/verify_local_http.py"
+    "test:http": "uv run --locked python tests/verify_local_http.py",
+    "test:firestore": "uv run --locked python tools/verify_shared_firestore.py"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.6"

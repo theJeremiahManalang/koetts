@@ -5,6 +5,15 @@ and reader-facing publication.
 
 ## Language
 
+**Chapter work**:
+The shared effort to produce audio for one requested manga chapter and audio
+configuration. Multiple readers can request the same chapter work.
+_Avoid_: Reader request, studio project
+
+**Reader request**:
+One reader's request for a chapter work, including that reader's original notes.
+_Avoid_: Chapter work, production operation
+
 **Take**:
 A recorded version of one audio segment. Multiple takes may exist; a selected
 take is the version chosen for use in an export.
@@ -23,6 +32,16 @@ _Avoid_: Publication, take
 **Publication**:
 A reviewed export made available to readers through an explicit admin decision.
 _Avoid_: Export, completed render
+
+**Audition candidate**:
+An unchanged copy of an export prepared for an admin to inspect before recording
+an audio-review decision.
+_Avoid_: Publication, selected take
+
+**Audio review**:
+An admin's explicit decision that an exact export is ready for publication. The
+decision does not prove that the admin listened to it.
+_Avoid_: Script approval, publication
 
 **Operation**:
 One requested production action with pinned inputs and an observable outcome. An

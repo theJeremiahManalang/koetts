@@ -130,3 +130,61 @@ The `manga_tts` engine namespace, project files, operation protocol, approval se
 9. Update local scripts, IDE run configurations, scheduled tasks, and deployment build contexts using the migration table above. Restore the original checkpoint/operation recovery flow rather than bypassing writer locks. Keep backups until existing-project review and needed checks succeed.
 
 For rollback, stop all new workers, return to the previous revision, and restore dependency environments and environment files to their original paths. Restore data backups only through the normal recovery process; do not overwrite newer production progress. This PR does not run a database-format migration or deploy services.
+
+## Optional Firestore shared metadata
+
+SQLite remains the default shared workflow backend. Firestore is an explicit local
+metadata alternative, not hosted production or distributed artifact storage. Use
+one dataset per local data root. The existing database is Standard edition,
+`koetts-9bf7f/koetts-default`; the legacy `manga_requests` collection is excluded and
+left untouched. Browser Firestore access remains denied; access uses server ADC.
+Install a packaged worker with its `firestore` extra when using that adapter.
+
+Stop web servers and shared-workflow clients before changing backends. Export
+`FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`, `MANGA_SHARED_DATASET`, and the same
+absolute `MANGA_DATA_ROOT` used by the application. Inspect before activation:
+
+```bash
+uv run --locked python -m manga_worker.shared_cutover
+```
+
+The default command only reads SQLite/Firestore metadata and reports counts, schema,
+artifact identity and blockers. It does not initialize a namespace, import old
+requests or delete data. Nonempty SQLite, foreign artifacts, unsupported schemas
+and orphan/unexpected target collections block activation. Resolve such findings
+with a separately reviewed preservation/migration plan; never infer reviews from
+legacy progress labels.
+
+When the report is ready, explicitly select `MANGA_SHARED_BACKEND=firestore` in the
+local server environment and restart. First use creates a local target binding;
+first successful mutation initializes versioned remote metadata. Immutable artifacts,
+workspace operations and signing keys remain under the same local root. Preserve
+`.shared-artifact-store-id` and `.shared-backend.json` with its backups. Configuration
+or provider failures never fall back to SQLite. Hosted guards remain unchanged.
+
+Before any target initialization, rollback is possible with the application stopped:
+
+```bash
+uv run --locked python -m manga_worker.shared_cutover --release-empty-binding
+```
+
+This explicit command removes only the local binding, after proving the target is
+completely empty. Then unset `MANGA_SHARED_BACKEND` to return to SQLite. Once the
+Firestore target exists or contains metadata, the command refuses rollback;
+reconciliation is required. Do not delete binding files to bypass that protection.
+This feature does not deploy the app, change IAM/rules or migrate live data.
+
+Run shared backend acceptance from the repository root:
+
+```bash
+npm run test:firestore
+```
+
+The runner starts a disposable loopback Firestore emulator, uses only the
+`demo-shared-workflow` project and a synthetic named database, and runs the same
+request contract against SQLite and Firestore alongside review/publication and
+cutover regressions. It requires Java 11 or newer. It reuses or downloads the
+SHA-256-verified emulator version pinned in the runner; set
+`FIRESTORE_EMULATOR_JAR` to supply that exact jar offline. CI runs this command.
+Ordinary Python discovery skips emulator tests when no emulator is configured;
+those skips are not Firestore acceptance evidence.

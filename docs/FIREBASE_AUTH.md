@@ -68,17 +68,25 @@ extraction POST and asset GET verify admin credentials before reading files or r
 Python. No credentials yields 401; a verified non-admin token yields 403.
 
 The browser sends Firebase ID tokens in Authorization headers for studio API calls.
-An HTTP-only, SameSite=Strict, one-hour session cookie supports protected image,
-audio and download URLs without tokens in URLs. Cookies are Secure in production.
+An HTTP-only, SameSite=Strict, one-hour session cookie supports protected studio
+image, audio and download URLs without Firebase credentials in URLs. Cookies are Secure in production.
 Session creation and deletion require a matching Origin header; token and session
 verification check revocation. The provider renews the cookie on ID-token changes
 and clears it on sign-out. Session sync must succeed before admin navigation appears.
 
+Local shared-request and catalog routes verify reader identity; request notes are
+visible only to their owner and trusted admins. Admin actions verify the admin claim,
+pin the actor server-side and require a trusted Origin for mutations. Published audio
+URLs include a short-lived, reader-bound token and also require the verified session;
+the token is not a Firebase credential. Draft audition audio remains admin-only.
+Frontend-only hosting disables these local shared routes.
+
 Behind App Hosting, `MANGA_APP_ORIGIN` pins the exact public HTTPS origin for
 session CSRF checks. This avoids comparing the browser origin with Next's internal
 proxy URL. Forwarded-host headers never define trusted origins. Local execution
-without this setting compares against the request URL; invalid configured origins
-fail closed.
+without this setting accepts the exact loopback Host and scheme when Next normalizes
+the internal hostname, otherwise it compares against the request URL. Invalid
+configured origins fail closed.
 
 Same-user token renewal preserves mounted studio and request drafts. While session
 verification is pending or fails, protected controls are inert and studio requests

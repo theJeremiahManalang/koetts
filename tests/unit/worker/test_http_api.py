@@ -430,3 +430,200 @@ class HttpBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     "/projects/project/assets/example.wav", headers=headers
                 )
                 self.assertEqual(response.status_code, expected)
+
+
+class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
+    headers = {"Authorization": "Bearer service", "X-KoeTTS-User-Token": "user", "Idempotency-Key": "intent"}
+
+    def app(self, backend=None, *, service_verifier=None, user_verifier=None):
+        return create_app(
+            BoundaryConfig("test-project", "https://api", {
+                "svc": frozenset({"readiness", "identity", "enqueue", "poll", "snapshot"})
+            }, mode="local"),
+            service_verifier=service_verifier or (lambda token: {
+                "sub": "svc", "iss": "https://accounts.google.com", "aud": "https://api",
+            }),
+            user_verifier=user_verifier or (lambda token, session: {
+                "sub": "admin", "iss": "https://securetoken.google.com/test-project",
+                "aud": "test-project", "admin": True,
+            }),
+            workflow=backend,
+        )
+
+    async def test_blocking_verification_and_storage_do_not_occupy_event_loop(self):
+        import asyncio
+        import threading
+
+        loop_thread = threading.get_ident()
+        verifier_threads = []
+        started, release = threading.Event(), threading.Event()
+
+        def service(token):
+            verifier_threads.append(threading.get_ident())
+            return {"sub": "svc", "iss": "https://accounts.google.com", "aud": "https://api"}
+
+        def user(token, session):
+            verifier_threads.append(threading.get_ident())
+            return {"sub": "admin", "iss": "https://securetoken.google.com/test-project", "aud": "test-project", "admin": True}
+
+        class Backend:
+            def operation_status(self, operation_id):
+                started.set()
+                release.wait(2)
+                return {"id": operation_id}
+
+        app = self.app(Backend(), service_verifier=service, user_verifier=user)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            self.assertEqual((await client.get("/identity", headers=self.headers)).status_code, 200)
+            self.assertTrue(all(thread != loop_thread for thread in verifier_threads))
+            blocked = asyncio.create_task(client.get("/operations/blocked", headers=self.headers))
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 1))
+                self.assertFalse(blocked.done())
+                response = await asyncio.wait_for(client.get("/ready", headers=self.headers), timeout=1)
+                self.assertEqual(response.status_code, 200)
+            finally:
+                release.set()
+                await blocked
+
+    async def test_private_responses_are_not_cacheable_and_errors_are_sanitized(self):
+        class Backend:
+            def operation_status(self, operation_id):
+                raise RuntimeError("private database path and credential")
+
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(Backend()), raise_app_exceptions=False), base_url="http://test") as client:
+            for route, headers, expected in [
+                ("/identity", self.headers, 200), ("/identity", {}, 401),
+                ("/operations/unknown", self.headers, 500),
+            ]:
+                response = await client.get(route, headers=headers)
+                self.assertEqual(response.status_code, expected)
+                self.assertIn("no-store", response.headers.get("cache-control", ""))
+                self.assertEqual(response.headers.get("x-content-type-options"), "nosniff")
+                self.assertNotIn("private database", response.text)
+                self.assertNotIn("credential", response.text if expected == 500 else "")
+
+    async def test_enqueue_rejects_ambiguous_or_non_json_inputs_before_persistence(self):
+        class Backend:
+            def __init__(self):
+                self.payloads = []
+
+            def enqueue_operation(self, payload, key):
+                self.payloads.append(payload)
+                raise AssertionError("Invalid input reached persistence")
+
+        backend = Backend()
+        valid_headers = {**self.headers, "Content-Type": "application/json"}
+        cases = [
+            (self.headers, b"{}", 415),
+            ({**valid_headers, "Content-Type": "text/plain"}, b"{}", 415),
+            (valid_headers, b"{", 400),
+            (valid_headers, b'{"action":"rename","action":"render"}', 400),
+            (valid_headers, b'{"value":NaN}', 400),
+            (valid_headers, b'{"value":Infinity}', 400),
+            (valid_headers, b'{"value":1e999}', 400),
+            (valid_headers, b"[" * 1500 + b"0" + b"]" * 1500, 400),
+            ({**valid_headers, "Idempotency-Key": "   "}, b"{}", 400),
+            ([*valid_headers.items(), ("Idempotency-Key", "second")], b"{}", 400),
+            ({**valid_headers, "Content-Length": "-1"}, b"{}", 400),
+            ({**valid_headers, "Content-Length": "3"}, b"{}", 400),
+            ([*valid_headers.items(), ("Content-Length", "2"), ("Content-Length", "3")], b"{}", 400),
+        ]
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(backend), raise_app_exceptions=False), base_url="http://test") as client:
+            for headers, body, expected in cases:
+                with self.subTest(headers=headers, body=body[:80]):
+                    response = await client.post("/operations", headers=headers, content=body)
+                    self.assertEqual(response.status_code, expected)
+        self.assertEqual(backend.payloads, [])
+
+    async def test_enqueue_limits_declared_and_streamed_body_size(self):
+        limit = 5 * 1024 * 1024
+        consumed = False
+
+        async def declared_body():
+            nonlocal consumed
+            consumed = True
+            yield b"{}"
+
+        async def streamed_body():
+            yield b" " * limit
+            yield b"x"
+
+        class Backend:
+            def enqueue_operation(self, payload, key):
+                raise AssertionError("Oversized body reached persistence")
+
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(Backend())), base_url="http://test") as client:
+            headers = {**self.headers, "Content-Type": "application/json"}
+            response = await client.post("/operations", headers={**headers, "Content-Length": str(limit + 1)}, content=declared_body())
+            self.assertEqual(response.status_code, 413)
+            self.assertFalse(consumed)
+            response = await client.post("/operations", headers=headers, content=streamed_body())
+            self.assertEqual(response.status_code, 413)
+
+    async def test_malformed_credentials_are_rejected_before_external_verifiers(self):
+        service_calls, user_calls = [], []
+
+        def service(token):
+            service_calls.append(token)
+            return {"sub": "svc", "iss": "https://accounts.google.com", "aud": "https://api"}
+
+        def user(token, session):
+            user_calls.append(token)
+            return {"sub": "admin", "iss": "https://securetoken.google.com/test-project", "aud": "test-project", "admin": True}
+
+        app = self.app(service_verifier=service, user_verifier=user)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            for authorization in ("Bearer ", "Bearer two tokens", "Bearer " + "x" * 16385):
+                response = await client.get("/identity", headers={**self.headers, "Authorization": authorization})
+                self.assertEqual(response.status_code, 401)
+            duplicate = [*self.headers.items(), ("Authorization", "Bearer second")]
+            self.assertEqual((await client.get("/identity", headers=duplicate)).status_code, 401)
+            self.assertEqual(service_calls, [])
+            for token in (" ", "two tokens", "x" * 16385):
+                response = await client.get("/identity", headers={**self.headers, "X-KoeTTS-User-Token": token})
+                self.assertEqual(response.status_code, 401)
+            self.assertEqual(user_calls, [])
+            response = await client.get("/identity", headers={**self.headers, "Authorization": "bearer service"})
+            self.assertEqual(response.status_code, 200)
+
+    async def test_invalid_direct_configuration_fails_before_serving(self):
+        for project, audience in (("", "https://api"), ("test-project", ""), (" ", "https://api")):
+            with self.subTest(project=project, audience=audience), self.assertRaises(ValueError):
+                create_app(BoundaryConfig(project, audience, {}))
+
+    async def test_concurrent_cold_start_initializes_firebase_once(self):
+        import asyncio
+        import threading
+        import time
+        from unittest.mock import patch
+
+        from manga_worker.http_auth import CredentialBoundary
+
+        initialized = []
+        start = threading.Barrier(2)
+        app = object()
+
+        def get_app(name):
+            if not initialized:
+                raise ValueError("No app")
+            return app
+
+        def initialize_app(**kwargs):
+            time.sleep(0.03)
+            if initialized:
+                raise ValueError("Already exists")
+            initialized.append(kwargs)
+            return app
+
+        def verify():
+            start.wait(timeout=2)
+            boundary = CredentialBoundary(BoundaryConfig("test-project", "https://api", {}))
+            return boundary._verify_user("token", False)
+
+        with patch("firebase_admin.get_app", side_effect=get_app), patch(
+            "firebase_admin.initialize_app", side_effect=initialize_app
+        ), patch("firebase_admin.auth.verify_id_token", return_value={"sub": "reader"}):
+            results = await asyncio.gather(asyncio.to_thread(verify), asyncio.to_thread(verify))
+        self.assertEqual(results, [{"sub": "reader"}, {"sub": "reader"}])
+        self.assertEqual(len(initialized), 1)

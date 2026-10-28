@@ -36,6 +36,8 @@ test('invalid authorization cannot fall back to a session', async () => {
 test('session mutations require an explicit same origin', () => {
   const api = load();
   assert.equal(api.trustedSessionRequest(request({ origin: 'http://localhost:3000' })), true);
+  assert.equal(api.trustedSessionRequest(request({ host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' })), true);
+  assert.equal(api.trustedSessionRequest(request({ host: '127.0.0.1:3000', origin: 'http://localhost:3000' })), false);
   for (const headers of [{}, { origin: 'https://attacker.example' }, { origin: 'http://localhost:3000', 'sec-fetch-site': 'cross-site' }]) assert.equal(api.trustedSessionRequest(request(headers)), false);
 });
 test('configured public origin survives hosting proxy without trusting forwarded hosts', t => {

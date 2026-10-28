@@ -260,7 +260,7 @@ class PipelineRouter:
     def update_metadata(self, metadata: dict[str, Any]) -> Project:
         """Commit transport-owned project metadata through the normal persistence seam."""
         allowed = {"title", "source_review_signature", "proposal_applied_signature",
-                   "web_export_signature", "web_export_scenes"}
+                   "web_export_signature", "web_export_scenes", "web_export_id"}
         if not isinstance(metadata, dict) or not set(metadata) <= allowed:
             raise ValueError("Unsupported project metadata fields")
         candidate = self._data()
@@ -522,7 +522,14 @@ class PipelineRouter:
     def export_audio(self, selection: RenderSelection, mp3: bool = False) -> ExportResult:
         """Assemble current chosen takes and overwrite fixed export files; never synthesize missing speech."""
         selection = RenderSelection.model_validate(selection)
+        candidate = self._data()
+        candidate.update(web_export_signature=None, web_export_scenes=[], web_export_id=None)
+        self._commit(candidate)
         wav = tts.export_audio(self._data(), self.root, selection.scene_ids, mp3)
+        candidate = self._data()
+        candidate.update(web_export_signature=storage.export_signature(candidate),
+                         web_export_scenes=selection.scene_ids, web_export_id=uuid.uuid4().hex)
+        self._commit(candidate)
         return ExportResult(wav_path=str(wav), export_directory=str(wav.parent))
 
     @operation("bundle")

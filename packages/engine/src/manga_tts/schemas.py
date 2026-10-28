@@ -348,6 +348,7 @@ class ProjectFields(Contract):
     proposal_applied_signature: str | None = None
     web_export_signature: str | None = None
     web_export_scenes: list[str] = Field(default_factory=list)
+    web_export_id: str | None = None
     chapter: dict[str, Any]
     settings: Settings
     sources: list[Source]
