@@ -6,6 +6,7 @@ uses standard input so reader notes and verified identity do not appear in argv.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,24 @@ from .paths import data_root
 
 class SharedService:
     def __init__(self, root: Path):
-        self.store = SharedRequests(root / "shared.sqlite3")
+        backend = os.environ.get("MANGA_SHARED_BACKEND", "sqlite")
+        metadata = None
+        if backend == "firestore":
+            from google.cloud import firestore
+
+            from .shared_firestore import FirestoreSharedMetadata, artifact_store_identity
+
+            project = os.environ.get("FIREBASE_PROJECT_ID", "")
+            database = os.environ.get("FIRESTORE_DATABASE_ID", "")
+            dataset = os.environ.get("MANGA_SHARED_DATASET", "")
+            if not project.strip() or not database.strip() or not dataset.strip():
+                raise ValueError("Explicit shared project, database and dataset required")
+            metadata = FirestoreSharedMetadata(
+                firestore.Client(project=project, database=database), dataset, artifact_store_identity(root),
+            )
+        elif backend != "sqlite":
+            raise ValueError("Invalid shared metadata backend")
+        self.store = SharedRequests(root / "shared.sqlite3", metadata=metadata)
 
     def execute(self, request: dict):
         action = request.get("action")

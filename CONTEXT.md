@@ -171,3 +171,26 @@ this evidence and the earlier compatibility review checkpoint.
 Next action: implement the worker-owned Firestore metadata adapter with explicit
 project/database/dataset configuration, transactional uniqueness records and local
 artifact-store binding; retain SQLite as default. Remaining phases are unchanged.
+
+### Phase 2 completion
+
+Added worker-owned FirestoreSharedMetadata and explicit backend selection. Required
+Firestore settings are FIREBASE_PROJECT_ID, FIRESTORE_DATABASE_ID and
+MANGA_SHARED_DATASET. SQLite stays default. Metadata transactions buffer all writes
+until reads finish, use uniqueness documents and explicit candidate/review sequences,
+and bind the namespace to .shared-artifact-store-id. No artifact I/O runs in SDK
+retry callbacks. google-cloud-firestore==2.34.1 is an optional worker dependency;
+pinned uv lock regeneration changed solver marker formatting without upgrading SDKs.
+
+Verification: root `npm run test:python` passed 133 tests (eight optional skips),
+log /tmp/firestore-phase2-python.log. Six Firestore emulator tests and three worker
+service tests passed together, log /tmp/firestore-phase2-emulator.log. Emulator uses
+only demo-shared-workflow/shared-tests on 127.0.0.1:8787; no live data writes.
+Ruff, repository checks and diff checks passed. Initial retry tests injected the
+wrong SDK failure point, then retained synthetic server locks; the corrected fixture
+rolls back before raising a commit conflict and proves stable identities/one copy.
+
+An installed Firestore emulator is running under exec session 36597, port8787;
+log /tmp/firestore-emulator-phase2.log. Revalidate this handle before reusing it.
+Next action: phase 3 dashboard presentation/navigation on existing /api/shared
+contracts, then phase 4 cutover preflight and phase 5 final acceptance/review.

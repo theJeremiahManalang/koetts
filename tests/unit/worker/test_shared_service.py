@@ -29,6 +29,27 @@ class SharedServiceTests(unittest.TestCase):
                 self.assertEqual({r["notes"] for r in admin_work[0]["requests"]}, {"first", "second"})
                 self.assertEqual(service.execute({"action": "requests", "reader": "bob"})[0]["status"], "approved")
 
+    def test_invalid_backend_and_incomplete_firestore_config_fail_without_fallback(self):
+        import os
+
+        for environment in ({"MANGA_SHARED_BACKEND": "unknown"}, {"MANGA_SHARED_BACKEND": "firestore"}):
+            with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, environment, clear=True):
+                root = Path(directory)
+                with self.assertRaises(ValueError):
+                    SharedService(root)
+                self.assertFalse((root / "shared.sqlite3").exists())
+
+    def test_artifact_store_identity_survives_restart_and_rejects_corruption(self):
+        from manga_worker.shared_firestore import artifact_store_identity
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            identity = artifact_store_identity(root)
+            self.assertEqual(artifact_store_identity(root), identity)
+            (root / ".shared-artifact-store-id").write_text("corrupt")
+            with self.assertRaises(ValueError):
+                artifact_store_identity(root)
+
 
 if __name__ == "__main__":
     unittest.main()

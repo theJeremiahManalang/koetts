@@ -112,3 +112,14 @@ ambiguous headers, duplicate fields and non-finite numbers, and validates bounde
 credentials before external verification. Private responses disable caching and
 content sniffing. Firebase app initialization is serialized across concurrent first
 requests. These controls preserve the separate hosted verification-only boundary.
+
+Shared metadata has an explicit worker-owned Firestore adapter, selected with
+`MANGA_SHARED_BACKEND=firestore`, `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`, and
+`MANGA_SHARED_DATASET`. SQLite remains the default. Firestore datasets live beneath
+`shared_workflow_v1/{dataset}` and bind to a persisted local artifact-store identity.
+Transactional uniqueness records coordinate chapter/configuration deduplication,
+reader/work identity and project links. Publication pointers and chapter status
+commit together. Candidate/review order uses an explicit sequence, and retryable
+callbacks contain metadata operations only. Artifact bytes, verification cache,
+production workspaces and locks remain local; hosted shared routes stay disabled.
+The legacy `manga_requests` collection is not read, migrated or modified.

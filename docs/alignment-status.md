@@ -705,3 +705,21 @@ The 35 existing shared engine/worker tests passed after extraction. Full Python
 acceptance and the added retry regression passed; exact results are recorded in
 `CONTEXT.md`. No Firestore adapter, live data migration or deployment is claimed
 by this phase. The next phase is the explicitly selected Firestore metadata adapter.
+
+### Firestore shared workflow — phase 2
+
+The optional worker Firestore adapter implements shared metadata transactions with
+explicit project/database/dataset selection, transactionally protected uniqueness
+records, monotonic candidate/review sequences, atomic publication/status changes,
+and binding to one local artifact-store identity. SQLite remains the default and
+configuration/connection failures never select a fallback store. The SDK is an
+explicit optional worker dependency; the uv lockfile was regenerated with pinned uv.
+
+Root Python acceptance passed 133 tests with eight skips (six emulator-only tests
+and the two existing external HTTP/sample prerequisites). Emulator acceptance covers
+concurrent duplicate intake, reader isolation and deletion, relinking, exact reviewed
+publication, recovery, failed replacement, competing publication, dataset binding
+and commit-conflict retries without repeated artifact copies. Retry fault injection
+releases the server transaction before raising its synthetic commit conflict.
+No live Firestore record was written. Live durability and hosted delivery remain
+outside this same-host implementation. Cutover preflight is the later phase 4 gate.
