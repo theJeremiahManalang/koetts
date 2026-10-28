@@ -502,3 +502,61 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(response.headers.get("x-content-type-options"), "nosniff")
                 self.assertNotIn("private database", response.text)
                 self.assertNotIn("credential", response.text if expected == 500 else "")
+
+    async def test_enqueue_rejects_ambiguous_or_non_json_inputs_before_persistence(self):
+        class Backend:
+            def __init__(self):
+                self.payloads = []
+
+            def enqueue_operation(self, payload, key):
+                self.payloads.append(payload)
+                raise AssertionError("Invalid input reached persistence")
+
+        backend = Backend()
+        valid_headers = {**self.headers, "Content-Type": "application/json"}
+        cases = [
+            (self.headers, b"{}", 415),
+            ({**valid_headers, "Content-Type": "text/plain"}, b"{}", 415),
+            (valid_headers, b"{", 400),
+            (valid_headers, b'{"action":"rename","action":"render"}', 400),
+            (valid_headers, b'{"value":NaN}', 400),
+            (valid_headers, b'{"value":Infinity}', 400),
+            (valid_headers, b'{"value":1e999}', 400),
+            (valid_headers, b"[" * 1500 + b"0" + b"]" * 1500, 400),
+            ({**valid_headers, "Idempotency-Key": "   "}, b"{}", 400),
+            ([*valid_headers.items(), ("Idempotency-Key", "second")], b"{}", 400),
+            ({**valid_headers, "Content-Length": "-1"}, b"{}", 400),
+            ({**valid_headers, "Content-Length": "3"}, b"{}", 400),
+            ([*valid_headers.items(), ("Content-Length", "2"), ("Content-Length", "3")], b"{}", 400),
+        ]
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(backend), raise_app_exceptions=False), base_url="http://test") as client:
+            for headers, body, expected in cases:
+                with self.subTest(headers=headers, body=body[:80]):
+                    response = await client.post("/operations", headers=headers, content=body)
+                    self.assertEqual(response.status_code, expected)
+        self.assertEqual(backend.payloads, [])
+
+    async def test_enqueue_limits_declared_and_streamed_body_size(self):
+        limit = 5 * 1024 * 1024
+        consumed = False
+
+        async def declared_body():
+            nonlocal consumed
+            consumed = True
+            yield b"{}"
+
+        async def streamed_body():
+            yield b" " * limit
+            yield b"x"
+
+        class Backend:
+            def enqueue_operation(self, payload, key):
+                raise AssertionError("Oversized body reached persistence")
+
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(Backend())), base_url="http://test") as client:
+            headers = {**self.headers, "Content-Type": "application/json"}
+            response = await client.post("/operations", headers={**headers, "Content-Length": str(limit + 1)}, content=declared_body())
+            self.assertEqual(response.status_code, 413)
+            self.assertFalse(consumed)
+            response = await client.post("/operations", headers=headers, content=streamed_body())
+            self.assertEqual(response.status_code, 413)
