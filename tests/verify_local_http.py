@@ -87,6 +87,9 @@ export function getAdminAuth() {
     return { uid: value, aud: "offline-fixture", admin: value === "fixture-admin" };
   }
   return { verifyIdToken: verify, verifySessionCookie: verify,
+    getUsers: async (_identifiers: import("firebase-admin/auth").UserIdentifier[]): Promise<import("firebase-admin/auth").GetUsersResult> => {
+      throw new Error("Live Firebase profile lookup is disabled in the disposable HTTP fixture");
+    },
     createSessionCookie: async (value: string, _options?: { expiresIn: number }) => { await verify(value); return value; } };
 }
 ''')

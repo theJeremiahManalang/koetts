@@ -117,3 +117,19 @@ Review/commit cleanup, including the untracked relocated API route and new test.
 - Changed apps/web/app/globals.css only: admin navigation now uses animated sage underlines, a persistent thicker active-page line, subtle hover tint/lift, pressed tint/offset, visible keyboard outline, and reduced-motion overrides. Preserved current Home / Requests / Studio labels, destinations and draft-navigation guards.
 - Verification: Rendered actual dashboard/navigation with synthetic data in a local preview; inspected active Requests underline and keyboard focus. Browser computed styles confirmed 3px expanded active underline and collapsed inactive underlines. No JS or route behavior changed; no new tests/build required for this CSS-only change. Preview tab closed and server stopped.
 - Next action: Report updated interactions.
+
+## 2026-10-28 — PR description for dev-test-1 into main
+- Objective/authorization: User requested inspecting branch changes and drafting a PR description; no PR creation, commit, push or merge requested.
+- Evidence: Refreshed origin/main and origin/dev-test-1. Local and remote refs match: main ede54cd, dev-test-1 bdfead4. Compared merge-base diff: 22 files, 1,340 insertions, 296 deletions. Clean working tree before this checkpoint.
+- Scope for description: authenticated Firestore request submission/user-owned listing; admin-only shared dashboard and transactional status updates; requester display names; rejection confirmation and icon actions; Studio request/new-chapter handoff and project-selection panel; admin/account navigation; named Firestore database configuration and regression tests. Historical commit titles for auth/idempotency do not add corresponding changes in the final merge-base diff.
+- Validation: Fresh npm run test:web and npm run typecheck results recorded in .cache/pr-description-tests.log and .cache/pr-description-types.log. Prior full acceptance/build/HTTP blockers remain documented; no new full-suite success claimed.
+- Material limitations for description: browser-local requests are not migrated automatically; reader deletion is not wired to Firestore (legacy localStorage code and commented dialog actions remain); Generate opens Studio preparation and does not bypass uploads/cast/script approval or start paid generation.
+- Next action: Deliver copy-ready PR title/body. No GitHub PR created.
+
+## 2026-10-28 — Fix getUsers TS2339 in disposable HTTP build
+- Objective/approval: User requested fixing getUsers missing from getAdminAuth return type in app/api/admin/requests/route.ts.
+- Root cause: tests/verify_local_http.py replaces the Firebase module in its disposable checkout. Its inferred authentication object included token/session verification and cookie creation but omitted the getUsers method used by the admin requests endpoint. Production getAdminAuth already returns Firebase Admin Auth with getUsers.
+- Fix: Added a getUsers method typed with SDK UserIdentifier[] and Promise<GetUsersResult> to the disposable fixture; it throws to prevent live profile lookup. No production casts, SDK changes, credentials, or auth bypass.
+- Regression: apps/web/tests/http-fixture-types.test.cjs extracts the actual Python-embedded fixture, substitutes it in-memory through a TypeScript compiler host, and typechecks the real admin requests route. Also checks that fixture getUsers rejects live lookup.
+- Checks: npm run test:web PASS 50/50; npm run typecheck PASS; uv run --locked ruff check tests/verify_local_http.py PASS; scoped git diff --check PASS. Full npm run test:http attempted, result in .cache/getusers-http.log; prior network/Windows harness blockers remain separate from the fixed TypeScript contract.
+- Next action: Report fixture fix and verification; user reruns CI/HTTP build.
