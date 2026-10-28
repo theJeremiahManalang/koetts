@@ -6,9 +6,12 @@ import json
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from manga_worker.http_auth import BoundaryConfig, CredentialBoundary
 from manga_tts.schemas import WorkflowError
+
+PRIVATE_HEADERS = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
 
 
 def create_app(
@@ -17,6 +20,12 @@ def create_app(
     config = config or BoundaryConfig.from_environment()
     boundary = CredentialBoundary(config, service_verifier, user_verifier)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+    @app.middleware("http")
+    async def private_response_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.update(PRIVATE_HEADERS)
+        return response
 
     def application():
         if config.mode != "local":
@@ -39,23 +48,23 @@ def create_app(
     @app.exception_handler(Exception)
     async def safe_failure(request, exc):
         return JSONResponse(
-            status_code=500, content={"error": "Workflow request failed"}
+            status_code=500, content={"error": "Workflow request failed"}, headers=PRIVATE_HEADERS,
         )
 
     @app.get("/ready")
-    async def ready(request: Request):
+    def ready(request: Request):
         boundary.authorize(request, "readiness", user=False)
         return {"ready": True, "mode": config.mode}
 
     @app.get("/identity")
-    async def identity(request: Request):
+    def identity(request: Request):
         return {
             "principal": boundary.authorize(request, "identity"),
             "mode": config.mode,
         }
 
     @app.get("/projects/{project_id}")
-    async def snapshot(project_id: str, request: Request):
+    def snapshot(project_id: str, request: Request):
         boundary.authorize(request, "snapshot")
         backend = application()
         try:
@@ -76,14 +85,14 @@ def create_app(
             return backend.snapshot(router)
 
     @app.get("/projects/{project_id}/assets/{asset_path:path}")
-    async def asset(project_id: str, asset_path: str, request: Request):
+    def asset(project_id: str, asset_path: str, request: Request):
         boundary.authorize(request, "asset")
         raise HTTPException(503, "Asset delivery unavailable")
 
     @app.post("/operations", status_code=202)
     async def enqueue(request: Request):
-        actor = boundary.authorize(request, "enqueue")
-        backend = application()
+        actor = await run_in_threadpool(boundary.authorize, request, "enqueue")
+        backend = await run_in_threadpool(application)
         key = request.headers.get("idempotency-key", "")
         if not key or len(key) > 200:
             raise HTTPException(
@@ -103,7 +112,10 @@ def create_app(
         payload["actor"] = actor
         # No worker is started here: durable queue ownership remains separate.
         try:
-            return backend.enqueue_operation(payload, key).public()
+            def persist():
+                return backend.enqueue_operation(payload, key).public()
+
+            return await run_in_threadpool(persist)
         except (ValueError, RuntimeError) as exc:
             from manga_tts.schemas import WorkflowError
 
@@ -116,7 +128,7 @@ def create_app(
             raise HTTPException(400, "Invalid operation request") from None
 
     @app.get("/operations/{operation_id}")
-    async def status(operation_id: str, request: Request):
+    def status(operation_id: str, request: Request):
         boundary.authorize(request, "poll")
         backend = application()
         try:
