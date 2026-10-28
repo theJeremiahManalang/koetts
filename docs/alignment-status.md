@@ -1,5 +1,8 @@
 # Architecture alignment acceptance evidence
 
+Historical acceptance commands/source paths below identify the checkout at evaluation time. The current monorepo source map is [architecture](architecture.md); current tooling and checks are in [developer setup](development.md).
+
+
 ## S0 — Complete, 19 October 2026
 
 Assignment: reproduce the existing application baseline and deepen local worker
@@ -39,7 +42,7 @@ No later scope had been implemented at the time of this S0 report.
   `npm test` selects `web/tests/*.test.cjs`; duplicate tests under `web/lib/` are not
   selected. No cleanup was performed.
 - **Workflow:** `web/app/api/workflow/route.ts` validates/stages requests and calls
-  `web/lib/workflow.ts`. Node persists request/job JSON, launches `web_workflow.py`,
+  `web/lib/workflow.ts`. Node persists request/job JSON, launches `apps/worker/src/manga_worker/workflow.py`,
   and exposes polling. Python `run_job` acquires `manga_tts.cli.workspace_lock`;
   `perform` validates the expected project fingerprint before applied mutations.
   Typed operations enter `PipelineRouter`; CLI review/application reaches the same
@@ -251,7 +254,7 @@ Python 3.11.15 came from `/tmp/manga-s0-venv`; Node was v24.18.0 and npm 11.16.0
 | --- | --- |
 | `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -v` / repository root | Exit 0; 59 tests run, 57 passed, two optional skips |
 | `/tmp/manga-s0-venv/bin/python -m unittest discover -s tests -p 'test_persistence.py' -v` / repository root | Exit 0; 13 passed |
-| Ruff 0.16.7 `check` and `check --select I` on `manga_tts/persistence.py`, `manga_tts/router.py`, `manga_tts/storage.py`, `web_workflow.py`, `tests/test_persistence.py`, and `tests/test_web_workflow.py` | Exit 0; both checks reported all checks passed |
+| Ruff 0.16.7 `check` and `check --select I` on `manga_tts/persistence.py`, `manga_tts/router.py`, `manga_tts/storage.py`, `apps/worker/src/manga_worker/workflow.py`, `tests/test_persistence.py`, and `tests/test_apps/worker/src/manga_worker/workflow.py` | Exit 0; both checks reported all checks passed |
 | Pyright 1.1.414 / same six S1 Python files | Exit 0; zero errors, warnings, or informationals using Python 3.11.15 and basic checking mode. Temporary config removed after the check. |
 | `npm test` / `web/` | Exit 0; eight assertions passed |
 | `npm run typecheck` / `web/` | Exit 0 |
@@ -277,7 +280,7 @@ The local studio still uses filesystem persistence by default.
 ## S2 — Complete, 20 October 2026
 
 Post-implementation S1/S2 review and recovery fixes are recorded in
-[the review evidence](s1-s2-review.md), including independent review results,
+[the review evidence](archive/s1-s2-review.md), including independent review results,
 restart and upload regressions, and current validation limits. This follow-up
 supersedes the earlier absence-of-findings claim for the reviewed recovery paths.
 
@@ -302,7 +305,7 @@ out of scope.
   leases, and have a 30-minute timeout. A stale worker is recovered only after
   confirming PID plus process creation time and reconciling the project lock.
 - A provider call without a durable result enters `reconciliation_required` and
-  retains its stage slot. The local `web_workflow.py reconcile` command requires an
+  retains its stage slot. The local `apps/worker/src/manga_worker/workflow.py reconcile` command requires an
   explicit fail or retry decision; retry may repeat billing. Safe stopped work with
   a durable segment checkpoint returns to the queue and resumes from that checkpoint.
 - Existing JSON job files are read-only polling fallbacks for IDs absent from
@@ -387,7 +390,7 @@ accounts, impersonate users or invoke paid providers.
   decision, approval fingerprint, timestamp and operation identity. Retry deduplication
   and legacy empty-history serialization preserve existing compatibility. CLI actors
   are explicitly local. Audit survives project bundles and restore.
-- `manga_tts/http_auth.py` independently verifies Google issuer/audience/signature,
+- `apps/worker/src/manga_worker/http_auth.py` independently verifies Google issuer/audience/signature,
   service subject/action permission, and exactly one revoked-checked Firebase user
   credential. `http_api.py` wraps snapshot and durable enqueue/poll services in local
   mode. Its default verification mode refuses project, asset and operation access
@@ -505,7 +508,7 @@ this report does not establish S4 or S5 completion.
 
 ### Final code review follow-up
 
-[Final S3 review](s3-final-review.md) records two subsequently discovered defects
+[Final S3 review](archive/s3-final-review.md) records two subsequently discovered defects
 in local polling recovery and audit subject identity, red/green regression evidence,
 separate fixes `434c81e` and `4161dfa`, fresh verification and clean independent
 follow-up reviews. It supersedes earlier no-findings claims for those paths.

@@ -64,17 +64,20 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="manga-s0-http-") as directory:
         runtime = Path(directory)
-        for source in repo.glob("*.py"):
-            shutil.copy2(source, runtime / source.name)
-        for name in ("manga_tts", "tests"):
-            shutil.copytree(repo / name, runtime / name, ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.copytree(repo / "web", runtime / "web", ignore=shutil.ignore_patterns(
-            "node_modules", ".next", "*.tsbuildinfo"))
-        # A real copy keeps Turbopack resolution and generated files inside the runtime.
-        shutil.copytree(repo / "web/node_modules", runtime / "web/node_modules", symlinks=True)
+        for name in ("pyproject.toml", "uv.lock", "package.json", "package-lock.json", ".python-version", ".npmrc", ".nvmrc"):
+            shutil.copy2(repo / name, runtime / name)
+        for name in ("packages", "apps", "tests"):
+            shutil.copytree(repo / name, runtime / name, ignore=shutil.ignore_patterns(
+                "__pycache__", "node_modules", ".next", "*.tsbuildinfo", "next-env.d.ts", ".env", ".env.local"))
+        # Resolve the same locked Python workspace inside the disposable source tree.
+        uv = shutil.which("uv")
+        check(uv is not None, "Install the pinned uv version before running HTTP checks")
+        subprocess.run([uv, "sync", "--frozen"], cwd=runtime, check=True, timeout=180)
+        interpreter = runtime / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        shutil.copytree(repo / "node_modules", runtime / "node_modules", symlinks=True)
         # Replace the external identity SDK only in this disposable source copy.
         # No environment variable or fixture credential can bypass production auth.
-        (runtime / "web/lib/firebase-admin.ts").write_text('''
+        (runtime / "apps/web/features/identity/firebase-admin.ts").write_text('''
 export function getAdminAuth() {
   async function verify(value: string, _checkRevoked?: boolean) {
     if (value !== "fixture-admin" && value !== "fixture-reader") throw new Error("Invalid fixture");
@@ -84,14 +87,16 @@ export function getAdminAuth() {
     createSessionCookie: async (value: string, _options?: { expiresIn: number }) => { await verify(value); return value; } };
 }
 ''')
-        env = {**os.environ, "PYTHON_EXECUTABLE": sys.executable,
+        env = {**os.environ, "PYTHON_EXECUTABLE": str(interpreter),
+               "MANGA_REPO_ROOT": str(runtime), "MANGA_DATA_ROOT": str(runtime / "results/web"),
                "GEMINI_API_KEY": "", "NEXT_TELEMETRY_DISABLED": "1"}
         env.pop("MANGA_WEB_TEST_URL", None)
+        env.pop("VIRTUAL_ENV", None)
         for frontend_only in (False, True):
             env["MANGA_FRONTEND_ONLY"] = "1" if frontend_only else "0"
             label = "frontend-only" if frontend_only else "studio"
             if not args.dev:
-                build = subprocess.Popen(["npm", "run", "build"], cwd=runtime / "web", env=env,
+                build = subprocess.Popen(["npm", "run", "build"], cwd=runtime / "apps/web", env=env,
                                          start_new_session=True)
                 try:
                     code = build.wait(timeout=180)
@@ -107,7 +112,7 @@ export function getAdminAuth() {
             if args.webpack:
                 command.append("--webpack")
             with (runtime / (label + ".log")).open("w+") as log:
-                server = subprocess.Popen(command, cwd=runtime / "web", env=env,
+                server = subprocess.Popen(command, cwd=runtime / "apps/web", env=env,
                                           stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 try:
                     deadline = time.monotonic() + 90
@@ -140,7 +145,7 @@ export function getAdminAuth() {
                             with fetch(base, route) as response:
                                 check(response.status == 200, "Route failed: " + route)
                                 check(b"<html" in response.read(), "Missing HTML: " + route)
-                        subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests",
+                        subprocess.run([str(interpreter), "-m", "unittest", "discover", "-s", "tests/integration", "-t", ".",
                                         "-p", "test_web_http.py", "-v"], cwd=runtime,
                                        env={**env, "MANGA_WEB_TEST_URL": base,
                                             "MANGA_WEB_TEST_TOKEN": "fixture-admin"}, check=True, timeout=120)

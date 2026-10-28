@@ -1,0 +1,45 @@
+[project]
+name = "manga-vision"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = ["Pillow==11.1.0"]
+
+[project.scripts]
+manga-vision = "manga_vision.cli:main"
+
+[project.optional-dependencies]
+inference = ["transformers==4.45.2", "tokenizers==0.20.3", "huggingface-hub==0.26.5",
+  "safetensors==0.4.5", "numpy==1.26.4", "einops==0.8.0", "timm==1.0.12",
+  "pytorch-metric-learning==2.8.1", "matplotlib==3.9.4", "shapely==2.0.6", "networkx==3.4.2"]
+cpu = ["manga-vision[inference]", "torch==2.5.1", "torchvision==0.20.1"]
+cuda124 = ["manga-vision[inference]", "torch==2.5.1", "torchvision==0.20.1"]
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cuda124" }]]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu124", extra = "cuda124" },
+]
+torchvision = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu124", extra = "cuda124" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/manga_vision"]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"

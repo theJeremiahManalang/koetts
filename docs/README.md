@@ -1,35 +1,22 @@
-# Project documentation
+# Documentation authority
 
-## Authority and reading paths
+Runtime source, workspace manifests, and lockfiles establish implemented behavior and dependencies. These documents add conventions and domain rationale; migration plans describe future work.
 
-Runtime source and configuration establish implemented behavior. The following
-files hold different kinds of context; a future design is not runtime evidence.
-
-| Need | Authoritative document |
+| Need | Guide |
 | --- | --- |
-| Substantial new task or material scope change | [prompt approval](agents/prompt-approval.md) |
-| Writing agent instructions or skills | [project writing-for-agents skill](../.agents/skills/writing-for-agents/SKILL.md) |
-| Current architecture and code seams | [architecture.md](architecture.md) |
-| Accepted release scope, target architecture, unresolved decisions | [target-design.md](target-design.md) |
-| Implementation scopes and acceptance checks | [architecture-alignment-plan.md](architecture-alignment-plan.md) |
-| Assign one implementation scope | [architecture-alignment-prompt.md](architecture-alignment-prompt.md) |
-| Local setup | [web guide](../web/README.md), [models](MODELS.md) |
-| Review, synthesis, export, recovery | [audio workflow](AUDIO_WORKFLOW.md) |
-| Existing frontend hosting configuration | [App Hosting](APP_HOSTING.md) |
-| Historical checks and inspection | [validation history](VALIDATION.md), [baseline](current-app-baseline.md) |
-| Extraction research | [research notes](TEXT_EXTRACTION_RESEARCH.md) |
+| Entrypoints and ownership | [Root README](../README.md) |
+| Setup, commands, environments, troubleshooting | [Developer setup](development.md) |
+| Team review and dependency workflow | [Contributing](../CONTRIBUTING.md) |
+| Implemented boundaries | [Architecture](architecture.md) |
+| Domain terms | [Glossary](../GLOSSARY.md) |
+| Extraction and hardware setup | [Models](MODELS.md) |
+| Review, synthesis, export, recovery | [Audio workflow](AUDIO_WORKFLOW.md) |
+| Login and trusted admin access | [Firebase authentication](FIREBASE_AUTH.md) |
+| Frontend hosting | [App Hosting](APP_HOSTING.md) |
+| Private HTTP service | [API deployment](S3_DEPLOYMENT.md) |
+| Accepted target/open decisions | [Target design](target-design.md) |
+| Migration scopes and evidence | [Plan](architecture-alignment-plan.md), [status](alignment-status.md) |
 
-[AGENTS.md](../AGENTS.md) routes agents to conditional context. Project skills live
-under `.agents/skills/`; they contain reusable procedures, not roadmap status.
-For harness validation evidence and measured reading costs, consult
-[the prompt-approval validation record](agents/prompt-approval-validation.md).
-[CONTEXT.md](../CONTEXT.md) records the active assignment and handoff only.
-Migration acceptance evidence belongs in [alignment-status.md](alignment-status.md).
-Use its recorded source boundaries, commands, outcomes, and limitations to assess
-scope prerequisites; historical reports alone do not establish completion.
+[Root agent guide](../AGENTS.md) routes scoped instructions. [Prompt approval](agents/prompt-approval.md) owns substantial-task approval; [writing guidance](agents/writing.md) owns harness conventions. `CONTEXT.md` records only the active task handoff.
 
-## Historical material
-
-[archive/](archive/) preserves the original OCR walkthrough and imported architecture
-handoff/prompts. Consult it only to recover unique rationale or historical intent.
-The active target design supersedes old claims that cloud policy was agreed.
+[Archive](archive/README.md) retains unique historical rationale and acceptance evidence. Historical paths and commands describe their original checkout and are not current onboarding instructions.

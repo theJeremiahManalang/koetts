@@ -1,23 +1,29 @@
 # Current application architecture
 
-Source inspection: 20 October 2026. This describes implemented boundaries, not a
+Source map updated: 22 October 2026. This describes implemented boundaries, not a
 new runtime verification. Historical test results remain in the baseline and
 validation record. Reinspect affected source when implementation changes.
 
+## Workspace ownership
+
+The root uv/npm workspaces own dependency installation and lockfiles. Deployable adapters live in `apps/web` and `apps/worker`; reusable production/image code lives in `packages/engine` and `packages/vision`. `manga_tts` and `manga_vision` remain the public Python namespaces; worker adapters now use `manga_worker`. Legacy root scripts and import aliases were removed after updating callers.
+
+Web features follow a directed graph: identity is independent; library uses identity; requests uses library and identity; studio uses identity. Features import no route adapter. The shared wire types remain owned by studio and are consumed by server transport. Domain unit tests and cross-application integration tests have separate owners.
+
 ## Local production studio
 
-The studio at `/` uses `web/app/page.tsx` and active workspaces in
-`web/components/`. Browser state owns unsaved review drafts. Shared TypeScript
-contracts are in `web/lib/types.ts`; Python commands are in `manga_tts/schemas.py`.
+The studio at `/` uses `apps/web/app/page.tsx` and active workspaces in
+`apps/web/features/studio/`. Browser state owns unsaved review drafts. Shared TypeScript
+contracts are in `apps/web/features/studio/types.ts`; Python commands are in `packages/engine/src/manga_tts/schemas.py`.
 
-`web/app/api/workflow/route.ts` persists each request with an idempotency key before
-returning an operation ID. `web/lib/workflow.ts` claims queued work and starts finite
+`apps/web/app/api/workflow/route.ts` persists each request with an idempotency key before
+returning an operation ID. `apps/web/lib/workflow.ts` claims queued work and starts finite
 local Python subprocesses. The browser polls operations and can recover a lost enqueue
 response by key. Python workers resolve pinned parameters from the operation store,
-then route production work through `PipelineRouter` in `manga_tts/router.py`; the CLI
+then route production work through `PipelineRouter` in `packages/engine/src/manga_tts/router.py`; the CLI
 uses the same engine.
 The engine owns validated applied state, approval validity, takes, and export.
-MAGI extraction preserves evidence; Gemini planning and synthesis are provider
+`packages/vision/` owns model identity, image helpers, and the lazy MAGI adapter. MAGI extraction preserves evidence; Gemini planning and synthesis are provider
 adapters. See the [audio workflow](AUDIO_WORKFLOW.md) for domain semantics.
 
 Persistence defaults to local files under `results/web/`: projects contain
@@ -57,7 +63,7 @@ engine mutations. The project-hash value in snapshots remains the expected-state
 contract; durable revision IDs are separate.
 
 S3 adds independently authenticated short-operation HTTP contracts in
-`manga_tts/http_api.py`. The default verification mode authorizes identities but
+`apps/worker/src/manga_worker/http_api.py`. The default verification mode authorizes identities but
 refuses all project, asset and operation access before touching workspaces. Local
 mode wraps the same snapshot and durable queue services; requests never run long
 generation inline. Service audience/subject/action checks and Firebase user checks
@@ -67,27 +73,23 @@ Approval audit records are part of project state, saved in the same commit as ca
 and scene decisions. Web actors come from verified request identity; worker retries
 retain that actor and operation identity. Local CLI actors are labeled separately.
 
-The bridge in `web/lib/python.ts` selects `PYTHON_EXECUTABLE`, then the repository
-virtual environment, then `python`. Operation recovery uses `psutil` from
-`requirements-audio.txt` to confirm local process identity. Check interpreter and
-dependency availability before startup.
-Dependency manifests and `web/package.json` are authoritative for dependencies and
-available commands. Older duplicate components/tests require reachability checks
-before removal.
+The bridge in `apps/web/lib/python.ts` invokes installed `manga_worker` modules using `PYTHON_EXECUTABLE` or the root uv environment. Repository discovery ascends to the root npm manifest; explicit absolute `MANGA_REPO_ROOT` supports unusual launchers. `MANGA_DATA_ROOT` pins the same local state directory for Node and Python workers. Installed workers use their documented user-data fallback outside a checkout.
+
+The uv workspace has one lockfile and a lightweight default environment; optional CPU/CUDA vision extras retain the existing model stack. The worker app owns HTTP/OCR/workflow adapters. The engine package owns production decisions and imports no application code. Vision owns image/model utilities and imports no engine code. Root repository checks enforce these directions.
 
 ## Reader demo and hosting
 
-Browse, manga details, and reader pages use `web/app/data/manga.ts` sample data.
+Browse, manga details, and reader pages use `apps/web/features/library/fixtures/catalog.ts` sample data.
 The request form stores requests in browser storage; `/requests` displays the local
 list and Listen is inactive. Google sign-in and trusted admin claims protect the
 studio page, workflow/extraction APIs and private assets. No shared requests,
 publication or hosted production-processing backend are implemented.
 
-`firebase.json` targets the `web/` App Hosting application. Its frontend-only mode
-in `web/apphosting.yaml` and Next configuration redirects the home route and guards
+`firebase.json` targets the `apps/web/` App Hosting application. Its frontend-only mode
+in `apps/web/apphosting.yaml` and Next configuration redirects the home route and guards
 workflow/extraction/asset APIs with HTTP 503. The local studio remains loopback
 bound with origin checks. These checks are not user authentication.
 
 See [target-design.md](target-design.md) for the accepted migration destination.
-See [the historical baseline](current-app-baseline.md) for deeper inspection notes;
+See [the historical baseline](archive/current-app-baseline.md) for deeper inspection notes;
 its recorded checks are not current pass claims.
