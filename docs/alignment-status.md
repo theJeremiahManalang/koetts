@@ -739,3 +739,21 @@ All 17 web test files passed, including new profile batching/failure and Studio
 context regressions. Pinned typecheck and production build passed. Existing reader
 server deletion and playback tests remain passing. HTTP fixture profile lookup is
 synthetic; this phase makes no live Firebase profile or hosted processing claim.
+
+### Firestore shared workflow — phase 4
+
+Read-only `manga_worker.shared_cutover` reports source/target counts, schema, local
+artifact identity, binding and blockers. Activation refuses populated SQLite,
+foreign/schema-mismatched or orphan target metadata, and unexpected collections.
+An explicit local binding prevents automatic SQLite fallback. With clients stopped,
+`--release-empty-binding` permits rollback only before any remote initialization;
+initialized targets require explicit reconciliation. Legacy records are never imported
+or deleted. Configuration and stop/preflight/activation/rollback steps are documented.
+
+Read-only live preflight on `koetts-9bf7f/koetts-default`, dataset `local-studio`, found
+no SQLite shared database, no target namespace, and six legacy requests. It returned
+ready without creating local identity/binding files or remote metadata. No migration
+was required or applied. Thirteen emulator/service tests passed; root Python
+acceptance passed 137 tests with twelve skips (ten emulator tests plus existing
+external sample/HTTP prerequisites). Live writes, deployment and IAM/rules changes
+were not performed. Final acceptance and independent review remain phase 5.

@@ -214,3 +214,20 @@ checks passed. No live profile lookup or data write was performed.
 
 Next action: phase 4 read-only cutover preflight and runtime refusal of unsafe
 backend changes, then phase 5 emulator runner/full acceptance/independent review.
+
+### Phase 4 completion
+
+Added shared_cutover read-only CLI and runtime cutover guards. It inventories local
+SQLite in read-only mode, target collections/schema/artifact owner and legacy count.
+Explicit binding blocks silent SQLite fallback. App-stopped rollback removes only
+an empty-target binding; initialized Firestore requires reconciliation. Existing
+SQLite data, schema/identity mismatches and orphan/unknown target collections block
+activation. Environment example and developer documentation describe these steps.
+
+Live read-only preflight passed for koetts-9bf7f/koetts-default/local-studio:
+no local shared DB, no target namespace, no identity/binding, six legacy records.
+Report: /tmp/firestore-phase4-live-preflight.json. No live writes or migration applied.
+Emulator+service13 tests passed (/tmp/firestore-phase4-emulator.log). Root Python
+137 tests passed,12 optional skips (/tmp/firestore-phase4-python.log). Ruff, repository
+pointer checks and diff checks passed. Next: phase5 reproducible emulator runner,
+shared backend contract parity, full acceptance, independent Standards/Spec review.

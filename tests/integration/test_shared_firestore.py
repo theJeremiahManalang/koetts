@@ -141,3 +141,60 @@ class FirestoreSharedTests(unittest.TestCase):
         self.assertEqual(identities, [candidate["id"], candidate["id"]])
         self.store.metadata = backend
         self.assertEqual(self.store.review_state(snapshot.work_id)["candidate"]["id"], candidate["id"])
+
+    def test_preflight_is_read_only_and_excludes_legacy_requests(self):
+        from manga_worker.shared_cutover import FirestoreSettings, inspect_cutover
+
+        settings = FirestoreSettings("demo-shared-workflow", "shared-tests", self.dataset)
+        before = {path.name for path in self.root.iterdir()}
+        report = inspect_cutover(self.root, self.client, settings)
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["legacy_manga_requests"]["action"], "leave untouched; excluded from new workflow")
+        self.assertFalse(report["target_exists"])
+        self.assertEqual(before, {path.name for path in self.root.iterdir()})
+        self.assertFalse(self.metadata.root.get().exists)
+
+    def test_binding_blocks_silent_fallback_and_allows_only_empty_rollback(self):
+        from unittest.mock import patch
+
+        from manga_worker.shared import SharedService
+        from manga_worker.shared_cutover import FirestoreSettings, bind_firestore, release_empty_binding
+
+        settings = FirestoreSettings("demo-shared-workflow", "shared-tests", self.dataset)
+        bind_firestore(self.root, self.client, settings)
+        with patch.dict(os.environ, {"MANGA_SHARED_BACKEND": "sqlite"}):
+            with self.assertRaises(ValueError):
+                SharedService(self.root)
+        release_empty_binding(self.root, self.client, settings)
+        self.assertFalse((self.root / ".shared-backend.json").exists())
+        bind_firestore(self.root, self.client, settings)
+        self.store.submit("alice", "Manga", "1", "")
+        with self.assertRaises(ValueError):
+            release_empty_binding(self.root, self.client, settings)
+
+    def test_cutover_refuses_populated_sqlite_or_unknown_target_state(self):
+        from manga_worker.shared_cutover import FirestoreSettings, bind_firestore, inspect_cutover
+
+        settings = FirestoreSettings("demo-shared-workflow", "shared-tests", self.dataset)
+        local = SharedRequests(self.root / "shared.sqlite3")
+        local.submit("local-reader", "Saved manga", "2", "saved note")
+        report = inspect_cutover(self.root, self.client, settings)
+        self.assertFalse(report["ready"])
+        with self.assertRaises(ValueError):
+            bind_firestore(self.root, self.client, settings)
+        self.assertEqual(local.list_reader("local-reader")[0]["notes"], "saved note")
+        self.assertFalse((self.root / ".shared-backend.json").exists())
+        self.metadata.root.collection("unexpected").document("orphan").set({"test": True})
+        report = inspect_cutover(self.root, self.client, settings)
+        self.assertTrue(any("orphan" in value for value in report["blockers"]))
+        self.assertTrue(any("unexpected" in value for value in report["blockers"]))
+
+    def test_preflight_accepts_matching_dataset_and_rejects_foreign_artifacts(self):
+        from manga_worker.shared_cutover import FirestoreSettings, inspect_cutover
+
+        settings = FirestoreSettings("demo-shared-workflow", "shared-tests", self.dataset)
+        (self.root / ".shared-artifact-store-id").write_text(self.identity)
+        self.store.submit("alice", "Manga", "1", "")
+        self.assertTrue(inspect_cutover(self.root, self.client, settings)["ready"])
+        (self.root / ".shared-artifact-store-id").write_text(uuid.uuid4().hex)
+        self.assertFalse(inspect_cutover(self.root, self.client, settings)["ready"])
