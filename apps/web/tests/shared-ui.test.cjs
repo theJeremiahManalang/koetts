@@ -318,3 +318,42 @@ test('reader keeps its player and position through same-user session renewal', a
   assert.equal(audio.currentTime, 42);
   assert.equal(audio.closest('[inert]'), null);
 });
+
+test('admin keeps audition audio mounted during same-user session renewal', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/admin/requests' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  let ready = true;
+  const auth = { useAuth: () => ({ user: { uid: 'admin' }, isAdmin: true, loading: false, authorizationReady: ready, error: '', login: async () => {} }) };
+  const releases = [];
+  let background = false;
+  globalThis.fetch = async url => {
+    if (background) await new Promise(resolve => { releases.push(resolve); });
+    return { ok: true, json: async () => url === '/api/workflow' ? { projects: [] } : { work: [{ id: 'a'.repeat(32), title: 'Manga', chapter: 1, status: 'approved', requests: [], link: { project_id: 'b'.repeat(32) }, publication_id: null, candidate: { id: 'c'.repeat(32), revision: 'd'.repeat(64), export_id: 'e'.repeat(32) }, review: null }] } };
+  };
+  const mocks = {
+    'next/link': props => React.createElement('a', props),
+    'next/navigation': { useRouter: () => ({ replace() {} }) },
+    '../identity/auth-provider': auth, './auth-provider': auth,
+    '../identity/firebase-client': { getFirebaseAuth: () => ({ currentUser: { uid: 'admin', getIdToken: async () => 'admin-token' } }) },
+  };
+  const Page = load('../features/requests/admin-requests-page.tsx', mocks).default;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { releases.forEach(release => release()); await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  const render = () => root.render(React.createElement(Page));
+  await act(async () => render());
+  const audio = document.querySelector('audio'); audio.currentTime = 42;
+  ready = false;
+  await act(async () => render());
+  assert.equal(document.querySelector('audio'), audio);
+  assert.ok(audio.closest('[inert]'));
+  background = true;
+  ready = true;
+  await act(async () => render());
+  assert.equal(document.querySelector('audio'), audio);
+  assert.equal(audio.currentTime, 42);
+  await act(async () => releases.forEach(release => release()));
+  assert.equal(document.querySelector('audio'), audio);
+  assert.equal(audio.currentTime, 42);
+});
