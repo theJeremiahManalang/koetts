@@ -35,6 +35,7 @@ function AdminWork({ uid, authorizationReady }: { uid: string; authorizationRead
   const [projects, setProjects] = useState<StudioProject[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const hasLoaded = useRef(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -43,12 +44,13 @@ function AdminWork({ uid, authorizationReady }: { uid: string; authorizationRead
     const [shared, studio] = await Promise.all([jsonRequest("/api/shared/admin"), jsonRequest("/api/workflow")]);
     setWork(shared.work as Work[]);
     setProjects(studio.projects as StudioProject[]);
+    hasLoaded.current = true;
   }, []);
 
   useEffect(() => {
     if (!authorizationReady) return;
     let active = true;
-    setLoading(true);
+    if (!hasLoaded.current) setLoading(true);
     void refresh().catch(() => { if (active) setError("Shared work could not be loaded. Please reload."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
