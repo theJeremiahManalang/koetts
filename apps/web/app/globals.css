@@ -1542,6 +1542,7 @@ audio { width: 100%; height: 40px; margin: 12px 0 0; }
   background: black;
   color: white;
 }
+.reader-high-contrast .reader-audio-panel .eyebrow { color: white; }
 
 /* Larger Controls */
 
@@ -1581,6 +1582,7 @@ audio { width: 100%; height: 40px; margin: 12px 0 0; }
 button:focus-visible,
 .accessible-reader
 a:focus-visible,
+.reader-audio-panel:focus-visible,
 .manga-page-demo:focus-visible {
   outline: 3px solid #76a9ff;
   outline-offset: 4px;
