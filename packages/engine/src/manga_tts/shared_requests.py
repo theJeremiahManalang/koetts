@@ -423,4 +423,3 @@ class SharedRequests:
             )
             if cursor.rowcount != 1:
                 raise ValueError("Request not found")
-
