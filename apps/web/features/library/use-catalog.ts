@@ -18,22 +18,27 @@ export function groupCatalog(chapters: PublishedChapter[]): PublishedManga[] {
 
 export function useCatalog() {
   const { user, authorizationReady, loading: authLoading } = useAuth();
-  const [chapters, setChapters] = useState<PublishedChapter[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [catalog, setCatalog] = useState<{ uid: string | null; chapters: PublishedChapter[]; loaded: boolean; error: string }>({
+    uid: null, chapters: [], loaded: false, error: "",
+  });
   useEffect(() => {
     if (!user || !authorizationReady) return;
     let active = true;
-    setLoading(true); setError("");
+    const uid = user.uid;
+    setCatalog(previous => previous.uid === uid ? { ...previous, error: "" } : { uid, chapters: [], loaded: false, error: "" });
     void fetch("/api/shared/catalog", { cache: "no-store" }).then(async response => {
       if (!response.ok) throw new Error();
       const data = await response.json() as { chapters: PublishedChapter[] };
       if (!Array.isArray(data.chapters)) throw new Error();
       return data.chapters;
-    }).then(data => { if (active) setChapters(data); })
-      .catch(() => { if (active) setError("The published catalog is unavailable. Please try again later."); })
-      .finally(() => { if (active) setLoading(false); });
+    }).then(data => { if (active) setCatalog({ uid, chapters: data, loaded: true, error: "" }); })
+      .catch(() => { if (active) setCatalog(previous => ({ ...previous, loaded: true, error: "The published catalog is unavailable. Please try again later." })); });
     return () => { active = false; };
   }, [user?.uid, authorizationReady]);
-  return { chapters: user && authorizationReady ? chapters : [], loading: authLoading || (!!user && (!authorizationReady || loading)), error, signedIn: !!user };
+  const sameUser = !!user && catalog.uid === user.uid;
+  return {
+    chapters: sameUser ? catalog.chapters : [],
+    loading: authLoading || (!!user && (!sameUser || !catalog.loaded)),
+    error: sameUser ? catalog.error : "", signedIn: !!user,
+  };
 }
