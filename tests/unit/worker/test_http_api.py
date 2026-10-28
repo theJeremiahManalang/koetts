@@ -560,3 +560,34 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(consumed)
             response = await client.post("/operations", headers=headers, content=streamed_body())
             self.assertEqual(response.status_code, 413)
+
+    async def test_malformed_credentials_are_rejected_before_external_verifiers(self):
+        service_calls, user_calls = [], []
+
+        def service(token):
+            service_calls.append(token)
+            return {"sub": "svc", "iss": "https://accounts.google.com", "aud": "https://api"}
+
+        def user(token, session):
+            user_calls.append(token)
+            return {"sub": "admin", "iss": "https://securetoken.google.com/test-project", "aud": "test-project", "admin": True}
+
+        app = self.app(service_verifier=service, user_verifier=user)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            for authorization in ("Bearer ", "Bearer two tokens", "Bearer " + "x" * 16385):
+                response = await client.get("/identity", headers={**self.headers, "Authorization": authorization})
+                self.assertEqual(response.status_code, 401)
+            duplicate = [*self.headers.items(), ("Authorization", "Bearer second")]
+            self.assertEqual((await client.get("/identity", headers=duplicate)).status_code, 401)
+            self.assertEqual(service_calls, [])
+            for token in (" ", "two tokens", "x" * 16385):
+                response = await client.get("/identity", headers={**self.headers, "X-KoeTTS-User-Token": token})
+                self.assertEqual(response.status_code, 401)
+            self.assertEqual(user_calls, [])
+            response = await client.get("/identity", headers={**self.headers, "Authorization": "bearer service"})
+            self.assertEqual(response.status_code, 200)
+
+    async def test_invalid_direct_configuration_fails_before_serving(self):
+        for project, audience in (("", "https://api"), ("test-project", ""), (" ", "https://api")):
+            with self.subTest(project=project, audience=audience), self.assertRaises(ValueError):
+                create_app(BoundaryConfig(project, audience, {}))
