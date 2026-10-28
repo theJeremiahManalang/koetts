@@ -78,6 +78,9 @@ def main():
         # Replace the external identity SDK only in this disposable source copy.
         # No environment variable or fixture credential can bypass production auth.
         (runtime / "apps/web/features/identity/firebase-admin.ts").write_text('''
+export function getAdminFirestore(): import("firebase-admin/firestore").Firestore {
+  throw new Error("Live Firestore is disabled in the disposable HTTP fixture");
+}
 export function getAdminAuth() {
   async function verify(value: string, _checkRevoked?: boolean) {
     if (value !== "fixture-admin" && value !== "fixture-reader") throw new Error("Invalid fixture");

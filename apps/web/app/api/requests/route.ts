@@ -1,10 +1,12 @@
-import { FieldValue, Timestamp  } from "firebase-admin/firestore";
-import { getAdminAuth, getAdminFirestore } from "../../../lib/firebase-admin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import {
+    getAdminAuth,
+    getAdminFirestore,
+} from "../../../features/identity/firebase-admin";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-    // Read the Firebase sign-in token sent by the form.
     const authorization = request.headers.get("authorization");
 
     if (!authorization?.startsWith("Bearer ")) {
@@ -46,13 +48,20 @@ export async function POST(request: Request) {
     }
 
     const input = body as Record<string, unknown>;
-    const mangaTitle = typeof input.mangaTitle === "string" ? input.mangaTitle.trim() : "";
-    const chapterText = typeof input.chapter === "string" ? input.chapter.trim() : "";
-    const notes = typeof input.notes === "string" ? input.notes.trim() : "";
+    const mangaTitle =
+        typeof input.mangaTitle === "string" ? input.mangaTitle.trim() : "";
+    const chapterText =
+        typeof input.chapter === "string" ? input.chapter.trim() : "";
+    const notes =
+        typeof input.notes === "string" ? input.notes.trim() : "";
 
-    // Validate on the server even though the form also validates.
-    if (mangaTitle.length < 1 || mangaTitle.length > 200 || !/^[0-9]{1,4}$/.test(chapterText) ||
-        typeof input.notes !== "string" ||notes.length > 200) {
+    if (
+        mangaTitle.length < 1 ||
+        mangaTitle.length > 200 ||
+        !/^[0-9]{1,4}$/.test(chapterText) ||
+        typeof input.notes !== "string" ||
+        notes.length > 2000
+    ) {
         return Response.json(
         {
             error:
@@ -63,7 +72,6 @@ export async function POST(request: Request) {
         );
     }
 
-    // Convert the form's text into a whole number for Firestore.
     const chapter = Number(chapterText);
 
     try {
@@ -78,10 +86,7 @@ export async function POST(request: Request) {
             createdAt: FieldValue.serverTimestamp(),
         });
 
-        return Response.json(
-        { id: document.id },
-        { status: 201 },
-        );
+        return Response.json({ id: document.id }, { status: 201 });
     } catch (error) {
         console.error("Failed to save manga request:", error);
 
@@ -91,8 +96,6 @@ export async function POST(request: Request) {
         );
     }
 }
-
-
 
 export async function GET(request: Request) {
     const authorization = request.headers.get("authorization");
@@ -124,17 +127,22 @@ export async function GET(request: Request) {
         .get();
 
         const requests = snapshot.docs.map(document => {
-            const data = document.data();
+        const data = document.data();
 
-            return {
-                id: document.id,
-                mangaTitle: data.mangaTitle,
-                chapter: data.chapter,
-                notes: data.notes,
-                status:
-                typeof data.status === "string" ? data.status.toUpperCase() : "pending",
-                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : "",
-            };
+        return {
+            id: document.id,
+            mangaTitle: data.mangaTitle,
+            chapter: data.chapter,
+            notes: data.notes,
+            status:
+            typeof data.status === "string"
+                ? data.status.toUpperCase()
+                : "pending",
+            createdAt:
+            data.createdAt instanceof Timestamp
+                ? data.createdAt.toDate().toISOString()
+                : "",
+        };
         });
 
         requests.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

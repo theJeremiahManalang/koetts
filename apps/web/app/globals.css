@@ -111,7 +111,7 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 :root { --muted: #62665b; --error: #963c34; --error-bg: #fff1ef; }
 select, textarea, input { accent-color: var(--accent); }
 a.button { color: inherit; text-decoration: none; }
-.header-actions { display: flex; align-items: center; gap: 10px; max-width: 55%; }
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; max-width: 55%; }
 .header-actions select { max-width: 260px; }
 .header-actions .button { white-space: nowrap; }
 .workflow-tabs { display: grid; grid-template-columns: repeat(5, minmax(210px, 1fr)); gap: 12px; margin: 0 0 20px; overflow-x: auto; padding-bottom: 8px; }

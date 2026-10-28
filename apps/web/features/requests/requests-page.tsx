@@ -5,17 +5,23 @@ import { useEffect, useRef, useState } from "react";
 import { LibraryHeader } from "../library/library-ui";
 import { mangas } from "../library/fixtures/catalog";
 import { RequireSignIn } from "../identity/require-sign-in";
-import { useAuth } from "../../components/auth-provider";
+import { useAuth } from "../identity/auth-provider";
 
-type MangaRequest = { id: string; mangaTitle: string; chapter: number; notes: string; status: string; createdAt: string };
+type MangaRequest = {
+  id: string;
+  mangaTitle: string;
+  chapter: number;
+  notes: string;
+  status: string;
+  createdAt: string;
+};
+
 // const samples: MangaRequest[] = [
 //   { id: "sample-echoes", mangaTitle: "Echoes of Tomorrow", chapter: "2", notes: "A narrated version of Static.", status: "PENDING", createdAt: "2026-10-20T02:00:00Z" },
 //   { id: "sample-garden", mangaTitle: "Moon Garden", chapter: "2", notes: "I'd love to listen to Moonflowers.", status: "PROCESSING", createdAt: "2026-10-19T02:00:00Z" },
 // ];
 
-
-
-import { samples, type MangaRequest } from "./fixtures/requests";
+// import { samples, type MangaRequest } from "./fixtures/requests";
 function isRequest(value: unknown): value is MangaRequest {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
@@ -168,9 +174,14 @@ function RequestsTable() {
               </th>
               <td>{request.chapter}</td><td><span className={`request-status ${request.status === "pending" ? "is-processing" : ""}`}>{request.status.toLowerCase().replaceAll("_", " ")}</span></td>
               <td>{Number.isNaN(Date.parse(request.createdAt)) ? "—" : new Date(request.createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" })}</td>
-              <td><div className="request-row-actions">{manga ? <Link className="button" href={`/manga/${manga.id}`} aria-label={`View ${request.mangaTitle}`}>View manga <span aria-hidden="true">↗</span></Link> : <span className="request-unavailable">Not in the library yet</span>}
-                <button type="button" className="button request-delete" aria-label={`Delete request for ${request.mangaTitle}, chapter ${request.chapter}`} onClick={event => { deleteTrigger.current = event.currentTarget; setError(""); setSelected(request); }}>Delete</button>
-              </div></td>
+              <td>
+                <div className="request-row-actions">
+                  {/* {manga ? 
+                    <Link className="button" href={`/manga/${manga.id}`} aria-label={`View ${request.mangaTitle}`}>View manga <span aria-hidden="true">↗</span></Link> : <span className="request-unavailable">Not in the library yet</span>
+                  } */}
+                  <button type="button" className="button request-delete" aria-label={`Delete request for ${request.mangaTitle}, chapter ${request.chapter}`} onClick={event => { deleteTrigger.current = event.currentTarget; setError(""); setSelected(request); }}>Delete</button>
+                </div>
+              </td>
             </tr>;
           })}</tbody>
         </table></div>

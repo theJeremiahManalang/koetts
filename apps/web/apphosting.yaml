@@ -33,3 +33,6 @@ env:
   - variable: S3_API_URL
     value: https://koetts-s3-api-gu5jb64hpq-uk.a.run.app
     availability: [RUNTIME]
+  - variable: FIRESTORE_DATABASE_ID
+    value: koetts-default
+    availability: [RUNTIME]
