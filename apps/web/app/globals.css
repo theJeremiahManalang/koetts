@@ -1537,6 +1537,12 @@ audio { width: 100%; height: 40px; margin: 12px 0 0; }
   border: 4px solid white;
 }
 
+.reader-high-contrast .reader-audio-panel {
+  border: 3px solid white;
+  background: black;
+  color: white;
+}
+
 /* Larger Controls */
 
 .reader-large-controls
@@ -1555,6 +1561,17 @@ audio { width: 100%; height: 40px; margin: 12px 0 0; }
 
 .reader-large-controls
 .page-counter {
+  font-size: 16px;
+}
+
+.reader-large-controls .published-audio-player audio { height: 56px; }
+.reader-large-controls .reader-back,
+.reader-large-controls .reader-bottom-bar > a,
+.reader-large-controls .published-audio-player button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 12px 20px;
   font-size: 16px;
 }
 
