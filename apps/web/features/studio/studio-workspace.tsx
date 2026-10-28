@@ -17,6 +17,8 @@ import type { Acting, Job, Project, Segment, Snapshot } from "./types";
 import { getFirebaseAuth } from "../identity/firebase-client";
 import { useAuth } from "../identity/auth-provider";
 import { RequireSignIn } from "../identity/require-sign-in";
+import { AdminNav } from "../identity/admin-nav";
+import { StudioRequestContext } from "./studio-request-context";
 import { AccountNav } from "../identity/account-nav";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
@@ -275,7 +277,9 @@ function StudioWorkspace() {
               return;
             } catch { /* The POST may not have reached persistence; keep its key for lookup or retry. */ }
           }
-          const id = localStorage.getItem("manga-tts-project"); if (id) await openProject(id);
+          const entry = new URLSearchParams(window.location.search);
+          const createForRequest = entry.get("create") === "1" && !!entry.get("request");
+          const id = localStorage.getItem("manga-tts-project"); if (id && !createForRequest) await openProject(id);
         }
       } catch (e) { toast.error("Saved projects could not be loaded", { description: e instanceof Error ? e.message : "Check the server connection and reload the page.", duration: Infinity }); }
       finally { setInitialLoading(false); }
@@ -403,9 +407,16 @@ function StudioWorkspace() {
     {initialLoading && <LoadingState label={busy || "Preparing your reading space…"} />}
     <div hidden={initialLoading}>
     {busy && !initialLoading && <LoadingState compact label={busy} />}
-    <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><div className="header-actions"><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton><AccountNav /></div></header>
+    <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><AdminNav active="studio" canNavigate={async () => !busy && await canLeave()} /><div className="header-actions"><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton><AccountNav /></div></header>
     <main>
-      <div className="reader-heading"><div><div className="eyebrow">YOUR READING SPACE</div><h1>A voice for every character.</h1><p>{snapshot ? "Review the story, direct the voices, and create your audiobook." : "Start with manga images or pick up a saved production."}</p></div><span className="mode-label"><span className="status-dot" />{snapshot ? `${(snapshot.project.title || snapshot.project.chapter_id)} · ${snapshot.approved_scenes.length}/${snapshot.project.scenes.length} scenes approved` : "Reviewed manga audio"}</span></div>
+      <section className="studio-generation-panel" aria-label="Audio generation project">
+        <div className="studio-generation-details">
+          <div className="studio-generation-summary">
+            <StudioRequestContext projectTitle={snapshot ? snapshot.project.title || snapshot.project.chapter_id : undefined} projectStatus={snapshot ? `${snapshot.approved_scenes.length}/${snapshot.project.scenes.length} scenes approved` : undefined} />
+          </div>
+          <div className="studio-project-picker"><p className="studio-active-project" role="status"><span>Project for audio</span><strong>{snapshot ? snapshot.project.title || snapshot.project.chapter_id : "New chapter"}</strong></p><label htmlFor="projects">Use a saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="" disabled>Choose a saved project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select>{!projects.length && <span className="control-note">No saved chapters yet.</span>}</div>
+        </div>
+      </section>
       {snapshot && <div className="project-title-row">{renaming ? <form className="action-row" onSubmit={e => { e.preventDefault(); if (titleDraft.trim() && !dirty) void run("rename", { title: titleDraft.trim() }); }}><label className="field-label">Project title<input autoFocus maxLength={120} required value={titleDraft} disabled={!!busy} onChange={e => setTitleDraft(e.target.value)} /></label><ActionButton type="submit" className="button primary" disabled={dirty || !titleDraft.trim()} reason={dirty ? "Apply your section edits before saving a new title." : "Enter a project title."}>Save title</ActionButton><ActionButton type="button" className="button" onClick={() => { setRenaming(false); setTitleDraft(snapshot.project.title || snapshot.project.chapter_id); }}>Cancel</ActionButton></form> : <><strong>{snapshot.project.title || snapshot.project.chapter_id}</strong><ActionButton className="button small" disabled={dirty} reason="Apply or discard your section edits before renaming the project." onClick={() => setRenaming(true)}>Rename project</ActionButton></>}</div>}
       {snapshot && <nav className="workflow-tabs" aria-label="Production steps">{tabs.map(([id, title], i) => <ActionButton key={id} className="button" aria-current={tab === id ? "step" : undefined} disabled={!!busy} onClick={() => switchTab(id)}><span aria-hidden="true">{sectionStatus(id).icon}</span><span className="step-title">{title}<small>{sectionStatus(id).label}</small></span></ActionButton>)}</nav>}
       {snapshot && <div className="section-guidance" aria-live="polite"><div><strong>{tabs.find(([id]) => id === tab)?.[1]} <span className={`step-status ${sectionStatus(tab).done ? "complete" : ""}`}>{sectionStatus(tab).label}</span></strong><p>{sectionInstructions[tab]}</p>{dirty && <p className="unsaved">Unsaved changes. Apply your edits to update section status.</p>}</div></div>}

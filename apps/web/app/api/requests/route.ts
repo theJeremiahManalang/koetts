@@ -82,7 +82,7 @@ export async function POST(request: Request) {
             mangaTitle,
             chapter,
             notes,
-            status: "pending",
+            status: "submitted",
             createdAt: FieldValue.serverTimestamp(),
         });
 

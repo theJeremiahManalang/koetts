@@ -25,8 +25,8 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
-for (const surface of ['request', 'studio', 'polling']) test(surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
-  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/request' });
+for (const surface of ['request', 'studio', 'polling', 'generate']) test(surface === 'generate' ? 'Generate opens a new chapter with request context without restoring or deleting an unrelated saved project' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: surface === 'generate' ? 'http://localhost/?request=example&create=1' : 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage, File: dom.window.File, URL: dom.window.URL, ResizeObserver: class { observe() {} disconnect() {} }, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   dom.window.HTMLElement.prototype.scrollTo = () => {};
@@ -40,7 +40,10 @@ for (const surface of ['request', 'studio', 'polling']) test(surface === 'pollin
   let polls = 0;
   let jobStatus = 'running';
   let observedReconciliation = false;
+  const requestedUrls = [];
   globalThis.fetch = async url => {
+    requestedUrls.push(String(url));
+    if (String(url).startsWith('/api/admin/requests')) return { ok: true, json: async () => ({ requests: [{ mangaTitle: 'Requested story', chapter: 3, notes: 'Narrate clearly', status: 'approved' }] }) };
     if (String(url).includes('?job=')) {
       polls++;
       return { ok: true, json: async () => { if (jobStatus === 'reconciliation_required') observedReconciliation = true; return { status: jobStatus, message: 'Rendering fixture' }; } };
@@ -75,7 +78,26 @@ for (const surface of ['request', 'studio', 'polling']) test(surface === 'pollin
     localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'a'.repeat(32), project: 'b'.repeat(32), idempotencyKey: 'retained-intent' }));
     localStorage.setItem('manga-tts-pending-operation', JSON.stringify([{ key: 'retained-intent', fingerprint: 'operation' }]));
   }
+  if (surface === 'generate') localStorage.setItem('manga-tts-project', 'unrelated-saved-project');
   await act(async () => emit(user('alice')));
+  if (surface === 'generate') {
+    assert.ok(document.querySelector('input[aria-label="Upload manga images"]'));
+    assert.match(document.body.textContent, /Requested story · Chapter 3/);
+    const generationPanel = document.querySelector('.studio-generation-panel');
+    assert.equal(generationPanel.querySelector('h1').textContent, 'Requested story · Chapter 3');
+    assert.equal(generationPanel.querySelector('.reader-heading'), null);
+    assert.equal(generationPanel.querySelector('.studio-generation-summary .studio-active-project'), null);
+    assert.ok(generationPanel.querySelector('.studio-project-picker .studio-active-project'));
+    assert.ok(generationPanel.querySelector('[aria-label="Selected audiobook request"]'));
+    assert.ok(generationPanel.querySelector('#projects'));
+    assert.match(generationPanel.textContent, /RemarksNarrate clearly/);
+    assert.match(generationPanel.querySelector('.studio-active-project').textContent, /New chapter/);
+    assert.equal(document.querySelector('.studio-continue'), null);
+    assert.ok(requestedUrls.includes('/api/admin/requests?id=example'));
+    assert.equal(requestedUrls.some(url => url.includes('?project=')), false);
+    assert.equal(localStorage.getItem('manga-tts-project'), 'unrelated-saved-project');
+    return;
+  }
   if (surface === 'polling') {
     assert.ok(polls > 0, 'saved operation must start polling');
     let release;

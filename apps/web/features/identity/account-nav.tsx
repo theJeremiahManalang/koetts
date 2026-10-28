@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
 
 export function AccountNav() {
-  const { user, isAdmin, loading, error: accountError, logout } = useAuth();
+  const { user, isAdmin, authorizationReady, loading, error: accountError, logout } = useAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const menu = useRef<HTMLDetailsElement>(null);
@@ -47,7 +47,10 @@ export function AccountNav() {
         </summary>
         <div className="account-dropdown-panel">
           <Link href="/requests" onClick={() => { if (menu.current) menu.current.open = false; }}>My Requests <span aria-hidden="true">↗</span></Link>
-          {isAdmin && <Link href="/" onClick={() => { if (menu.current) menu.current.open = false; }}>Generate Manga Audio <span aria-hidden="true">↗</span></Link>}
+          {isAdmin && authorizationReady && <>
+            <Link href="/admin/requests" onClick={() => { if (menu.current) menu.current.open = false; }}>Admin dashboard <span aria-hidden="true">↗</span></Link>
+            <Link href="/" onClick={() => { if (menu.current) menu.current.open = false; }}>Studio <span aria-hidden="true">↗</span></Link>
+          </>}
           <button type="button" disabled={pending} onClick={handleLogout}>{pending ? "Signing out…" : "Sign Out"}<span aria-hidden="true">→</span></button>
         </div>
       </details>

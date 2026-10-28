@@ -18,7 +18,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     if (user && authorizationReady && !loading) {
       const next = new URLSearchParams(window.location.search).get("next") || "/browse";
       // Only return to known local pages; never follow an external redirect URL.
-      const allowed = ["/request", "/requests", "/browse", ...(isAdmin ? ["/"] : [])].includes(next.split("?")[0]);
+      const allowed = ["/request", "/requests", "/browse", ...(isAdmin ? ["/", "/admin/requests"] : [])].includes(next.split("?")[0]);
       router.replace(allowed ? next : "/browse");
     }
   }, [user, isAdmin, loading, authorizationReady, router]);

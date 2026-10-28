@@ -65,7 +65,7 @@ test('request creation uses verified owner, numeric chapter, and server timestam
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { id: 'saved' });
   assert.deepEqual(writes, [{ userId: 'alice', mangaTitle: 'Example', chapter: 2,
-    notes: 'n'.repeat(2000), status: 'pending', createdAt: timestamp }]);
+    notes: 'n'.repeat(2000), status: 'submitted', createdAt: timestamp }]);
 });
 
 test('invalid chapters and oversized notes are rejected without writes', async () => {
