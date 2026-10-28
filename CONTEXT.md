@@ -93,4 +93,7 @@ Independent Standards and Spec re-review confirmed zero remaining findings after
 checks (`/tmp/s4-hardening-http.log`). Repository pointer validation and diff checks
 also passed after documentation updates.
 
-Next action: push and create the authorized pull request to main. No external blocker.
+Branch pushed. Pull request #16 is open against main:
+https://github.com/theJeremiahManalang/koetts/pull/16
+GitHub reports the branch mergeable; Workspace checks are running.
+Next action: inspect CI results; merge requires a separate instruction. No external blocker.
