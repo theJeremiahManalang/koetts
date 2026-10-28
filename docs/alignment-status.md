@@ -676,3 +676,16 @@ No real human approval, live publication, paid generation, model inference, depl
 Firestore/GCS semantics or production listening quality is claimed. Saved user results,
 source samples and credentials were not changed. The next eligible scope is S5;
 its cloud inputs and rollout gates remain unresolved in the target design.
+
+#### Review hardening follow-up
+
+The trusted export arguments now travel in an immutable `ExportSnapshot`, resolving
+the earlier Data Clumps observation while preserving locked checksum verification.
+FastAPI authentication, JSON decoding and persistence run outside the event loop;
+requests reject ambiguous or oversized input before persistence, credentials are
+bounded, private responses disable caching, and Firebase cold-start initialization
+is serialized. Hosted verification remains processing-disabled. Focused HTTP tests
+cover concurrency, sanitization, body limits, strict parsing and credential rejection.
+Pinned full acceptance passed 123 Python tests (two optional skips), 55 web tests,
+Ruff, repository checks, typecheck and production build; the final race regression
+passed within the 14-test HTTP suite. No live-provider or deployment claim is made.

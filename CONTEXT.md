@@ -60,7 +60,37 @@ alignment evidence; final pinned gates passed.
 Two-axis review against `ede54cd946143fa6f9c2a1fc847aacff6520b479` found no remaining
 S4 spec gap. All blocking standards findings were fixed and re-reviewed, including
 CLI export identity, audio-path integrity, review recovery and reader/admin renewal.
-A trusted-snapshot data-clump observation remains accepted and nonblocking.
+The trusted-snapshot data-clump observation was resolved with an immutable typed
+`ExportSnapshot` at the existing locked worker boundary.
 
 Next eligible work: resolve the S5 cloud inputs when that scope is assigned. No S4
 work or external blocker remains. Cloud rollout authorization is not implied.
+
+## FastAPI hardening follow-up
+
+The user authorized resolving review findings, hardening the existing FastAPI API,
+and pushing this branch with a pull request to main once review is clean.
+
+Blocking identity verification, JSON decoding and workspace/queue calls now run in
+worker threads. Operation requests enforce a 5 MiB streamed limit, unambiguous JSON
+and headers, finite numbers, and bounded credentials. Private responses carry
+no-store and nosniff headers; unexpected errors remain sanitized. Configuration
+fails closed and service permissions are immutable. A shared initialization lock
+prevents concurrent first Firebase requests from rejecting valid credentials.
+Hosted verification mode remains unable to process workspaces.
+
+Changed paths: worker HTTP API/authentication and their unit tests, engine shared
+requests and trusted worker snapshot orchestration, plus architecture/alignment docs.
+
+Pinned `npm run check` passed after the main hardening changes: 123 Python tests
+(two optional skips), 55 web tests, repository checks, Ruff, typecheck and production
+build. Log: `/tmp/s4-hardening-check.log`. The subsequent initialization-race fix
+passed all 14 HTTP unit tests and Ruff. External sample compatibility remains skipped;
+no live identity provider, inference or deployment was exercised.
+
+Independent Standards and Spec re-review confirmed zero remaining findings after
+`35b87f3`. Pinned `npm run test:http` passed studio and frontend-only integration
+checks (`/tmp/s4-hardening-http.log`). Repository pointer validation and diff checks
+also passed after documentation updates.
+
+Next action: push and create the authorized pull request to main. No external blocker.

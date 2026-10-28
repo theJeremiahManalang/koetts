@@ -105,3 +105,10 @@ authentication. Hosted processing and cloud shared storage remain S5 work.
 See [target-design.md](target-design.md) for the accepted migration destination.
 See [the historical baseline](archive/current-app-baseline.md) for deeper inspection notes;
 its recorded checks are not current pass claims.
+
+The private FastAPI adapter runs blocking credential verification and workspace I/O
+in worker threads. Local operation enqueue accepts at most 5 MiB of JSON, rejects
+ambiguous headers, duplicate fields and non-finite numbers, and validates bounded
+credentials before external verification. Private responses disable caching and
+content sniffing. Firebase app initialization is serialized across concurrent first
+requests. These controls preserve the separate hosted verification-only boundary.
