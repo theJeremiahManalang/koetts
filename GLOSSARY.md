@@ -33,6 +33,16 @@ _Avoid_: Publication, take
 A reviewed export made available to readers through an explicit admin decision.
 _Avoid_: Export, completed render
 
+**Audition candidate**:
+An unchanged copy of an export prepared for an admin to inspect before recording
+an audio-review decision.
+_Avoid_: Publication, selected take
+
+**Audio review**:
+An admin's explicit decision that an exact export is ready for publication. The
+decision does not prove that the admin listened to it.
+_Avoid_: Script approval, publication
+
 **Operation**:
 One requested production action with pinned inputs and an observable outcome. An
 operation may require more than one worker attempt.

@@ -170,6 +170,26 @@ multi-file transaction. A separate admin review and atomic publication step snap
 the exact export and preserves the previous published audio on replacement failure.
 The bundle contains applied state/assets, not unapplied drafts.
 
+## Publish reviewed audio locally
+
+Readers submit chapter requests through `/request` and see their own requests at
+`/requests`. At `/admin/requests`, an admin approves shared chapter work and attaches
+an existing studio project. Use the linked studio to supply authorized source images
+and complete the cast, source, script, render and export steps above.
+
+Prepare the export for audition, listen to the immutable candidate, and record an
+explicit audio review. Publish that reviewed export with the separate publication
+button. Changes to the project, export or project link require a fresh review.
+Replacement work and failed publication leave the previous published audio available.
+Readers browse published chapters at `/browse`; Listen opens authenticated playback
+with automatically refreshed links and byte-range seeking. Studio source images are
+not delivered to readers.
+
+Shared requests, decisions and publication pointers are local to the same host.
+Preserve the complete configured data root, including `shared.sqlite3` and
+`shared-artifacts`, when backing up or moving it. Hosted shared storage is S5 work;
+frontend-only hosting keeps this local service disabled.
+
 ## Recovery and advanced edits
 
 ```powershell
