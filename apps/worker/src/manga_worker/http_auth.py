@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
 from fastapi import HTTPException, Request
 
+_FIREBASE_APP_LOCK = threading.Lock()
 MAX_CREDENTIAL_BYTES = 16 * 1024
 
 
@@ -82,12 +84,13 @@ class CredentialBoundary:
         from firebase_admin import auth
 
         name = f"s3-{self.config.project_id}"
-        try:
-            app = firebase_admin.get_app(name)
-        except ValueError:
-            app = firebase_admin.initialize_app(
-                options={"projectId": self.config.project_id}, name=name
-            )
+        with _FIREBASE_APP_LOCK:
+            try:
+                app = firebase_admin.get_app(name)
+            except ValueError:
+                app = firebase_admin.initialize_app(
+                    options={"projectId": self.config.project_id}, name=name
+                )
         verifier = auth.verify_session_cookie if session else auth.verify_id_token
         return verifier(token, app=app, check_revoked=True)
 

@@ -591,3 +591,39 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
         for project, audience in (("", "https://api"), ("test-project", ""), (" ", "https://api")):
             with self.subTest(project=project, audience=audience), self.assertRaises(ValueError):
                 create_app(BoundaryConfig(project, audience, {}))
+
+    async def test_concurrent_cold_start_initializes_firebase_once(self):
+        import asyncio
+        import threading
+        import time
+        from unittest.mock import patch
+
+        from manga_worker.http_auth import CredentialBoundary
+
+        initialized = []
+        start = threading.Barrier(2)
+        app = object()
+
+        def get_app(name):
+            if not initialized:
+                raise ValueError("No app")
+            return app
+
+        def initialize_app(**kwargs):
+            time.sleep(0.03)
+            if initialized:
+                raise ValueError("Already exists")
+            initialized.append(kwargs)
+            return app
+
+        def verify():
+            start.wait(timeout=2)
+            boundary = CredentialBoundary(BoundaryConfig("test-project", "https://api", {}))
+            return boundary._verify_user("token", False)
+
+        with patch("firebase_admin.get_app", side_effect=get_app), patch(
+            "firebase_admin.initialize_app", side_effect=initialize_app
+        ), patch("firebase_admin.auth.verify_id_token", return_value={"sub": "reader"}):
+            results = await asyncio.gather(asyncio.to_thread(verify), asyncio.to_thread(verify))
+        self.assertEqual(results, [{"sub": "reader"}, {"sub": "reader"}])
+        self.assertEqual(len(initialized), 1)
