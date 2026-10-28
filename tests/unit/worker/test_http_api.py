@@ -430,3 +430,75 @@ class HttpBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     "/projects/project/assets/example.wav", headers=headers
                 )
                 self.assertEqual(response.status_code, expected)
+
+
+class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
+    headers = {"Authorization": "Bearer service", "X-KoeTTS-User-Token": "user", "Idempotency-Key": "intent"}
+
+    def app(self, backend=None, *, service_verifier=None, user_verifier=None):
+        return create_app(
+            BoundaryConfig("test-project", "https://api", {
+                "svc": frozenset({"readiness", "identity", "enqueue", "poll", "snapshot"})
+            }, mode="local"),
+            service_verifier=service_verifier or (lambda token: {
+                "sub": "svc", "iss": "https://accounts.google.com", "aud": "https://api",
+            }),
+            user_verifier=user_verifier or (lambda token, session: {
+                "sub": "admin", "iss": "https://securetoken.google.com/test-project",
+                "aud": "test-project", "admin": True,
+            }),
+            workflow=backend,
+        )
+
+    async def test_blocking_verification_and_storage_do_not_occupy_event_loop(self):
+        import asyncio
+        import threading
+
+        loop_thread = threading.get_ident()
+        verifier_threads = []
+        started, release = threading.Event(), threading.Event()
+
+        def service(token):
+            verifier_threads.append(threading.get_ident())
+            return {"sub": "svc", "iss": "https://accounts.google.com", "aud": "https://api"}
+
+        def user(token, session):
+            verifier_threads.append(threading.get_ident())
+            return {"sub": "admin", "iss": "https://securetoken.google.com/test-project", "aud": "test-project", "admin": True}
+
+        class Backend:
+            def operation_status(self, operation_id):
+                started.set()
+                release.wait(2)
+                return {"id": operation_id}
+
+        app = self.app(Backend(), service_verifier=service, user_verifier=user)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            self.assertEqual((await client.get("/identity", headers=self.headers)).status_code, 200)
+            self.assertTrue(all(thread != loop_thread for thread in verifier_threads))
+            blocked = asyncio.create_task(client.get("/operations/blocked", headers=self.headers))
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 1))
+                self.assertFalse(blocked.done())
+                response = await asyncio.wait_for(client.get("/ready", headers=self.headers), timeout=1)
+                self.assertEqual(response.status_code, 200)
+            finally:
+                release.set()
+                await blocked
+
+    async def test_private_responses_are_not_cacheable_and_errors_are_sanitized(self):
+        class Backend:
+            def operation_status(self, operation_id):
+                raise RuntimeError("private database path and credential")
+
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(Backend()), raise_app_exceptions=False), base_url="http://test") as client:
+            for route, headers, expected in [
+                ("/identity", self.headers, 200), ("/identity", {}, 401),
+                ("/operations/unknown", self.headers, 500),
+            ]:
+                response = await client.get(route, headers=headers)
+                self.assertEqual(response.status_code, expected)
+                self.assertIn("no-store", response.headers.get("cache-control", ""))
+                self.assertEqual(response.headers.get("x-content-type-options"), "nosniff")
+                self.assertNotIn("private database", response.text)
+                self.assertNotIn("credential", response.text if expected == 500 else "")
