@@ -194,3 +194,23 @@ An installed Firestore emulator is running under exec session 36597, port8787;
 log /tmp/firestore-emulator-phase2.log. Revalidate this handle before reusing it.
 Next action: phase 3 dashboard presentation/navigation on existing /api/shared
 contracts, then phase 4 cutover preflight and phase 5 final acceptance/review.
+
+### Phase 3 completion
+
+Ported selected dashboard improvements onto /api/shared endpoints. Added batched,
+project-scoped requester profile names with safe fallback and no email exposure;
+kept individual notes and all #16 link/audition/review/publication controls. Added
+readable icon actions with hover/focus tooltips, active admin navigation, and Studio
+context keyed by shared work. Preparing an unlinked work starts without reopening
+or deleting an unrelated saved project; operation recovery still takes precedence.
+No #15 request API, fixture catalog or manual status workflow was restored.
+
+Verification: pinned npm run test:web passed all17 test files after updating the
+existing mocked auth boundary for AccountNav. New tests cover batched/private names,
+profile outages and Studio preparation. Pinned typecheck/build passed. Pinned
+npm run test:http passed studio and frontend-only checks. Logs:
+/tmp/firestore-phase3-{web,typecheck,build,http}.log. Repository checks and diff
+checks passed. No live profile lookup or data write was performed.
+
+Next action: phase 4 read-only cutover preflight and runtime refusal of unsafe
+backend changes, then phase 5 emulator runner/full acceptance/independent review.

@@ -25,8 +25,8 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
-for (const surface of ['request', 'studio', 'polling']) test(surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
-  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/request' });
+for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${'a'.repeat(32)}&create=1` : 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage, File: dom.window.File, URL: dom.window.URL, ResizeObserver: class { observe() {} disconnect() {} }, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   dom.window.HTMLElement.prototype.scrollTo = () => {};
@@ -40,7 +40,10 @@ for (const surface of ['request', 'studio', 'polling']) test(surface === 'pollin
   let polls = 0;
   let jobStatus = 'running';
   let observedReconciliation = false;
+  const requestedUrls = [];
   globalThis.fetch = async url => {
+    requestedUrls.push(String(url));
+    if (String(url).startsWith('/api/shared/admin?work_id=')) return { ok: true, json: async () => ({ work: [{ id: 'a'.repeat(32), title: 'Requested story', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
     if (String(url).includes('?job=')) {
       polls++;
       return { ok: true, json: async () => { if (jobStatus === 'reconciliation_required') observedReconciliation = true; return { status: jobStatus, message: 'Rendering fixture' }; } };
@@ -75,7 +78,17 @@ for (const surface of ['request', 'studio', 'polling']) test(surface === 'pollin
     localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'a'.repeat(32), project: 'b'.repeat(32), idempotencyKey: 'retained-intent' }));
     localStorage.setItem('manga-tts-pending-operation', JSON.stringify([{ key: 'retained-intent', fingerprint: 'operation' }]));
   }
+  if (surface === 'work-prepare') localStorage.setItem('manga-tts-project', 'unrelated-saved-project');
   await act(async () => emit(user('alice')));
+  if (surface === 'work-prepare') {
+    assert.ok(document.querySelector('input[aria-label="Upload manga images"]'));
+    assert.match(document.body.textContent, /Requested story · Chapter 3/);
+    assert.match(document.body.textContent, /Narrate clearly/);
+    assert.ok(requestedUrls.some(url => url.startsWith('/api/shared/admin?work_id=')));
+    assert.equal(requestedUrls.some(url => url.includes('?project=')), false);
+    assert.equal(localStorage.getItem('manga-tts-project'), 'unrelated-saved-project');
+    return;
+  }
   if (surface === 'polling') {
     assert.ok(polls > 0, 'saved operation must start polling');
     let release;

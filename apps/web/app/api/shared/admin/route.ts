@@ -1,3 +1,4 @@
+import { withRequesterNames } from "../../../../features/requests/server/requester-names";
 import { adminPrincipal, requireAdmin, trustedSessionRequest } from "../../../../features/identity/require-admin";
 import { localSharedOnly, principalKey, readSharedJson, sharedCall, validRevision, validSharedId } from "../../../../features/requests/server/shared";
 
@@ -7,7 +8,14 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const denied = await requireAdmin(request); if (denied) return denied;
   const unavailable = localSharedOnly(); if (unavailable) return unavailable;
-  try { return Response.json({ work: await sharedCall({ action: "work" }) }, { headers: { "Cache-Control": "private, no-store" } }); }
+  const id = new URL(request.url).searchParams.get("work_id");
+  if (id !== null && !validSharedId(id)) return Response.json({ error: "Invalid work." }, { status: 400 });
+  try {
+    const work = await sharedCall<{ id: string; requests: { reader?: string }[] }[]>({ action: "work" });
+    const selected = id === null ? work : work.filter(item => item.id === id);
+    if (id !== null && !selected.length) return Response.json({ error: "Work not found." }, { status: 404 });
+    return Response.json({ work: await withRequesterNames(selected, adminPrincipal(request).project_id) }, { headers: { "Cache-Control": "private, no-store" } });
+  }
   catch { return Response.json({ error: "Shared work is unavailable." }, { status: 503 }); }
 }
 

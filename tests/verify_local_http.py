@@ -84,6 +84,9 @@ export function getAdminAuth() {
     return { uid: value, aud: "offline-fixture", admin: value === "fixture-admin" };
   }
   return { verifyIdToken: verify, verifySessionCookie: verify,
+    getUsers: async (identifiers: import("firebase-admin/auth").UserIdentifier[]): Promise<import("firebase-admin/auth").GetUsersResult> => ({
+      users: [], notFound: identifiers,
+    }),
     createSessionCookie: async (value: string, _options?: { expiresIn: number }) => { await verify(value); return value; } };
 }
 ''')

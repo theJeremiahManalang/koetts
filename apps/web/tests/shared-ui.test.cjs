@@ -13,6 +13,7 @@ function load(relative, mocks, cache = new Map()) {
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   new Function('exports', 'require', code)(exports, name => {
     if (name in mocks) return mocks[name];
+    if (name === './auth-provider' && mocks['../identity/auth-provider']) return mocks['../identity/auth-provider'];
     if (name.startsWith('.')) {
       const base = path.resolve(path.dirname(filename), name);
       const file = ['.tsx', '.ts'].map(ext => base + ext).find(fs.existsSync);
@@ -96,7 +97,7 @@ test('admin publishes the saved review rather than a newer audition candidate', 
     calls.push([url, options]);
     if (options.method === 'POST') return { ok: true, json: async () => ({ result: { id: '1'.repeat(32) } }) };
     if (url === '/api/workflow') return { ok: true, json: async () => ({ projects: [{ id: projectId, name: 'Studio project' }] }) };
-    return { ok: true, json: async () => ({ work: [{ id: workId, title: 'Manga', chapter: 1, status: 'approved', requests: [{ id: '2'.repeat(32), notes: 'Reader note' }], link: { project_id: projectId }, publication_id: null, candidate: { id: latestCandidate, revision, export_id: '3'.repeat(32) }, review: { id: reviewId, candidate_id: reviewedCandidate, revision, export_id: '3'.repeat(32) } }] }) };
+    return { ok: true, json: async () => ({ work: [{ id: workId, title: 'Manga', chapter: 1, status: 'approved', requests: [{ id: '2'.repeat(32), notes: 'Reader note', requester_name: 'Fixture Reader' }], link: { project_id: projectId }, publication_id: null, candidate: { id: latestCandidate, revision, export_id: '3'.repeat(32) }, review: { id: reviewId, candidate_id: reviewedCandidate, revision, export_id: '3'.repeat(32) } }] }) };
   };
   const mocks = {
     'next/link': props => React.createElement('a', props),
@@ -109,6 +110,8 @@ test('admin publishes the saved review rather than a newer audition candidate', 
   t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
   await act(async () => root.render(React.createElement(Page)));
   assert.match(document.body.textContent, /Reader note/);
+  assert.match(document.body.textContent, /Fixture Reader/);
+  assert.ok(document.querySelector('nav[aria-label="Admin navigation"] a[aria-current="page"]'));
   const publish = [...document.querySelectorAll('button')].find(button => button.textContent === 'Publish reviewed audio');
   assert.ok(publish);
   await act(async () => publish.click());

@@ -18,6 +18,9 @@ import { getFirebaseAuth } from "../identity/firebase-client";
 import { useAuth } from "../identity/auth-provider";
 import { RequireSignIn } from "../identity/require-sign-in";
 
+import { AdminNav } from "../identity/admin-nav";
+import { StudioRequestContext } from "./studio-request-context";
+
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
 const actingFields = (v: Acting) => ({ include: v.include, speaker_id: v.speaker_id, text: v.text, delivery: v.delivery, emotion: v.emotion, style: v.style, pacing: v.pacing });
@@ -274,8 +277,10 @@ function StudioWorkspace() {
               return;
             } catch { /* The POST may not have reached persistence; keep its key for lookup or retry. */ }
           }
-          const requestedProject = new URLSearchParams(window.location.search).get("project");
-          const id = requestedProject && /^[a-f0-9]{32}$/.test(requestedProject) ? requestedProject : localStorage.getItem("manga-tts-project");
+          const entry = new URLSearchParams(window.location.search);
+          const requestedProject = entry.get("project");
+          const newForWork = entry.get("create") === "1" && /^[a-f0-9]{32}$/.test(entry.get("work") || "");
+          const id = requestedProject && /^[a-f0-9]{32}$/.test(requestedProject) ? requestedProject : newForWork ? null : localStorage.getItem("manga-tts-project");
           if (id) await openProject(id);
         }
       } catch (e) { toast.error("Saved projects could not be loaded", { description: e instanceof Error ? e.message : "Check the server connection and reload the page.", duration: Infinity }); }
@@ -404,8 +409,9 @@ function StudioWorkspace() {
     {initialLoading && <LoadingState label={busy || "Preparing your reading space…"} />}
     <div hidden={initialLoading}>
     {busy && !initialLoading && <LoadingState compact label={busy} />}
-    <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><div className="header-actions"><a className="button" href="/admin/requests">Manage requests</a><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton></div></header>
+    <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><div className="header-actions"><AdminNav active="studio" canNavigate={async () => !busy && await canLeave()} /><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton></div></header>
     <main>
+      <StudioRequestContext />
       <div className="reader-heading"><div><div className="eyebrow">YOUR READING SPACE</div><h1>A voice for every character.</h1><p>{snapshot ? "Review the story, direct the voices, and create your audiobook." : "Start with manga images or pick up a saved production."}</p></div><span className="mode-label"><span className="status-dot" />{snapshot ? `${(snapshot.project.title || snapshot.project.chapter_id)} · ${snapshot.approved_scenes.length}/${snapshot.project.scenes.length} scenes approved` : "Reviewed manga audio"}</span></div>
       {snapshot && <div className="project-title-row">{renaming ? <form className="action-row" onSubmit={e => { e.preventDefault(); if (titleDraft.trim() && !dirty) void run("rename", { title: titleDraft.trim() }); }}><label className="field-label">Project title<input autoFocus maxLength={120} required value={titleDraft} disabled={!!busy} onChange={e => setTitleDraft(e.target.value)} /></label><ActionButton type="submit" className="button primary" disabled={dirty || !titleDraft.trim()} reason={dirty ? "Apply your section edits before saving a new title." : "Enter a project title."}>Save title</ActionButton><ActionButton type="button" className="button" onClick={() => { setRenaming(false); setTitleDraft(snapshot.project.title || snapshot.project.chapter_id); }}>Cancel</ActionButton></form> : <><strong>{snapshot.project.title || snapshot.project.chapter_id}</strong><ActionButton className="button small" disabled={dirty} reason="Apply or discard your section edits before renaming the project." onClick={() => setRenaming(true)}>Rename project</ActionButton></>}</div>}
       {snapshot && <nav className="workflow-tabs" aria-label="Production steps">{tabs.map(([id, title], i) => <ActionButton key={id} className="button" aria-current={tab === id ? "step" : undefined} disabled={!!busy} onClick={() => switchTab(id)}><span aria-hidden="true">{sectionStatus(id).icon}</span><span className="step-title">{title}<small>{sectionStatus(id).label}</small></span></ActionButton>)}</nav>}

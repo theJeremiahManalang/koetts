@@ -18,6 +18,7 @@ function load(path, { reader = true, admin = false } = {}) {
       adminPrincipal: () => principal,
       trustedSessionRequest: request => request.headers.get('origin') === 'http://localhost:3000',
     };
+    if (name.includes('/server/requester-names')) return { withRequesterNames: async work => work };
     if (name.includes('/server/shared')) return {
       sharedCall: async payload => { calls.push(payload); return payload.action === 'requests' || payload.action === 'work' ? [] : { id: 'result' }; },
       validSharedId: value => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value),

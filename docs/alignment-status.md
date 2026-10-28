@@ -723,3 +723,19 @@ and commit-conflict retries without repeated artifact copies. Retry fault inject
 releases the server transaction before raising its synthetic commit conflict.
 No live Firestore record was written. Live durability and hosted delivery remain
 outside this same-host implementation. Cutover preflight is the later phase 4 gate.
+
+### Firestore shared workflow — phase 3
+
+Selected PR #15 presentation/navigation changes now use PR #16's existing shared
+contracts. The admin response adds project-scoped requester display names through
+batched Firebase Auth lookups; unavailable/deleted/unnamed profiles have explicit
+fallbacks and never expose emails. Individual notes, readable action labels with
+icons/tooltips, and active admin navigation retain all project linking, audition,
+review and publication actions. No processing/ready/rejected statuses were added.
+Studio context uses a shared work ID and preserves saved projects and unfinished
+operation recovery. Unlinked work can prepare a new project without an implicit link.
+
+All 17 web test files passed, including new profile batching/failure and Studio
+context regressions. Pinned typecheck and production build passed. Existing reader
+server deletion and playback tests remain passing. HTTP fixture profile lookup is
+synthetic; this phase makes no live Firebase profile or hosted processing claim.

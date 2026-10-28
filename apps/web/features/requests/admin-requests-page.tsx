@@ -6,11 +6,15 @@ import { RequireSignIn } from "../identity/require-sign-in";
 import { useAuth } from "../identity/auth-provider";
 import { getFirebaseAuth } from "../identity/firebase-client";
 
+import { AdminNav } from "../identity/admin-nav";
+import { AccountNav } from "../identity/account-nav";
+import { RequestAction } from "./request-action";
+
 type Candidate = { id: string; revision: string; export_id: string };
 type Review = Candidate & { candidate_id: string };
 type Work = {
   id: string; title: string; chapter: number; status: "pending" | "approved" | "published";
-  requests: { id: string; notes: string }[];
+  requests: { id: string; notes: string; requester_name?: string }[];
   link: { project_id: string } | null; publication_id: string | null;
   candidate: Candidate | null; review: Review | null;
 };
@@ -87,7 +91,7 @@ function AdminWork({ uid, authorizationReady }: { uid: string; authorizationRead
   }
 
   return <main className="admin-requests-page">
-    <header className="admin-header"><div><p className="browse-eyebrow">Admin</p><h1>Audiobook requests</h1><p>Approve chapter work, attach a studio project, and review its export before publication.</p></div><Link href="/browse" className="header-link">View library</Link></header>
+    <header className="admin-header"><div><p className="browse-eyebrow">Admin</p><h1>Audiobook requests</h1><p>Approve chapter work, attach a studio project, and review its export before publication.</p></div><AdminNav active="requests" /><AccountNav /></header>
     {message && <p role="status" className="notice">{message}</p>}
     {error && <p role="alert" className="notice error">{error}</p>}
     {loading ? <p role="status">Loading requests…</p> : work.length === 0 ? <section className="empty-requests"><h2>No requests yet</h2><p>Reader requests will appear here.</p></section> :
@@ -97,16 +101,17 @@ function AdminWork({ uid, authorizationReady }: { uid: string; authorizationRead
         return <article key={item.id} className="admin-request-card">
           <div className="admin-request-info"><div className="admin-request-heading"><div><p className="request-manga">{item.title}</p><h2>Chapter {item.chapter}</h2></div><span className={`request-status status-${item.status}`}>{item.status}</span></div>
             <p>{item.requests.length} {item.requests.length === 1 ? "reader request" : "reader requests"}</p>
-            {item.requests.some(request => request.notes) && <div className="request-notes"><strong>Reader notes</strong><ul>{item.requests.filter(request => request.notes).map(request => <li key={request.id}>{request.notes}</li>)}</ul></div>}
-            {item.status === "pending" && <button type="button" className="approve-button" disabled={!!busy} onClick={() => void action(item, "approve")}>Approve request</button>}
+            <div className="request-notes"><strong>Readers and notes</strong><ul>{item.requests.map(request => <li key={request.id}><strong>{request.requester_name || "Name unavailable"}</strong><p>{request.notes || "No note provided."}</p></li>)}</ul></div>
+            {item.status === "pending" && <RequestAction action="approve" label="Approve request" disabled={!!busy || !authorizationReady} onClick={() => void action(item, "approve")} />}
+            {item.status === "approved" && !item.link && <Link className="button" href={`/?work=${encodeURIComponent(item.id)}&create=1`}>Prepare new studio project</Link>}
             {item.status !== "pending" && <>
               <label>Studio project <select value={project} disabled={!!busy} onChange={event => setSelectedProjects(current => ({ ...current, [item.id]: event.target.value }))}><option value="">Select a saved project</option>{projects.map(saved => <option key={saved.id} value={saved.id}>{saved.name} · {saved.id.slice(0, 6)}</option>)}</select></label>
               <div className="admin-actions"><button type="button" className="button" disabled={!!busy || !project || project === item.link?.project_id} onClick={() => void action(item, "link", { project_id: project })}>{item.link ? "Replace project link" : "Attach project"}</button>
-                {item.link && <Link className="button" href={`/?project=${encodeURIComponent(item.link.project_id)}`}>Open linked studio project</Link>}</div>
+                {item.link && <Link className="button" href={`/?project=${encodeURIComponent(item.link.project_id)}&work=${encodeURIComponent(item.id)}`}>Open linked studio project</Link>}</div>
               <p className="control-note">Upload authorized images in the studio. Replacing a project link invalidates earlier reviews; published audio remains available.</p>
-              {item.link && <><button type="button" className="button" disabled={!!busy} onClick={() => void action(item, "prepare")}>Prepare export for audition</button>
-                {item.candidate && <div className="request-notes"><strong>Latest audition candidate</strong><audio controls preload="none" src={`/api/shared/candidate?id=${encodeURIComponent(item.candidate.id)}`} /><button type="button" className="button" disabled={!!busy} onClick={() => void action(item, "review", { candidate_id: item.candidate!.id, revision: item.candidate!.revision })}>Record audio review</button><p className="control-note">Record your decision after reviewing this exact export.</p></div>}
-                {item.review && <div className="request-notes"><strong>Reviewed export</strong><audio controls preload="none" src={`/api/shared/candidate?id=${encodeURIComponent(item.review.candidate_id)}`} /><button type="button" className="approve-button" disabled={!!busy || !reviewMatchesCandidate} onClick={() => void action(item, "publish", { review_id: item.review!.id, revision: item.review!.revision, expected_publication: item.publication_id })}>Publish reviewed audio</button>{!reviewMatchesCandidate && <p className="control-note">The latest candidate differs from this review. Record a review for the current export before publishing.</p>}</div>}
+              {item.link && <><RequestAction action="prepare" label="Prepare export for audition" disabled={!!busy || !authorizationReady} onClick={() => void action(item, "prepare")} />
+                {item.candidate && <div className="request-notes"><strong>Latest audition candidate</strong><audio controls preload="none" src={`/api/shared/candidate?id=${encodeURIComponent(item.candidate.id)}`} /><RequestAction action="review" label="Record audio review" disabled={!!busy || !authorizationReady} onClick={() => void action(item, "review", { candidate_id: item.candidate!.id, revision: item.candidate!.revision })} /><p className="control-note">Record your decision after reviewing this exact export.</p></div>}
+                {item.review && <div className="request-notes"><strong>Reviewed export</strong><audio controls preload="none" src={`/api/shared/candidate?id=${encodeURIComponent(item.review.candidate_id)}`} /><RequestAction action="publish" label="Publish reviewed audio" disabled={!!busy || !authorizationReady || !reviewMatchesCandidate} onClick={() => void action(item, "publish", { review_id: item.review!.id, revision: item.review!.revision, expected_publication: item.publication_id })} />{!reviewMatchesCandidate && <p className="control-note">The latest candidate differs from this review. Record a review for the current export before publishing.</p>}</div>}
               </>}
             </>}
           </div>

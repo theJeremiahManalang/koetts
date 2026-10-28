@@ -1935,3 +1935,12 @@ a:focus-visible,
 .account-dropdown-panel a:hover, .account-dropdown-panel button:hover:not(:disabled) { background: var(--paper); }
 .account-dropdown-panel button { border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 4px; }
 .account-dropdown-panel button:disabled { opacity: .6; }
+
+.admin-navigation { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.admin-navigation a { color: var(--ink, #24342b); padding: .5rem; text-decoration: none; }
+.admin-navigation a[aria-current="page"] { font-weight: 750; text-decoration: underline; text-underline-offset: .3em; }
+.shared-action-tooltip { display: inline-block; position: relative; margin: .25rem; }
+.shared-action-symbol::before { content: attr(data-symbol); margin-right: .35rem; }
+.shared-action-label { display: none; position: absolute; bottom: calc(100% + .3rem); left: 0; padding: .5rem; border-radius: .4rem; color: #fff; background: #24342b; z-index: 5; width: max-content; max-width: 16rem; }
+.shared-action-tooltip:not([data-dismissed]):hover .shared-action-label,
+.shared-action-tooltip:not([data-dismissed]):focus-within .shared-action-label { display: block; }
