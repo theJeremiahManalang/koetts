@@ -514,7 +514,12 @@ separate fixes `434c81e` and `4161dfa`, fresh verification and clean independent
 follow-up reviews. It supersedes earlier no-findings claims for those paths.
 These local review fixes were not deployed; hosted processing remains disabled.
 
-## S4 — In progress
+## S4 — Complete locally, 28 October 2026
+
+All four approved implementation phases are complete for the same-host local
+service. Final acceptance evidence and limitations follow the phase records below.
+
+### Initial incomplete checkpoint
 
 The approved request identity is a whitespace-normalized, case-folded manga title,
 positive chapter number, and the single default audio configuration. Readers see
@@ -522,11 +527,9 @@ pending, approved, or published status. The local request-store foundation curre
 persists shared chapter work and reader-specific requests in SQLite. It is not wired
 into the web application, and its approval method is not an authorization boundary.
 
-S4 acceptance remains incomplete: authenticated API and UI integration, source and
-studio linkage, exact export review, atomic publication, catalog, playback, and the
-end-to-end flow have not been implemented or verified. In particular, export review
-must derive the revision, settings, and checksums from trusted studio state rather
-than accepting assertions from a caller. No publication capability is enabled.
+At this initial checkpoint, authenticated API and UI integration, source and studio
+linkage, exact export review, atomic publication, catalog, playback, and the end-to-end
+flow were incomplete. The subsequent phase records supersede that checkpoint.
 
 ### S4 phase 1 — request and project-link contracts
 
@@ -599,3 +602,77 @@ and same-directory symlink substitution. Follow-up fixes and regression checks
 resolved the findings. A separate local process with write access can still modify
 an already opened inode during streaming; application-managed artifacts are treated
 as immutable. S5 must establish cloud-object immutability independently.
+
+### S4 phase 4 — UI integration and final acceptance
+
+The request form and account request list use shared persistence, including duplicate
+feedback and owner-only deletion. Admins approve chapter work, attach a saved project,
+open the linked studio, audition an immutable export, record its review, and explicitly
+publish that reviewed version. The catalog, chapter details, Listen links and reader
+use accepted publications. Browser-local demo records remain untouched and are not
+imported; unused source fixtures were removed after checking consumers.
+
+Reader and admin audition players remain mounted through same-user reauthentication.
+The reader refreshes expiring URLs while retaining listening position, and preserves
+high-contrast and larger-control preferences. Production source images remain private;
+reader page delivery awaits the separately scoped manga API.
+
+| S4 acceptance criterion | Current evidence | Result |
+| --- | --- | --- |
+| Shared requests and chapter/configuration deduplication | Engine/service tests and the HTTP flow submit two readers' normalized references, preserve original notes, isolate lists and deny cross-reader deletion | Passed locally |
+| Admin approval and authorized production linkage | Worker tests reject missing, malformed and symlinked projects; HTTP performs admin approval, links a real synthetic project, then applies a script review and renders/exports through the existing workflow | Passed locally |
+| Exact immutable export review | Tests bind candidate/review to project revision, export ID, settings and every artifact checksum; altered files, relinks and CLI re-exports invalidate promotion | Passed locally |
+| Atomic publication and replacement retention | Concurrent publication has one winner; injected SQLite pointer failure, changed exports and relinks preserve the previous published pointer and audio | Passed locally |
+| Reader-safe catalog and audio | Route and HTTP tests verify reader/admin separation, session-bound expiring tokens, tampering rejection, private cache headers and byte ranges; reader DOM contains no studio images | Passed locally |
+| Complete reader/admin experience | React tests and Chromium exercise request submission/duplicate/deletion, linked studio navigation, audition/review/publication, catalog/Listen/playback, session renewal and accessibility | Passed with synthetic identities/audio |
+
+#### Final verification
+
+Final acceptance used Node **22.22.3**, npm **10.9.8**, uv **0.11.16** and the
+repository Python **3.11.15** environment. Earlier exploratory runs used the shell's
+Node 24 default; the gates below were repeated with the pinned runtime.
+
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:$PATH UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run check`
+  passed: repository boundaries/pointers, Ruff, 117 Python tests (115 passed, two
+  optional skips), 55 web tests, typecheck and the production build.
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:$PATH UV_CACHE_DIR=/tmp/manga-s4-uv-cache npm run test:http`
+  passed studio and frontend-only production checks. The HTTP integration test ran
+  successfully against its disposable server. The two full-suite skips were the
+  separately executed HTTP test and the external sample compatibility test; no
+  external sample was supplied.
+- `PATH=/home/ssuish/.nvm/versions/node/v22.22.3/bin:$PATH UV_CACHE_DIR=/tmp/manga-s4-uv-cache .venv/bin/python /tmp/manga-s4-browser-runner.py`
+  passed Chromium checks at **1440×900** and **390×844**. Browser plugin was unavailable;
+  regular Playwright reused an installed package and browser. The disposable copy
+  alone replaced external identity SDK/provider dependencies. Real app screens loaded
+  the synthetic 0.32-second WAV, played and sought it, retained reader and admin audio
+  through session renewal, handled requests and publication, and showed no relevant
+  app console errors or framework overlay. Mobile width was 390 pixels with no
+  horizontal overflow. The missing favicon was excluded from app-error findings.
+- Screenshots and browser scripts are temporary session artifacts under `/tmp`,
+  including `manga-s4-browse.png`, `manga-s4-reader.png`,
+  `manga-s4-reader-mobile.png` and `manga-s4-admin.png`; they are not required project data.
+- After the final contrast adjustment, pinned `npm run build` passed again.
+  Pinned `npm run check:repo` and `git diff --check` also passed after the completion
+  documentation was updated.
+
+#### Final review
+
+Standards and Spec reviewed the full branch against
+`ede54cd946143fa6f9c2a1fc847aacff6520b479`. Final review found and resolved admin audition
+reset during renewal; the reviewer confirmed the fix and all 11 shared UI tests.
+There are no unresolved blocking correctness findings. A possible data-clump smell
+in the trusted export arguments was accepted as nonblocking; all values are derived
+at the common locked snapshot boundary. Spec review reported no remaining S4 gaps
+or scope creep. Earlier reader renewal and removed-accessibility findings were also
+fixed and checked at the complete ReaderPage boundary and in Chromium.
+
+The small web-guide correction preserves root approval policy. A manual instruction
+walkthrough checked substantial tasks, quick questions, approved follow-ups, material
+scope changes and explicit bypasses; all still route through the unchanged root guide.
+Web-guide text changed from 218 to 215 words. This is a text inspection, not a model
+behavior evaluation. Repository pointer validation passed.
+
+No real human approval, live publication, paid generation, model inference, deployment,
+Firestore/GCS semantics or production listening quality is claimed. Saved user results,
+source samples and credentials were not changed. The next eligible scope is S5;
+its cloud inputs and rollout gates remain unresolved in the target design.

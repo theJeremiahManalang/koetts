@@ -1,6 +1,6 @@
 # Current application architecture
 
-Source map updated: 22 October 2026. This describes implemented boundaries, not a
+Source map updated: 28 October 2026. This describes implemented boundaries, not a
 new runtime verification. Historical test results remain in the baseline and
 validation record. Reinspect affected source when implementation changes.
 
