@@ -34,6 +34,7 @@ from manga_tts.operations import (
 )
 from manga_tts.resolution import page_image
 from manga_tts.script import cast_signature, scene_signature
+from manga_tts.shared_requests import ExportSnapshot
 from manga_tts.storage import asset, digest, export_signature, read_json, write_json
 
 from .paths import data_root
@@ -498,7 +499,7 @@ def link_shared_project(store, work_id, project_id, actor):
         return store.link_project(work_id, project_id, actor)
 
 
-def _export_snapshot(workspace, expected_revision):
+def _export_snapshot(workspace, expected_revision, *, work_id, link):
     """Resolve current export metadata and files while the workspace lock is held."""
     router = PipelineRouter(operation_pipeline_config(workspace))
     router.load_project()
@@ -518,7 +519,9 @@ def _export_snapshot(workspace, expected_revision):
         if path.is_symlink() or not path.is_file():
             raise ValueError("Export artifact is unavailable")
         artifacts[name] = asset(workspace, f"exports/{name}")
-    return revision, export_id, digest(data["settings"]), artifacts
+    return ExportSnapshot(work_id=work_id, link_id=link["id"], project_id=link["project_id"],
+                          revision=revision, export_id=export_id, settings_hash=digest(data["settings"]),
+                          artifacts=artifacts)
 
 
 @contextmanager
@@ -532,40 +535,26 @@ def _locked_shared_export(store, work_id, expected_revision):
     if workspace.is_symlink() or not (workspace / "project.json").is_file():
         raise ValueError("Studio project not found")
     with workspace_lock(workspace):
-        yield link, _export_snapshot(workspace, expected_revision)
-
-
-def _export_checksums(artifacts):
-    checksums = {}
-    for name, path in artifacts.items():
-        with path.open("rb") as source:
-            checksums[name] = hashlib.file_digest(source, "sha256").hexdigest()
-    return checksums
+        yield _export_snapshot(workspace, expected_revision, work_id=work_id, link=link)
 
 
 def prepare_shared_export(store, work_id, actor, expected_revision):
     """Prepare a current immutable export snapshot for an administrator to inspect."""
-    with _locked_shared_export(store, work_id, expected_revision) as (link, snapshot):
-        revision, export_id, settings_hash, artifacts = snapshot
-        return store.prepare_audio_review(work_id, link, actor, revision, export_id, settings_hash, artifacts)
+    with _locked_shared_export(store, work_id, expected_revision) as snapshot:
+        return store.prepare_audio_review(snapshot, actor=actor)
 
 
 def approve_shared_export(store, work_id, candidate_id, actor, expected_revision):
     """Record a human decision against the prepared, still-current export."""
-    with _locked_shared_export(store, work_id, expected_revision) as (link, snapshot):
-        revision, export_id, settings_hash, artifacts = snapshot
-        return store.approve_audio_review(work_id, candidate_id, link, actor, revision, export_id, settings_hash,
-                                          _export_checksums(artifacts))
+    with _locked_shared_export(store, work_id, expected_revision) as snapshot:
+        return store.approve_audio_review(snapshot, candidate_id=candidate_id, actor=actor)
 
 
 def publish_shared_export(store, work_id, review_id, actor, expected_revision, expected_publication):
     """Publish only a reviewed export that still matches the locked studio project."""
-    with _locked_shared_export(store, work_id, expected_revision) as (link, snapshot):
-        revision, export_id, settings_hash, artifacts = snapshot
-        return store.publish_review(
-            work_id, review_id, actor, link, revision, export_id, settings_hash,
-            _export_checksums(artifacts), expected_publication,
-        )
+    with _locked_shared_export(store, work_id, expected_revision) as snapshot:
+        return store.publish_review(snapshot, review_id=review_id, actor=actor,
+                                    expected_publication=expected_publication)
 
 
 def source_signature(data):

@@ -13,12 +13,43 @@ import sqlite3
 import stat
 import tempfile
 import uuid
+from collections.abc import Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 
 def _manga_id(title_key: str) -> str:
     return hashlib.sha256(title_key.encode("utf-8")).hexdigest()[:32]
+
+
+def _file_checksum(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExportSnapshot:
+    """Export identity and files derived by the worker under its workspace lock.
+
+    This groups trusted application inputs; constructing it grants no authority.
+    Callers retain the workspace lock through the associated store mutation.
+    """
+
+    work_id: str
+    link_id: str
+    project_id: str
+    revision: str
+    export_id: str
+    settings_hash: str
+    artifacts: Mapping[str, Path]
+
+    def __post_init__(self):
+        object.__setattr__(self, "artifacts", MappingProxyType(dict(self.artifacts)))
+
+    def checksums(self) -> dict[str, str]:
+        return {name: _file_checksum(path) for name, path in self.artifacts.items()}
 
 
 class SharedRequests:
@@ -198,7 +229,7 @@ class SharedRequests:
             try:
                 os.link(temporary, target)
             except FileExistsError:
-                if self._checksum(target) != checksum:
+                if _file_checksum(target) != checksum:
                     raise ValueError("Stored artifact checksum mismatch") from None
             if hasattr(os, "O_DIRECTORY"):
                 directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
@@ -210,14 +241,6 @@ class SharedRequests:
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-
-    @staticmethod
-    def _checksum(path: Path):
-        digest = hashlib.sha256()
-        with path.open("rb") as source:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
-        return digest.hexdigest()
 
     def _verified_artifact(self, checksum: str):
         """Cache verification only while the immutable file's identity stays unchanged."""
@@ -258,25 +281,25 @@ class SharedRequests:
         except OSError:
             raise ValueError("Artifact is unavailable") from None
 
-    def prepare_audio_review(self, work_id, link, actor, revision, export_id, settings_hash, artifacts):
+    def prepare_audio_review(self, snapshot: ExportSnapshot, *, actor: str):
         """Capture immutable artifacts for an administrator to inspect."""
-        if not actor or not revision or not export_id or not settings_hash or not artifacts:
+        if not actor or not snapshot.revision or not snapshot.export_id or not snapshot.settings_hash or not snapshot.artifacts:
             raise ValueError("Incomplete audio review")
-        checksums = {name: self._store_artifact(path) for name, path in artifacts.items()}
+        checksums = {name: self._store_artifact(path) for name, path in snapshot.artifacts.items()}
         candidate_id = uuid.uuid4().hex
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
-            if not current or current["id"] != link["id"] or current["project_id"] != link["project_id"]:
+            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (snapshot.work_id,)).fetchone()
+            if not current or current["id"] != snapshot.link_id or current["project_id"] != snapshot.project_id:
                 raise ValueError("Project link changed during review")
             db.execute(
                 "INSERT INTO export_candidates(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (candidate_id, work_id, link["id"], link["project_id"], actor, revision, export_id,
-                 settings_hash, json.dumps(checksums, sort_keys=True)),
+                (candidate_id, snapshot.work_id, snapshot.link_id, snapshot.project_id, actor,
+                 snapshot.revision, snapshot.export_id, snapshot.settings_hash, json.dumps(checksums, sort_keys=True)),
             )
-        return {"id": candidate_id, "work_id": work_id, "link_id": link["id"], "project_id": link["project_id"],
-                "actor": actor, "revision": revision, "export_id": export_id, "settings_hash": settings_hash,
+        return {"id": candidate_id, "work_id": snapshot.work_id, "link_id": snapshot.link_id, "project_id": snapshot.project_id,
+                "actor": actor, "revision": snapshot.revision, "export_id": snapshot.export_id, "settings_hash": snapshot.settings_hash,
                 "checksums": checksums}
 
     def candidate_artifact(self, candidate_id, name):
@@ -305,34 +328,35 @@ class SharedRequests:
             ).fetchone()
             return {"candidate": dict(candidate), "review": dict(review) if review else None}
 
-    def approve_audio_review(self, work_id, candidate_id, link, actor, revision, export_id, settings_hash, checksums):
+    def approve_audio_review(self, snapshot: ExportSnapshot, *, candidate_id: str, actor: str):
         """Record an explicit decision only for a still-current prepared snapshot."""
         if not actor:
             raise ValueError("Audio review actor required")
+        checksums = snapshot.checksums()
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
-            candidate = db.execute("SELECT * FROM export_candidates WHERE id = ? AND work_id = ?", (candidate_id, work_id)).fetchone()
-            if (not current or not candidate or current["id"] != link["id"]
+            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (snapshot.work_id,)).fetchone()
+            candidate = db.execute("SELECT * FROM export_candidates WHERE id = ? AND work_id = ?", (candidate_id, snapshot.work_id)).fetchone()
+            if (not current or not candidate or current["id"] != snapshot.link_id
                     or candidate["link_id"] != current["id"] or candidate["project_id"] != current["project_id"]
-                    or (candidate["revision"], candidate["export_id"], candidate["settings_hash"]) != (revision, export_id, settings_hash)
+                    or (candidate["revision"], candidate["export_id"], candidate["settings_hash"]) != (snapshot.revision, snapshot.export_id, snapshot.settings_hash)
                     or json.loads(candidate["checksums"]) != checksums):
                 raise ValueError("Export no longer matches prepared audio")
             for checksum in checksums.values():
                 path = self.database.parent / "shared-artifacts" / checksum
-                if not path.is_file() or self._checksum(path) != checksum:
+                if not path.is_file() or _file_checksum(path) != checksum:
                     raise ValueError("Candidate artifact unavailable or changed")
             review_id = uuid.uuid4().hex
             db.execute(
                 "INSERT INTO audio_reviews(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (review_id, work_id, link["id"], link["project_id"], actor, revision, export_id,
-                 settings_hash, json.dumps(checksums, sort_keys=True)),
+                (review_id, snapshot.work_id, snapshot.link_id, snapshot.project_id, actor,
+                 snapshot.revision, snapshot.export_id, snapshot.settings_hash, json.dumps(checksums, sort_keys=True)),
             )
             db.execute("INSERT INTO review_candidates(review_id, candidate_id) VALUES (?, ?)", (review_id, candidate_id))
-        return {"id": review_id, "candidate_id": candidate_id, "work_id": work_id, "link_id": link["id"],
-                "project_id": link["project_id"], "actor": actor, "revision": revision, "export_id": export_id,
-                "settings_hash": settings_hash, "checksums": checksums}
+        return {"id": review_id, "candidate_id": candidate_id, "work_id": snapshot.work_id, "link_id": snapshot.link_id,
+                "project_id": snapshot.project_id, "actor": actor, "revision": snapshot.revision, "export_id": snapshot.export_id,
+                "settings_hash": snapshot.settings_hash, "checksums": checksums}
 
     def publication(self, work_id):
         with self._connect() as db:
@@ -362,24 +386,26 @@ class SharedRequests:
                 result.append(entry)
             return result
 
-    def publish_review(self, work_id, review_id, actor, link, revision, export_id, settings_hash,
-                       checksums, expected_publication):
+    def publish_review(self, snapshot: ExportSnapshot, *, review_id: str, actor: str,
+                       expected_publication: str | None):
         """Atomically promote a reviewed export after validating a locked current snapshot."""
         if not actor:
             raise ValueError("Publication actor required")
+        checksums = snapshot.checksums()
+        work_id = snapshot.work_id
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             current_link = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
             review = db.execute("SELECT * FROM audio_reviews WHERE id = ? AND work_id = ?", (review_id, work_id)).fetchone()
-            if (not current_link or not review or current_link["id"] != link["id"]
+            if (not current_link or not review or current_link["id"] != snapshot.link_id
                     or review["link_id"] != current_link["id"]
                     or review["project_id"] != current_link["project_id"]
-                    or (review["revision"], review["export_id"], review["settings_hash"]) != (revision, export_id, settings_hash)
+                    or (review["revision"], review["export_id"], review["settings_hash"]) != (snapshot.revision, snapshot.export_id, snapshot.settings_hash)
                     or json.loads(review["checksums"]) != checksums):
                 raise ValueError("Export no longer matches audio review")
             for checksum in checksums.values():
                 path = self.database.parent / "shared-artifacts" / checksum
-                if not path.is_file() or self._checksum(path) != checksum:
+                if not path.is_file() or _file_checksum(path) != checksum:
                     raise ValueError("Reviewed artifact unavailable or changed")
             prior = db.execute("SELECT * FROM publications WHERE work_id = ?", (work_id,)).fetchone()
             if prior and prior["review_id"] == review_id:
