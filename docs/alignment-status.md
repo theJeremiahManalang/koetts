@@ -689,3 +689,19 @@ cover concurrency, sanitization, body limits, strict parsing and credential reje
 Pinned full acceptance passed 123 Python tests (two optional skips), 55 web tests,
 Ruff, repository checks, typecheck and production build; the final race regression
 passed within the 14-test HTTP suite. No live-provider or deployment claim is made.
+
+### Firestore shared workflow — phase 1
+
+The approved follow-up preserves S4 behavior while separating shared metadata
+transactions from local immutable artifact storage. `SharedRequests` retains engine
+validation and review/publication decisions. `SQLiteSharedMetadata` owns SQL and
+transaction rollback; `LocalSharedArtifacts` owns bytes and a disposable local
+verification cache. Existing metadata tables and artifact paths remain readable.
+Mutation identities are allocated before transaction callbacks, and callbacks do
+not copy or verify files. A rollback/retry regression confirms one artifact copy,
+the same candidate identity across attempts, and recovery through a fresh service.
+
+The 35 existing shared engine/worker tests passed after extraction. Full Python
+acceptance and the added retry regression passed; exact results are recorded in
+`CONTEXT.md`. No Firestore adapter, live data migration or deployment is claimed
+by this phase. The next phase is the explicitly selected Firestore metadata adapter.

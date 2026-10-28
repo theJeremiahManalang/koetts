@@ -6,18 +6,13 @@ SQLite coordinates one host. Cloud persistence is a separate adapter.
 from __future__ import annotations
 
 import hashlib
-import json
-import os
-import re
-import sqlite3
-import stat
-import tempfile
 import uuid
 from collections.abc import Mapping
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
+
+from .shared_artifacts import LocalSharedArtifacts
 
 
 def _manga_id(title_key: str) -> str:
@@ -53,73 +48,14 @@ class ExportSnapshot:
 
 
 class SharedRequests:
-    """Store reader requests and their shared chapter work."""
+    """Shared workflow decisions independent of metadata storage and artifact transport."""
 
-    def __init__(self, database: Path):
+    def __init__(self, database: Path, *, metadata=None, artifacts=None):
+        from .shared_metadata import SQLiteSharedMetadata
+
         self.database = Path(database)
-        self.database.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
-            db.executescript("""
-                CREATE TABLE IF NOT EXISTS chapter_work (
-                    id TEXT PRIMARY KEY, title TEXT NOT NULL,
-                    title_key TEXT NOT NULL, chapter INTEGER NOT NULL,
-                    configuration TEXT NOT NULL, status TEXT NOT NULL,
-                    UNIQUE(title_key, chapter, configuration)
-                );
-                CREATE TABLE IF NOT EXISTS reader_requests (
-                    id TEXT PRIMARY KEY, work_id TEXT NOT NULL REFERENCES chapter_work(id),
-                    reader TEXT NOT NULL, notes TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(work_id, reader)
-                );
-                CREATE TABLE IF NOT EXISTS work_approvals (
-                    work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
-                    actor TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS work_projects (
-                    work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
-                    id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL UNIQUE,
-                    actor TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS audio_reviews (
-                    id TEXT PRIMARY KEY, work_id TEXT NOT NULL REFERENCES chapter_work(id),
-                    link_id TEXT NOT NULL, project_id TEXT NOT NULL, actor TEXT NOT NULL,
-                    revision TEXT NOT NULL, export_id TEXT NOT NULL, settings_hash TEXT NOT NULL,
-                    checksums TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS export_candidates (
-                    id TEXT PRIMARY KEY, work_id TEXT NOT NULL REFERENCES chapter_work(id),
-                    link_id TEXT NOT NULL, project_id TEXT NOT NULL, actor TEXT NOT NULL,
-                    revision TEXT NOT NULL, export_id TEXT NOT NULL, settings_hash TEXT NOT NULL,
-                    checksums TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS review_candidates (
-                    review_id TEXT PRIMARY KEY REFERENCES audio_reviews(id),
-                    candidate_id TEXT NOT NULL REFERENCES export_candidates(id)
-                );
-                CREATE TABLE IF NOT EXISTS publications (
-                    work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
-                    id TEXT NOT NULL UNIQUE, review_id TEXT NOT NULL REFERENCES audio_reviews(id),
-                    actor TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS verified_artifacts (
-                    checksum TEXT PRIMARY KEY, device INTEGER NOT NULL, inode INTEGER NOT NULL,
-                    size INTEGER NOT NULL, modified_ns INTEGER NOT NULL, changed_ns INTEGER NOT NULL
-                );
-            """)
-
-    @contextmanager
-    def _connect(self):
-        db = sqlite3.connect(self.database, timeout=30)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys = ON")
-        try:
-            with db:
-                yield db
-        finally:
-            db.close()
+        self.artifacts = artifacts if artifacts is not None else LocalSharedArtifacts(self.database.parent)
+        self.metadata = metadata if metadata is not None else SQLiteSharedMetadata(self.database)
 
     def submit(self, reader: str, title: str, chapter: str, notes: str):
         title = " ".join(title.split())
@@ -127,325 +63,230 @@ class SharedRequests:
             raise ValueError("Invalid request")
         if not chapter.isascii() or not chapter.isdigit() or not 1 <= int(chapter) <= 9999:
             raise ValueError("Invalid chapter")
-        with self._connect() as db:
-            db.execute(
-                "INSERT INTO chapter_work VALUES (?, ?, ?, ?, ?, ?) "
-                "ON CONFLICT(title_key, chapter, configuration) DO NOTHING",
-                (uuid.uuid4().hex, title, title.casefold(), int(chapter), "default", "pending"),
-            )
-            work_id = db.execute(
-                "SELECT id FROM chapter_work WHERE title_key = ? AND chapter = ? AND configuration = ?",
-                (title.casefold(), int(chapter), "default"),
-            ).fetchone()[0]
-            inserted = db.execute(
-                "INSERT INTO reader_requests(id, work_id, reader, notes) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(work_id, reader) DO NOTHING",
-                (uuid.uuid4().hex, work_id, reader, notes),
-            )
-            result = dict(db.execute(
-                "SELECT r.id, r.work_id, r.notes, r.created_at, w.title, w.chapter, w.status "
-                "FROM reader_requests r JOIN chapter_work w ON r.work_id = w.id "
-                "WHERE r.work_id = ? AND r.reader = ?", (work_id, reader),
-            ).fetchone())
-            result["duplicate"] = inserted.rowcount == 0
-            return result
+        work = dict(id=uuid.uuid4().hex, title=title, title_key=title.casefold(), chapter=int(chapter),
+                    configuration="default", status="pending")
+        request = dict(id=uuid.uuid4().hex, reader=reader, notes=notes, created_at=_now())
 
-    def list_reader(self, reader: str):
-        with self._connect() as db:
-            rows = db.execute(
-                "SELECT r.id, r.work_id, r.notes, r.created_at, w.title, w.title_key, w.chapter, w.status "
-                "FROM reader_requests r JOIN chapter_work w ON r.work_id = w.id "
-                "WHERE r.reader = ? ORDER BY r.created_at, r.id", (reader,),
-            )
+        def submit(tx):
+            existing = tx.find("chapter_work", title_key=work["title_key"], chapter=work["chapter"], configuration="default")
+            current = existing[0] if existing else work
+            prior = tx.find("reader_requests", work_id=current["id"], reader=reader)
+            record = prior[0] if prior else {**request, "work_id": current["id"]}
+            if not existing:
+                tx.put("chapter_work", work)
+            if not prior:
+                tx.put("reader_requests", record)
+            return {**_fields(record, "id", "work_id", "notes", "created_at"),
+                    **_fields(current, "title", "chapter", "status"), "duplicate": bool(prior)}
+        return self.metadata.run(submit)
+
+    def list_reader(self, reader):
+        def read(tx):
+            requests = tx.find("reader_requests", reader=reader)
             result = []
-            for row in rows:
-                entry = dict(row)
-                entry["manga_id"] = _manga_id(entry.pop("title_key"))
-                result.append(entry)
+            for request in sorted(requests, key=lambda r: (r["created_at"], r["id"])):
+                work = tx.get("chapter_work", request["work_id"])
+                result.append({**_fields(request, "id", "work_id", "notes", "created_at"),
+                               **_fields(work, "title", "chapter", "status"), "manga_id": _manga_id(work["title_key"])})
             return result
+        return self.metadata.run(read)
 
     def list_work(self):
-        with self._connect() as db:
-            return [dict(row) for row in db.execute(
-                "SELECT w.id, w.title, w.chapter, w.status, a.actor AS approved_by "
-                "FROM chapter_work w LEFT JOIN work_approvals a ON a.work_id = w.id "
-                "ORDER BY w.title_key, w.chapter"
-            )]
+        def read(tx):
+            result = []
+            for work in sorted(tx.find("chapter_work"), key=lambda r: (r["title_key"], r["chapter"])):
+                approval = tx.get("work_approvals", work["id"])
+                result.append({**_fields(work, "id", "title", "chapter", "status"),
+                               "approved_by": approval["actor"] if approval else None})
+            return result
+        return self.metadata.run(read)
 
-    def work_requests(self, work_id: str):
-        """List individual requests for an authorized administrator."""
-        with self._connect() as db:
-            return [dict(row) for row in db.execute(
-                "SELECT id, reader, notes, created_at FROM reader_requests "
-                "WHERE work_id = ? ORDER BY created_at, id", (work_id,),
-            )]
+    def work_requests(self, work_id):
+        return self.metadata.run(lambda tx: [_fields(r, "id", "reader", "notes", "created_at") for r in
+                                sorted(tx.find("reader_requests", work_id=work_id), key=lambda r: (r["created_at"], r["id"]))])
 
-    def get_link(self, work_id: str):
-        with self._connect() as db:
-            row = db.execute(
-                "SELECT id, work_id, project_id, actor, created_at FROM work_projects WHERE work_id = ?",
-                (work_id,),
-            ).fetchone()
-            return dict(row) if row else None
+    def get_link(self, work_id):
+        return self.metadata.run(lambda tx: _without_sequence(tx.get("work_projects", work_id)))
 
-    def link_project(self, work_id: str, project_id: str, actor: str):
-        """Attach an existing project; the caller verifies the project and actor."""
+    def link_project(self, work_id, project_id, actor):
         if not project_id or not actor:
             raise ValueError("Project and actor required")
-        with self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            work = db.execute("SELECT status FROM chapter_work WHERE id = ?", (work_id,)).fetchone()
+        link = dict(work_id=work_id, id=uuid.uuid4().hex, project_id=project_id, actor=actor, created_at=_now())
+
+        def commit(tx):
+            work = tx.get("chapter_work", work_id)
+            previous = tx.get("work_projects", work_id)
+            used = tx.find("work_projects", project_id=project_id)
             if not work or work["status"] not in ("approved", "published"):
                 raise ValueError("Approved work required")
-            previous = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
             if previous and previous["project_id"] == project_id:
-                return dict(previous)
-            if db.execute("SELECT 1 FROM work_projects WHERE project_id = ?", (project_id,)).fetchone():
+                return _without_sequence(previous)
+            if used:
                 raise ValueError("Project already linked")
-            db.execute(
-                "INSERT INTO work_projects(work_id, id, project_id, actor) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(work_id) DO UPDATE SET id = excluded.id, project_id = excluded.project_id, "
-                "actor = excluded.actor, created_at = CURRENT_TIMESTAMP",
-                (work_id, uuid.uuid4().hex, project_id, actor),
-            )
-            return dict(db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone())
-
-    def _store_artifact(self, source: Path):
-        """Copy immutable content before recording any review or publication pointer."""
-        directory = self.database.parent / "shared-artifacts"
-        directory.mkdir(parents=True, exist_ok=True)
-        temporary = None
-        try:
-            digest = hashlib.sha256()
-            with source.open("rb") as incoming, tempfile.NamedTemporaryFile(dir=directory, delete=False) as output:
-                temporary = Path(output.name)
-                while chunk := incoming.read(1024 * 1024):
-                    digest.update(chunk)
-                    output.write(chunk)
-                output.flush()
-                os.fsync(output.fileno())
-            checksum = digest.hexdigest()
-            target = directory / checksum
-            try:
-                os.link(temporary, target)
-            except FileExistsError:
-                if _file_checksum(target) != checksum:
-                    raise ValueError("Stored artifact checksum mismatch") from None
-            if hasattr(os, "O_DIRECTORY"):
-                directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
-            return checksum
-        finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
-
-    def _verified_artifact(self, checksum: str):
-        """Cache verification only while the immutable file's identity stays unchanged."""
-        if not re.fullmatch(r"[a-f0-9]{64}", checksum):
-            raise ValueError("Invalid artifact checksum")
-        path = self.database.parent / "shared-artifacts" / checksum
-        try:
-            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-            with os.fdopen(fd, "rb") as source:
-                info = os.fstat(source.fileno())
-                if not stat.S_ISREG(info.st_mode):
-                    raise ValueError("Artifact is unavailable")
-                identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-                with self._connect() as db:
-                    cached = db.execute(
-                        "SELECT device, inode, size, modified_ns, changed_ns FROM verified_artifacts WHERE checksum = ?",
-                        (checksum,),
-                    ).fetchone()
-                # Windows reports creation time as ctime on supported Python
-                # versions, so it cannot prove that file contents are unchanged.
-                if os.name != "nt" and cached and tuple(cached) == identity:
-                    return path
-                digest = hashlib.sha256()
-                while chunk := source.read(1024 * 1024):
-                    digest.update(chunk)
-                after = os.fstat(source.fileno())
-                after_identity = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
-                if digest.hexdigest() != checksum or identity != after_identity:
-                    raise ValueError("Artifact checksum mismatch")
-                with self._connect() as db:
-                    db.execute(
-                        "INSERT INTO verified_artifacts VALUES (?, ?, ?, ?, ?, ?) "
-                        "ON CONFLICT(checksum) DO UPDATE SET device = excluded.device, inode = excluded.inode, "
-                        "size = excluded.size, modified_ns = excluded.modified_ns, changed_ns = excluded.changed_ns",
-                        (checksum, *identity),
-                    )
-                return path
-        except OSError:
-            raise ValueError("Artifact is unavailable") from None
+            tx.put("work_projects", link)
+            return link
+        return self.metadata.run(commit)
 
     def prepare_audio_review(self, snapshot: ExportSnapshot, *, actor: str):
-        """Capture immutable artifacts for an administrator to inspect."""
         if not actor or not snapshot.revision or not snapshot.export_id or not snapshot.settings_hash or not snapshot.artifacts:
             raise ValueError("Incomplete audio review")
-        checksums = {name: self._store_artifact(path) for name, path in snapshot.artifacts.items()}
-        candidate_id = uuid.uuid4().hex
-        with self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (snapshot.work_id,)).fetchone()
-            if not current or current["id"] != snapshot.link_id or current["project_id"] != snapshot.project_id:
+        checksums = {name: self.artifacts.store(path) for name, path in snapshot.artifacts.items()}
+        record = _export_record(snapshot, actor, checksums)
+
+        def commit(tx):
+            link = tx.get("work_projects", snapshot.work_id)
+            if not _same_link(link, snapshot):
                 raise ValueError("Project link changed during review")
-            db.execute(
-                "INSERT INTO export_candidates(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (candidate_id, snapshot.work_id, snapshot.link_id, snapshot.project_id, actor,
-                 snapshot.revision, snapshot.export_id, snapshot.settings_hash, json.dumps(checksums, sort_keys=True)),
-            )
-        return {"id": candidate_id, "work_id": snapshot.work_id, "link_id": snapshot.link_id, "project_id": snapshot.project_id,
-                "actor": actor, "revision": snapshot.revision, "export_id": snapshot.export_id, "settings_hash": snapshot.settings_hash,
-                "checksums": checksums}
+            tx.put("export_candidates", record)
+            return _without_created(record)
+        return self.metadata.run(commit)
 
     def candidate_artifact(self, candidate_id, name):
-        with self._connect() as db:
-            candidate = db.execute("SELECT checksums FROM export_candidates WHERE id = ?", (candidate_id,)).fetchone()
-        if not candidate or name not in json.loads(candidate["checksums"]):
+        record = self.metadata.run(lambda tx: tx.get("export_candidates", candidate_id))
+        if not record or name not in record["checksums"]:
             raise ValueError("Candidate artifact not found")
-        checksum = json.loads(candidate["checksums"])[name]
-        return self._verified_artifact(checksum)
+        return self.artifacts.verified(record["checksums"][name])
 
     def review_state(self, work_id):
-        """Recover the latest prepared candidate and its decision for the current link."""
-        with self._connect() as db:
-            candidate = db.execute(
-                "SELECT c.id, c.revision, c.export_id FROM export_candidates c "
-                "JOIN work_projects p ON p.work_id = c.work_id AND p.id = c.link_id "
-                "WHERE c.work_id = ? ORDER BY c.rowid DESC LIMIT 1", (work_id,),
-            ).fetchone()
-            if not candidate:
+        def read(tx):
+            link = tx.get("work_projects", work_id)
+            candidates = tx.find("export_candidates", work_id=work_id)
+            reviews = tx.find("audio_reviews", work_id=work_id)
+            candidates = [r for r in candidates if link and r["link_id"] == link["id"]]
+            reviews = [r for r in reviews if link and r["link_id"] == link["id"]]
+            if not candidates:
                 return {"candidate": None, "review": None}
-            review = db.execute(
-                "SELECT r.id, r.revision, r.export_id, rc.candidate_id FROM audio_reviews r "
-                "JOIN review_candidates rc ON rc.review_id = r.id "
-                "JOIN work_projects p ON p.work_id = r.work_id AND p.id = r.link_id "
-                "WHERE r.work_id = ? ORDER BY r.rowid DESC LIMIT 1", (work_id,),
-            ).fetchone()
-            return {"candidate": dict(candidate), "review": dict(review) if review else None}
+            candidate = max(candidates, key=lambda r: r["sequence"])
+            review = max(reviews, key=lambda r: r["sequence"]) if reviews else None
+            relation = tx.get("review_candidates", review["id"]) if review else None
+            return {"candidate": _fields(candidate, "id", "revision", "export_id"),
+                    "review": {**_fields(review, "id", "revision", "export_id"), "candidate_id": relation["candidate_id"]}
+                    if review and relation else None}
+        return self.metadata.run(read)
 
     def approve_audio_review(self, snapshot: ExportSnapshot, *, candidate_id: str, actor: str):
-        """Record an explicit decision only for a still-current prepared snapshot."""
         if not actor:
             raise ValueError("Audio review actor required")
         checksums = snapshot.checksums()
-        with self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            current = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (snapshot.work_id,)).fetchone()
-            candidate = db.execute("SELECT * FROM export_candidates WHERE id = ? AND work_id = ?", (candidate_id, snapshot.work_id)).fetchone()
-            if (not current or not candidate or current["id"] != snapshot.link_id
-                    or candidate["link_id"] != current["id"] or candidate["project_id"] != current["project_id"]
-                    or (candidate["revision"], candidate["export_id"], candidate["settings_hash"]) != (snapshot.revision, snapshot.export_id, snapshot.settings_hash)
-                    or json.loads(candidate["checksums"]) != checksums):
+        self._verify_checksums(checksums)
+        record = _export_record(snapshot, actor, checksums)
+
+        def commit(tx):
+            link = tx.get("work_projects", snapshot.work_id)
+            candidate = tx.get("export_candidates", candidate_id)
+            if not _matches(candidate, link, snapshot, checksums):
                 raise ValueError("Export no longer matches prepared audio")
-            for checksum in checksums.values():
-                path = self.database.parent / "shared-artifacts" / checksum
-                if not path.is_file() or _file_checksum(path) != checksum:
-                    raise ValueError("Candidate artifact unavailable or changed")
-            review_id = uuid.uuid4().hex
-            db.execute(
-                "INSERT INTO audio_reviews(id, work_id, link_id, project_id, actor, revision, export_id, settings_hash, checksums) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (review_id, snapshot.work_id, snapshot.link_id, snapshot.project_id, actor,
-                 snapshot.revision, snapshot.export_id, snapshot.settings_hash, json.dumps(checksums, sort_keys=True)),
-            )
-            db.execute("INSERT INTO review_candidates(review_id, candidate_id) VALUES (?, ?)", (review_id, candidate_id))
-        return {"id": review_id, "candidate_id": candidate_id, "work_id": snapshot.work_id, "link_id": snapshot.link_id,
-                "project_id": snapshot.project_id, "actor": actor, "revision": snapshot.revision, "export_id": snapshot.export_id,
-                "settings_hash": snapshot.settings_hash, "checksums": checksums}
+            tx.put("audio_reviews", record)
+            tx.put("review_candidates", {"review_id": record["id"], "candidate_id": candidate_id})
+            return {**_without_created(record), "candidate_id": candidate_id}
+        return self.metadata.run(commit)
 
     def publication(self, work_id):
-        with self._connect() as db:
-            row = db.execute(
-                "SELECT p.id, p.work_id, p.review_id, p.actor, p.created_at, r.checksums "
-                "FROM publications p JOIN audio_reviews r ON r.id = p.review_id WHERE p.work_id = ?",
-                (work_id,),
-            ).fetchone()
-            if row is None:
+        def read(tx):
+            publication = tx.get("publications", work_id)
+            if not publication:
                 return None
-            result = dict(row)
-            result["checksums"] = json.loads(result["checksums"])
-            return result
+            review = tx.get("audio_reviews", publication["review_id"])
+            return {**_without_sequence(publication), "checksums": review["checksums"]}
+        return self.metadata.run(read)
 
     def catalog(self):
-        """Return only chapter work with an accepted publication pointer."""
-        with self._connect() as db:
-            rows = db.execute(
-                "SELECT w.id AS work_id, w.title, w.title_key, w.chapter, p.id AS publication_id "
-                "FROM chapter_work w JOIN publications p ON p.work_id = w.id "
-                "ORDER BY w.title_key, w.chapter"
-            )
+        def read(tx):
             result = []
-            for row in rows:
-                entry = dict(row)
-                entry["manga_id"] = _manga_id(entry.pop("title_key"))
-                result.append(entry)
-            return result
+            for publication in tx.find("publications"):
+                work = tx.get("chapter_work", publication["work_id"])
+                result.append({"work_id": work["id"], "title": work["title"], "chapter": work["chapter"],
+                               "manga_id": _manga_id(work["title_key"]), "publication_id": publication["id"],
+                               "_sort": (work["title_key"], work["chapter"])})
+            return [{k: v for k, v in row.items() if k != "_sort"} for row in sorted(result, key=lambda r: r["_sort"])]
+        return self.metadata.run(read)
 
-    def publish_review(self, snapshot: ExportSnapshot, *, review_id: str, actor: str,
-                       expected_publication: str | None):
-        """Atomically promote a reviewed export after validating a locked current snapshot."""
+    def publish_review(self, snapshot: ExportSnapshot, *, review_id: str, actor: str, expected_publication: str | None):
         if not actor:
             raise ValueError("Publication actor required")
         checksums = snapshot.checksums()
-        work_id = snapshot.work_id
-        with self._connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            current_link = db.execute("SELECT * FROM work_projects WHERE work_id = ?", (work_id,)).fetchone()
-            review = db.execute("SELECT * FROM audio_reviews WHERE id = ? AND work_id = ?", (review_id, work_id)).fetchone()
-            if (not current_link or not review or current_link["id"] != snapshot.link_id
-                    or review["link_id"] != current_link["id"]
-                    or review["project_id"] != current_link["project_id"]
-                    or (review["revision"], review["export_id"], review["settings_hash"]) != (snapshot.revision, snapshot.export_id, snapshot.settings_hash)
-                    or json.loads(review["checksums"]) != checksums):
+        self._verify_checksums(checksums)
+        record = dict(id=uuid.uuid4().hex, work_id=snapshot.work_id, review_id=review_id, actor=actor, created_at=_now())
+
+        def commit(tx):
+            link = tx.get("work_projects", snapshot.work_id)
+            review = tx.get("audio_reviews", review_id)
+            prior = tx.get("publications", snapshot.work_id)
+            work = tx.get("chapter_work", snapshot.work_id)
+            if not _matches(review, link, snapshot, checksums):
                 raise ValueError("Export no longer matches audio review")
-            for checksum in checksums.values():
-                path = self.database.parent / "shared-artifacts" / checksum
-                if not path.is_file() or _file_checksum(path) != checksum:
-                    raise ValueError("Reviewed artifact unavailable or changed")
-            prior = db.execute("SELECT * FROM publications WHERE work_id = ?", (work_id,)).fetchone()
             if prior and prior["review_id"] == review_id:
-                return {"id": prior["id"], "work_id": work_id, "review_id": review_id}
+                return _fields(prior, "id", "work_id", "review_id")
             if (prior["id"] if prior else None) != expected_publication:
                 raise ValueError("Publication changed; reload before publishing")
-            publication_id = uuid.uuid4().hex
-            db.execute(
-                "INSERT INTO publications(work_id, id, review_id, actor) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(work_id) DO UPDATE SET id = excluded.id, review_id = excluded.review_id, "
-                "actor = excluded.actor, created_at = CURRENT_TIMESTAMP",
-                (work_id, publication_id, review_id, actor),
-            )
-            db.execute("UPDATE chapter_work SET status = 'published' WHERE id = ?", (work_id,))
-            return {"id": publication_id, "work_id": work_id, "review_id": review_id}
+            tx.put("publications", record)
+            tx.put("chapter_work", {**work, "status": "published"})
+            return _fields(record, "id", "work_id", "review_id")
+        return self.metadata.run(commit)
+
+    def _verify_checksums(self, checksums):
+        for checksum in checksums.values():
+            self.artifacts.verified(checksum)
 
     def published_artifact(self, work_id, name, expected_publication=None):
         publication = self.publication(work_id)
         if (not publication or name not in publication["checksums"]
                 or (expected_publication is not None and publication["id"] != expected_publication)):
             raise ValueError("Published artifact not found")
-        checksum = publication["checksums"][name]
-        return self._verified_artifact(checksum)
+        return self.artifacts.verified(publication["checksums"][name])
 
-    def approve(self, work_id: str, actor: str):
+    def approve(self, work_id, actor):
         if not actor:
             raise ValueError("Approval actor required")
-        with self._connect() as db:
-            cursor = db.execute(
-                "UPDATE chapter_work SET status = 'approved' WHERE id = ? AND status = 'pending'",
-                (work_id,),
-            )
-            if cursor.rowcount != 1:
-                raise ValueError("Pending work not found")
-            db.execute("INSERT INTO work_approvals(work_id, actor) VALUES (?, ?)", (work_id, actor))
+        record = dict(work_id=work_id, actor=actor, created_at=_now())
 
-    def delete(self, reader: str, request_id: str):
-        with self._connect() as db:
-            cursor = db.execute(
-                "DELETE FROM reader_requests WHERE id = ? AND reader = ?", (request_id, reader),
-            )
-            if cursor.rowcount != 1:
+        def commit(tx):
+            work = tx.get("chapter_work", work_id)
+            if not work or work["status"] != "pending":
+                raise ValueError("Pending work not found")
+            tx.put("chapter_work", {**work, "status": "approved"})
+            tx.put("work_approvals", record)
+        return self.metadata.run(commit)
+
+    def delete(self, reader, request_id):
+        def commit(tx):
+            record = tx.get("reader_requests", request_id)
+            if not record or record["reader"] != reader:
                 raise ValueError("Request not found")
+            tx.delete("reader_requests", request_id)
+        return self.metadata.run(commit)
+
+
+def _now():
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _fields(record, *keys):
+    return {key: record[key] for key in keys}
+
+
+def _without_sequence(record):
+    return {k: v for k, v in record.items() if k != "sequence"} if record is not None else None
+
+
+def _without_created(record):
+    return {k: v for k, v in record.items() if k != "created_at"}
+
+
+def _export_record(snapshot, actor, checksums):
+    return dict(id=uuid.uuid4().hex, work_id=snapshot.work_id, link_id=snapshot.link_id,
+                project_id=snapshot.project_id, actor=actor, revision=snapshot.revision,
+                export_id=snapshot.export_id, settings_hash=snapshot.settings_hash, checksums=checksums, created_at=_now())
+
+
+def _same_link(link, snapshot):
+    return bool(link and link["id"] == snapshot.link_id and link["project_id"] == snapshot.project_id)
+
+
+def _matches(record, link, snapshot, checksums):
+    return bool(_same_link(link, snapshot) and record and record["work_id"] == snapshot.work_id
+                and record["link_id"] == snapshot.link_id and record["project_id"] == snapshot.project_id
+                and (record["revision"], record["export_id"], record["settings_hash"]) ==
+                (snapshot.revision, snapshot.export_id, snapshot.settings_hash) and record["checksums"] == checksums)

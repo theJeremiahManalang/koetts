@@ -97,3 +97,77 @@ Branch pushed. Pull request #16 is open against main:
 https://github.com/theJeremiahManalang/koetts/pull/16
 GitHub reports the branch mergeable; Workspace checks are running.
 Next action: inspect CI results; merge requires a separate instruction. No external blocker.
+
+## PR #15 compatibility review
+
+The user requested a read-only implementation review of PR #15 against their PR #16.
+Pinned main: `ede54cd946143fa6f9c2a1fc847aacff6520b479`; PR #15:
+`a5215cf5684f54b12f5e651f1e1b1f0230b7523d`; PR #16:
+`8e6e67a296c46c5110013908d19604fa472fe6b9`.
+
+Fetched both heads and inspected their three-dot diffs from main. A disposable
+`git merge-tree --write-tree origin/pr-16 origin/pr-15` simulation returned conflict
+status 1: seven content conflicts, with nine changed files overlapping. Output is
+`/tmp/pr15-pr16-merge.txt`. No actual merge or application source edit was performed.
+
+PR #15's Firestore `manga_requests` collection and `/api/requests` interfaces do not
+implement PR #16's shared chapter-work identities, deduplication, project links or
+publication fulfillment. Its dashboard replaces reviewed publication with manual
+progress statuses. Taking its requests page also restores an import of the catalog
+fixture deleted by PR #16. Its Delete interface retains browser-local behavior and
+has commented-out confirmation controls, regressing PR #16's server deletion.
+Independent Standards and Spec reviews examined these boundaries. This review used
+source inspection and merge simulation; it did not run a resolved combined build or
+live Firestore tests. No external comments, review submission or merge was authorized.
+
+Next action: report integration blockers. Reconciliation should preserve one shared
+request/publication contract and port selected UI improvements; introducing Firestore
+requires an explicit adapter and existing-data migration decision. No implementation
+or merge is included in this review request.
+
+## Approved Firestore implementation — in progress
+
+The user approved the proposed Firestore/dashboard plan with “Implement the plan”
+and requires one commit per bounded phase (five commits). Keep PR #16's workflow;
+port presentation/navigation only, retaining pending/approved/published statuses.
+All shared metadata will support an explicitly selected Firestore backend, while
+artifacts and processing remain local and hosted guards stay enabled. Leave the six
+legacy manga_requests documents untouched; start a separate versioned namespace.
+Read-only inspection found no results/web/shared.sqlite3 in this checkout.
+
+Phase 1 started: extracted immutable artifact storage and verification into
+manga_tts.shared_artifacts.LocalSharedArtifacts, with a disposable local verification
+cache independent of metadata. SharedRequests now uses that artifact boundary;
+existing artifact locations remain unchanged. These edits are uncommitted because
+phase 1 still needs its metadata transaction interface extraction. Preserve the
+preexisting uncommitted compatibility-review checkpoint in this file.
+
+Checks: `UV_CACHE_DIR=/tmp/manga-s4-uv-cache uv run --locked python -m unittest
+ tests.unit.engine.test_shared_requests tests.unit.worker.test_shared_service
+ tests.unit.worker.test_web_workflow -q` passed 35 tests. Ruff for changed Python
+modules and git diff --check passed. Full acceptance not yet run for this work.
+
+Next action: finish metadata persistence separation, add focused boundary tests,
+run full Python suite and commit completed phase 1. Then implement Firestore adapter,
+dashboard improvements, cutover preflight, and final emulator/integration review as
+four further bounded commits. No live data writes, deployment or PR update performed.
+
+
+### Phase 1 completion
+
+Metadata separation is complete: engine transaction protocols and SQLite adapter
+are in shared_metadata.py; SharedRequests owns storage-independent decisions;
+shared_artifacts.py owns immutable bytes and its disposable verification cache.
+Existing SQLite schema, artifact locations and shared HTTP response shapes remain
+compatible. Candidate/review/publication identities are allocated outside retryable
+callbacks; file operations occur before those callbacks.
+
+Verification: full Python discovery passed 124 tests with two optional skips
+(`/tmp/firestore-phase1-python.log`); all 35 existing shared tests passed. The added
+rollback/retry regression passed in the five-test shared engine suite. Ruff passed
+for changed modules/tests; no live data writes occurred. Phase 1 commit includes
+this evidence and the earlier compatibility review checkpoint.
+
+Next action: implement the worker-owned Firestore metadata adapter with explicit
+project/database/dataset configuration, transactional uniqueness records and local
+artifact-store binding; retain SQLite as default. Remaining phases are unchanged.
