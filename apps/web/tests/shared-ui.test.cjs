@@ -216,6 +216,13 @@ test('reader plays a published chapter without exposing studio images', async t 
   assert.equal(document.querySelector('audio').getAttribute('src'), '/api/shared/audio?token=signed');
   assert.match(document.body.textContent, /pages are not available/i);
   assert.equal(document.querySelector('img'), null);
+  const accessibility = [...document.querySelectorAll('button')].find(button => button.textContent === 'Accessibility');
+  assert.ok(accessibility);
+  await act(async () => accessibility.click());
+  const settings = document.querySelectorAll('input[type="checkbox"]');
+  await act(async () => { settings[0].click(); settings[1].click(); });
+  assert.ok(document.querySelector('main').classList.contains('reader-high-contrast'));
+  assert.ok(document.querySelector('main').classList.contains('reader-large-controls'));
 });
 
 test('audio refresh waits for session verification and resumes afterward', async t => {
@@ -271,4 +278,43 @@ test('admin action stops if session verification changes while preparing', async
   await act(async () => render());
   await act(async () => { release(); await wait; });
   assert.equal(calls.filter(([, options]) => options.method === 'POST').length, 0);
+});
+
+test('reader keeps its player and position through same-user session renewal', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/read' });
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const mangaId = 'b'.repeat(32), workId = 'a'.repeat(32);
+  let ready = true, requests = 0;
+  const auth = { useAuth: () => ({ user: { uid: 'reader' }, loading: false, authorizationReady: ready, error: ready ? '' : 'Session verification failed', login: async () => {} }) };
+  globalThis.fetch = async url => {
+    requests++;
+    return url === '/api/shared/catalog'
+      ? { ok: true, json: async () => ({ chapters: [{ work_id: workId, manga_id: mangaId, title: 'Published Manga', chapter: 3, publication_id: 'c'.repeat(32) }] }) }
+      : { ok: true, json: async () => ({ url: '/api/shared/audio?token=' + requests, expires_in: 300 }) };
+  };
+  const mocks = {
+    'next/link': props => React.createElement('a', props),
+    'next/navigation': { useParams: () => ({ mangaId, chapterId: workId }), useRouter: () => ({ replace() {} }) },
+    '../identity/auth-provider': auth, './auth-provider': auth,
+  };
+  const Page = load('../features/library/reader-page.tsx', mocks).default;
+  const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
+  t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  const render = () => root.render(React.createElement(Page));
+  await act(async () => render());
+  const audio = document.querySelector('audio'); audio.currentTime = 42;
+  const before = requests;
+  ready = false;
+  await act(async () => render());
+  assert.equal(document.querySelector('audio'), audio);
+  assert.equal(audio.currentTime, 42);
+  assert.ok(audio.closest('[inert]'));
+  assert.equal(requests, before);
+  ready = true;
+  await act(async () => render());
+  assert.equal(document.querySelector('audio'), audio);
+  assert.equal(audio.currentTime, 42);
+  assert.equal(audio.closest('[inert]'), null);
 });
