@@ -74,7 +74,8 @@ class _FirestoreHostedStore:
         snapshot = self.root.get(transaction=transaction)
         if not snapshot.exists:
             for collection in ("projects", "artifact_references", "operations", "operation_idempotency_keys",
-                               "operation_stage_slots", "operation_project_slots"):
+                               "operation_stage_slots", "operation_project_slots", "uploads",
+                               "production_months", "production_admissions"):
                 if list(self.root.collection(collection).limit(1).stream(transaction=transaction)):
                     raise ValueError("Hosted dataset has orphaned records without a namespace binding")
             return False

@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import json
 import math
+import tempfile
+from pathlib import Path
+import threading
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
 from manga_worker.http_auth import BoundaryConfig, CredentialBoundary
 from manga_tts.schemas import WorkflowError
+from manga_tts.operations import OperationConflict
+from manga_tts.shared_requests import IntakeQuotaExceeded
 
 PRIVATE_HEADERS = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
 MAX_OPERATION_BYTES = 5 * 1024 * 1024
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _unique_object(pairs):
@@ -42,39 +48,53 @@ async def _operation_request(request: Request):
     if (len(keys) != 1 or not keys[0].strip() or len(keys[0]) > 200
             or any(ord(character) < 32 or ord(character) == 127 for character in keys[0])):
         raise HTTPException(400, "Idempotency-Key required (maximum 200 characters)")
-    content_types = request.headers.getlist("content-type")
-    if len(content_types) != 1 or content_types[0].split(";", 1)[0].strip().lower() != "application/json":
-        raise HTTPException(415, "Expected application/json")
+    return keys[0], await _json_request(request)
+
+
+async def _body_bytes(request: Request, limit: int):
     lengths = request.headers.getlist("content-length")
     if len(lengths) > 1 or (lengths and (not lengths[0].isascii() or not lengths[0].isdigit() or len(lengths[0]) > 20)):
         raise HTTPException(400, "Invalid Content-Length")
     declared = int(lengths[0]) if lengths else None
-    if declared is not None and declared > MAX_OPERATION_BYTES:
+    if declared is not None and declared > limit:
         raise HTTPException(413, "Operation request too large")
     try:
         body = bytearray()
         async for chunk in request.stream():
-            if len(body) + len(chunk) > MAX_OPERATION_BYTES:
+            if len(body) + len(chunk) > limit:
                 raise HTTPException(413, "Operation request too large")
             body.extend(chunk)
         if declared is not None and declared != len(body):
             raise ValueError("Incomplete body")
+        return body
+    except (ValueError, ClientDisconnect):
+        raise HTTPException(400, "Invalid request body") from None
+
+
+async def _json_request(request: Request, limit=MAX_OPERATION_BYTES):
+    content_types = request.headers.getlist("content-type")
+    if len(content_types) != 1 or content_types[0].split(";", 1)[0].strip().lower() != "application/json":
+        raise HTTPException(415, "Expected application/json")
+    try:
+        body = await _body_bytes(request, limit)
         payload = await run_in_threadpool(json.loads, body, object_pairs_hook=_unique_object,
                                           parse_constant=_reject_constant, parse_float=_finite_float)
         if not isinstance(payload, dict):
             raise TypeError("Invalid request")
     except (ValueError, TypeError, RecursionError, ClientDisconnect):
         raise HTTPException(400, "Invalid operation request") from None
-    return keys[0], payload
+    return payload
 
 
 def create_app(
-    config=None, *, service_verifier=None, user_verifier=None, workflow=None, coordinator=None
+    config=None, *, service_verifier=None, user_verifier=None, workflow=None, coordinator=None, hosted=None
 ):
     config = config or BoundaryConfig.from_environment()
     boundary = CredentialBoundary(config, service_verifier, user_verifier)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     coordinator_instance = coordinator
+    hosted_instance = hosted
+    hosted_lock = threading.Lock()
 
     @app.middleware("http")
     async def private_response_headers(request, call_next):
@@ -91,6 +111,24 @@ def create_app(
 
         return web_workflow
 
+    def cloud_application():
+        nonlocal hosted_instance
+        if config.mode != "cloud":
+            raise HTTPException(503, "Hosted processing unavailable")
+        with hosted_lock:
+            if hosted_instance is None:
+                from .cloud import CloudSettings
+                from .cloud_application import CloudApplication
+
+                settings = CloudSettings.from_environment()
+                if settings.project != config.project_id:
+                    raise HTTPException(503, "Hosted project configuration mismatch")
+                hosted_instance = CloudApplication(settings, cache_root=Path(tempfile.gettempdir()) / "manga-api-cache")
+            return hosted_instance
+
+    def workflow_application():
+        return cloud_application() if config.mode == "cloud" else application()
+
     @app.exception_handler(WorkflowError)
     async def workflow_failure(request, exc):
         status = (
@@ -105,6 +143,22 @@ def create_app(
         return JSONResponse(
             status_code=500, content={"error": "Workflow request failed"}, headers=PRIVATE_HEADERS,
         )
+
+    @app.exception_handler(OperationConflict)
+    async def operation_conflict(request, exc):
+        return JSONResponse(status_code=409, content={"error": {"code": exc.code, "message": "Operation conflict; reload before retrying."}})
+
+    @app.exception_handler(IntakeQuotaExceeded)
+    async def intake_limit(request, exc):
+        return JSONResponse(status_code=429, content={"error": {"code": exc.code, "message": str(exc)}})
+
+    @app.exception_handler(ValueError)
+    async def invalid_request(request, exc):
+        return JSONResponse(status_code=400, content={"error": "Invalid workflow request"})
+
+    @app.exception_handler(FileNotFoundError)
+    async def missing_resource(request, exc):
+        return JSONResponse(status_code=404, content={"error": "Resource not found"})
 
     @app.get("/ready")
     def ready(request: Request):
@@ -130,9 +184,16 @@ def create_app(
             coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
         return coordinator_instance.tick()
 
+    @app.get("/projects")
+    def list_projects(request: Request):
+        boundary.authorize(request, "snapshot")
+        return cloud_application().list_projects()
+
     @app.get("/projects/{project_id}")
     def snapshot(project_id: str, request: Request):
         boundary.authorize(request, "snapshot")
+        if config.mode == "cloud":
+            return cloud_application().snapshot(project_id)
         backend = application()
         try:
             project_id = backend.identifier(project_id)
@@ -154,12 +215,58 @@ def create_app(
     @app.get("/projects/{project_id}/assets/{asset_path:path}")
     def asset(project_id: str, asset_path: str, request: Request):
         boundary.authorize(request, "asset")
+        if config.mode == "cloud":
+            path = cloud_application().asset_path(project_id, asset_path)
+            return FileResponse(path, headers=PRIVATE_HEADERS)
         raise HTTPException(503, "Asset delivery unavailable")
+
+    @app.put("/uploads/{upload_token}/{name:path}")
+    async def upload(upload_token: str, name: str, request: Request):
+        actor = await run_in_threadpool(boundary.authorize, request, "upload")
+        backend = await run_in_threadpool(cloud_application)
+        types = request.headers.getlist("content-type")
+        if len(types) != 1 or types[0].lower() != "application/octet-stream":
+            raise HTTPException(415, "Expected application/octet-stream")
+        body = await _body_bytes(request, MAX_UPLOAD_BYTES)
+        if not body:
+            raise HTTPException(400, "Empty upload")
+        def persist():
+            with tempfile.TemporaryDirectory(prefix="manga-api-upload-") as directory:
+                source = Path(directory) / "upload"
+                source.write_bytes(body)
+                return backend.upload(upload_token, name, source, actor)
+        return await run_in_threadpool(persist)
+
+    @app.post("/shared")
+    async def shared(request: Request):
+        # Verify both credentials before reading any private request data. The
+        # action-specific second check applies the stronger admin requirement.
+        actor = await run_in_threadpool(boundary.authorize, request, "shared", admin=False)
+        backend = await run_in_threadpool(cloud_application)
+        payload = await _json_request(request, 16 * 1024)
+        reader_actions = {"submit", "requests", "delete", "catalog", "published"}
+        admin_actions = {"work", "approve", "link", "prepare", "review", "publish"}
+        action = payload.get("action")
+        if action not in reader_actions | admin_actions:
+            raise HTTPException(400, "Invalid shared action")
+        if action in admin_actions:
+            actor = await run_in_threadpool(boundary.authorize, request, "shared", admin=True)
+        return await run_in_threadpool(backend.shared, payload, actor)
+
+    @app.get("/shared/published/{work_id}")
+    def published_audio(work_id: str, request: Request, publication_id: str | None = None):
+        boundary.authorize(request, "shared", admin=False)
+        return FileResponse(cloud_application().published_path(work_id, publication_id), media_type="audio/wav", headers=PRIVATE_HEADERS)
+
+    @app.get("/shared/candidates/{candidate_id}")
+    def candidate_audio(candidate_id: str, request: Request):
+        boundary.authorize(request, "shared")
+        return FileResponse(cloud_application().candidate_path(candidate_id), media_type="audio/wav", headers=PRIVATE_HEADERS)
 
     @app.post("/operations", status_code=202)
     async def enqueue(request: Request):
         actor = await run_in_threadpool(boundary.authorize, request, "enqueue")
-        backend = await run_in_threadpool(application)
+        backend = await run_in_threadpool(workflow_application)
         key, payload = await _operation_request(request)
         payload["actor"] = actor
         # No worker is started here: durable queue ownership remains separate.
@@ -176,13 +283,21 @@ def create_app(
             from manga_tts.operations import OperationConflict
 
             if isinstance(exc, OperationConflict):
-                raise HTTPException(409, "Operation conflict") from None
+                raise
             raise HTTPException(400, "Invalid operation request") from None
+
+    @app.get("/operations/by-key")
+    def operation_by_key(request: Request, key: str):
+        boundary.authorize(request, "poll")
+        result = cloud_application().operation_by_key(key)
+        if result is None:
+            raise HTTPException(404, "Operation not found")
+        return result
 
     @app.get("/operations/{operation_id}")
     def status(operation_id: str, request: Request):
         boundary.authorize(request, "poll")
-        backend = application()
+        backend = workflow_application()
         try:
             result = backend.operation_status(operation_id)
         except ValueError:

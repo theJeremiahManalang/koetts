@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { adminPrincipal, requireAdmin } from "../../../features/identity/require-admin";
+import { adminPrincipal, requireAdmin, trustedSessionRequest } from "../../../features/identity/require-admin";
 import { mkdir, readdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -15,6 +15,7 @@ import {
   validIdempotencyKey,
 } from "../../../lib/workflow";
 import { python } from "../../../lib/python";
+import { hostedMode, privateJson, PrivateApiError } from "../../../lib/private-api";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,14 @@ export async function GET(request: Request) {
   const denied = await requireAdmin(request); if (denied) return denied;
   if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   try {
+    if (hostedMode()) {
+      const url = new URL(request.url);
+      let endpoint = "/projects";
+      if (url.searchParams.has("job")) endpoint = `/operations/${validId(url.searchParams.get("job")!)}`;
+      else if (url.searchParams.has("key")) endpoint = `/operations/by-key?${new URLSearchParams({ key: validIdempotencyKey(url.searchParams.get("key")) })}`;
+      else if (url.searchParams.has("project")) endpoint = `/projects/${validId(url.searchParams.get("project")!)}`;
+      return Response.json(await privateJson(request, endpoint), { headers: { "Cache-Control": "private, no-store" } });
+    }
     sameOrigin(request);
     const url = new URL(request.url);
     if (url.searchParams.has("job")) {
@@ -65,7 +74,10 @@ export async function GET(request: Request) {
       try { const p = await jsonFile(path.join(dataRoot, "projects", name, "project.json")); projects.push({ id: name, name: p.title || p.chapter_id, scenes: p.scenes.length }); } catch { /* incomplete import */ }
     }
     return Response.json({ projects, has_api_key: !!process.env.GEMINI_API_KEY });
-  } catch { return Response.json({ error: "Could not load this workspace. A job may still be running; try reloading shortly." }, { status: 409 }); }
+  } catch (error) {
+    if (error instanceof PrivateApiError) return Response.json({ error: error.message, code: error.code }, { status: error.status });
+    return Response.json({ error: "Could not load this workspace. A job may still be running; try reloading shortly." }, { status: 409 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -75,6 +87,24 @@ export async function POST(request: Request) {
   let enqueueStarted = false;
   try {
     const actor = adminPrincipal(request);
+    if (hostedMode()) {
+      if (!trustedSessionRequest(request) || request.headers.get("x-manga-workflow") !== "1") {
+        return Response.json({ error: "Invalid origin or workflow request." }, { status: 403 });
+      }
+      const key = validIdempotencyKey(request.headers.get("idempotency-key"));
+      if (!request.headers.get("content-type")?.startsWith("application/json")) {
+        return Response.json({ error: "Upload files individually before submitting this operation." }, { status: 415 });
+      }
+      const bounded = await limitedRequest(request);
+      const payload = await bounded.json();
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid workflow request.");
+      payload.actor = actor;
+      payload.project = payload.action === "create" && !payload.project ? id() : validId(payload.project);
+      const operation = await privateJson(request, "/operations", {
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(payload),
+      });
+      return Response.json(operation, { status: 202, headers: { "Cache-Control": "private, no-store" } });
+    }
     sameOrigin(request);
     // Custom header prevents simple cross-origin form submissions.
     if (request.headers.get("x-manga-workflow") !== "1") return Response.json({ error: "Invalid request." }, { status: 403 });
@@ -148,6 +178,7 @@ export async function POST(request: Request) {
     try { await dispatchQueued(); } catch { /* persisted work remains queued for polling recovery */ }
     return Response.json(enqueued.operation, { status: 202 });
   } catch (error) {
+    if (error instanceof PrivateApiError) return Response.json({ error: error.message, code: error.code }, { status: error.status });
     const code = typeof error === "object" && error && "code" in error ? String(error.code) : undefined;
     // An enqueue transport failure can follow a successful SQLite commit. Keep
     // its inputs for key-based recovery unless rejection proves no ownership.

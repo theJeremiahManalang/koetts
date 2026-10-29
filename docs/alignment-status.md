@@ -839,3 +839,36 @@ Phase2 HTTP acceptance completed successfully. Independent Standards review foun
 a duplicated existing persistence reader helper; fixed and21 affected tests passed.
 Spec review found zero phase2 findings. Deployed job retry settings and container
 builds remain unverified; platform retry zero is deployment policy, not live evidence.
+
+## Hosted service — phase 3 transport and intake checkpoint
+
+Cloud web transport now forwards independently authenticated service/user credentials
+to the private Python API. Studio files upload individually with bounded byte bodies;
+compact operation requests preserve expected project hashes and immutable server-owned
+upload references. Read-only snapshots do not acquire project writers. Asset delivery
+fetches the requested artifact rather than unrelated source/audio blobs. Private audio
+uses same-origin reader-bound tokens and independently verified sessions for ranges.
+Cloud OCR is queued finite work; the HTTP handler performs no inference.
+
+Hosted reader quotas commit with request intake: five pending at any time, ten new
+requests per UTC day, duplicates excluded and deletion not refunding daily count.
+A monthly chapter ledger and atomic enqueue hook exist and pass concurrency/rollback
+checks. Its application identity driver is intentionally not selected: the user has
+not yet answered whether hosted creation requires approved shared work or each new
+unlinked project consumes one chapter allowance. Phase3 remains open on that decision;
+no operational phase or hosted activation is claimed complete.
+
+Pinned full check passed239 Python tests (50 optional skips),79 web tests, Ruff,
+repository checks,typecheck and production build. Refreshed loopback acceptance passed
+70 tests, including nine monthly admission/atomic enqueue cases. Disposable production
+HTTP studio/frontend-only checks passed. A stale-revision regression fixture initially
+used an invalid expected hash; corrected to retain forged storage references while
+providing a valid expected hash. Separate tests retain stale-write rejection.
+
+Playwright in a disposable copied app verified two individual68-byte PNG uploads and
+one301-byte enqueue, followed by a controlled failure retaining both selections.
+Desktop/mobile screenshots and JSON evidence reside under/tmp/hosted-phase3-browser*.
+Browser plugin was absent. Synthetic identity/private transport fixtures and webpack
+dev fallback were used; this does not establish live Firebase or production adapter
+acceptance. No external requests, console/page errors or mobile horizontal overflow
+were observed. No inference, paid calls, deployment, IAM or live data changes occurred.

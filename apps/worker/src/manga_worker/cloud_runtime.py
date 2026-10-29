@@ -36,6 +36,7 @@ class CloudRuntime:
         *,
         router_factory: Callable[..., Any] | None = None,
         perform_operation: Callable[..., dict] = perform,
+        extractor: Callable[[Path], Any] | None = None,
         source_verifier: Callable[..., None] = verify_operation_sources,
         stop_process: Callable[[], None] | None = None,
     ):
@@ -45,8 +46,16 @@ class CloudRuntime:
         self.root = Path(root)
         self.router_factory = router_factory or self._router
         self.perform_operation = perform_operation
+        self.extractor = extractor or self._extract_text
         self.source_verifier = source_verifier
         self.stop_process = stop_process or self._terminate
+
+    @staticmethod
+    def _extract_text(image: Path):
+        """Load the optional OCR stack only when a hosted OCR job runs."""
+        from .extract import extract_text
+
+        return extract_text(image)
 
     @staticmethod
     def _terminate() -> None:
@@ -137,8 +146,14 @@ class CloudRuntime:
         attempt_root = self.root / "attempts" / operation.operation_id / str(claim.fence)
         attempt_root.mkdir(parents=True, exist_ok=False)
         workspace = attempt_root / "projects" / operation.project_id
-        workspace.mkdir(parents=True)
         request = dict(operation.payload)
+        ocr = request.get("action") == "ocr"
+        if ocr and operation.stage != "magi":
+            self._finish_failure(claim, "Hosted OCR operation stage is invalid.", "invalid_payload")
+            shutil.rmtree(attempt_root, ignore_errors=True)
+            return True
+        if not ocr:
+            workspace.mkdir(parents=True)
         if request.get("project") not in (None, operation.project_id):
             self._finish_failure(claim, "Hosted request project does not match its operation.", "invalid_payload")
             shutil.rmtree(attempt_root, ignore_errors=True)
@@ -175,6 +190,27 @@ class CloudRuntime:
         failure: tuple[str, str, bool] | None = None
         try:
             self._materialize_uploads(operation, request, attempt_root)
+            if ocr:
+                self.source_verifier(operation, request, root=attempt_root)
+                token = request.get("upload_token")
+                if not isinstance(token, str) or not re.fullmatch(r"[a-f0-9]{32}", token):
+                    raise OperationConflict("invalid_payload", "Hosted OCR upload identity is invalid.")
+                image = attempt_root / "uploads" / token / "panel.png"
+                if image.is_symlink() or not image.is_file():
+                    raise OperationConflict("invalid_payload", "Hosted OCR image is unavailable.")
+                try:
+                    response = self.extractor(image)
+                except Exception as exc:
+                    raise OperationConflict("ocr_failed", "Hosted OCR failed.") from exc
+                if (not isinstance(response, dict) or not isinstance(response.get("texts"), list)
+                        or any(not isinstance(value, str) for value in response["texts"])):
+                    raise OperationConflict("invalid_ocr_response", "OCR returned an invalid response.")
+                if fence_lost.is_set():
+                    raise OperationConflict("stale_fence", "Worker fence is no longer current.")
+                stop_heartbeat.set()
+                self.store.complete(claim, {"texts": response["texts"]})
+                return True
+
             owner_id = f"hosted-{operation.operation_id}-{claim.fence}"
             writer = self.persistence.acquire(operation.project_id, owner_id)
             revision = self._restore_project(operation, writer, workspace)

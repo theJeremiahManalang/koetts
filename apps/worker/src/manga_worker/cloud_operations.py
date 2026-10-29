@@ -309,6 +309,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
         source_fingerprint: str,
         configuration_fingerprint: str,
         request_fingerprint: str | None = None,
+        admission=None,
     ) -> Operation:
         if (
             not isinstance(idempotency_key, str)
@@ -382,6 +383,10 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                         "idempotency_conflict", "This idempotency key already belongs to a different request."
                     )
                 return op, bound
+            # Admission shares this commit. Existing intent retries return above
+            # without consuming capacity again.
+            if admission is not None:
+                admission(tx)
             tx.create(ref, doc)
             tx.create(key_ref, {"operation_id": operation_id, "idempotency_key": idempotency_key})
             return Operation(

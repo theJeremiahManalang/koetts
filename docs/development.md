@@ -250,3 +250,45 @@ the accepted manifest and recovers matching writer ownership. Uncertain provider
 outcomes retain their slots until explicit operator resolution; accepted audio remains
 eligible for reuse. The emulator gate exercises interrupted rendering with synthetic
 audio and fresh scratch, not real model or provider compatibility.
+
+## Hosted web transport and public intake
+
+`MANGA_EXECUTION_MODE=cloud` selects authenticated private HTTP transport instead
+of local Python. Unknown execution modes fail closed; the Python bridge itself also
+refuses subprocess execution in cloud or frontend-only mode. Keep the checked-in
+App Hosting frontend-only guard enabled until the complete hosted release passes
+its acceptance gates. This setting is not deployment authorization.
+
+Hosted studio uploads use one raw binary request per file, at most 10 MiB each,
+followed by a compact JSON operation submission. Image creation accepts at most
+40 pages; local studio limits remain unchanged. Upload manifests bind immutable
+filenames to the verified admin and exact GCS references. Client-supplied artifact
+references and revision IDs never establish trusted storage identity. Expected
+project hashes still reject stale edits and review decisions. Idempotent retries
+return the original operation even after that operation advances project state.
+
+In cloud mode, `/api/extract` returns a queued operation with HTTP 202 instead of
+running inference in the request. Supply `Idempotency-Key` and poll the existing
+workflow status endpoint for its `result.texts`. Local extraction retains its
+synchronous response. Ordinary reads and HTTP intake never initialize inference.
+
+The private API independently authenticates service and user identities for shared
+requests. Reader identities and admin approval actors come from verified credentials,
+never request fields. Hosted reader intake allows five outstanding pending requests
+and ten successful new requests per UTC day. Duplicate requests do not count again;
+deletion does not refund daily quota. Approved/published work adds no pending count.
+The daily ledger commits atomically with new requests.
+
+Hosted playback keeps the same-origin reader-bound audio token and checks a valid
+session on every request, including byte ranges. Set server-only
+`MANGA_AUDIO_SIGNING_KEY` to the canonical base64 encoding of exactly 32 random
+bytes through Secret Manager. Missing or invalid keys never select a local-file
+fallback. Private responses stream through the application with `private, no-store`
+and `nosniff`; draft assets and audition audio remain admin-only.
+
+The monthly production ledger supports atomic reservation with operation creation
+and a five-chapter/UTC-month ceiling. Its chapter identity driver is not yet wired:
+the user must choose whether hosted creation requires approved shared work or
+whether each unlinked project consumes a monthly allowance. Do not enable hosted
+production before this decision, operational cost controls, and the remaining
+acceptance gates are complete.

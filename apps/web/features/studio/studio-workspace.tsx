@@ -20,6 +20,7 @@ import { RequireSignIn } from "../identity/require-sign-in";
 
 import { AdminNav } from "../identity/admin-nav";
 import { StudioRequestContext } from "./studio-request-context";
+import { hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -75,14 +76,18 @@ function ActionButton({ disabled, reason, children, ...props }: ButtonHTMLAttrib
   </span>;
 }
 
-export default function Home() {
+export default function Home({ hosted = false }: { hosted?: boolean }) {
   const { user, isAdmin, loading, error } = useAuth();
   if (loading) return <LoadingState />;
   if (!user || !isAdmin) return <main><h1>Administrator access required</h1><p>{error || "Sign in with an administrator account to use the studio."}</p><a href="/browse">Return to the library</a></main>;
-  return <RequireSignIn><StudioWorkspace key={user.uid} /></RequireSignIn>;
+  return <RequireSignIn><StudioWorkspace key={user.uid} hosted={hosted} /></RequireSignIn>;
 }
 
-function StudioWorkspace() {
+export function StudioWorkspace({ hosted = false }: { hosted?: boolean }) {
+  return <StudioWorkspaceClient hosted={hosted} />;
+}
+
+function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
   const { user: signedInUser, authorizationReady } = useAuth();
   const authorization = useRef({ uid: signedInUser?.uid, ready: authorizationReady });
   authorization.current = { uid: signedInUser?.uid, ready: authorizationReady };
@@ -343,7 +348,16 @@ function StudioWorkspace() {
     startOperation(operation);
     try {
       const key = idempotencyKeyForIntent(formFingerprint(form));
-      const job = await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: form }, key);
+      const job = hosted
+        ? await (async () => {
+          const uploadToken = uploadTokenForIntent(key);
+          const payload = await prepareHostedUpload(form, async (name, file, token) => api(
+            `/api/workflow/upload?token=${encodeURIComponent(token)}&name=${encodeURIComponent(name)}`,
+            { method: "PUT", headers: { "X-Manga-Workflow": "1", "Content-Type": "application/octet-stream" }, body: file },
+          ), uploadToken, hostedWorkId(window.location.search));
+          return api("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json", "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: JSON.stringify(payload) }, key);
+        })()
+        : await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: form }, key);
       await watch({ ...job, operation, idempotencyKey: key });
     }
     catch (e) { failOperation(operation, e); setBusy(""); }
@@ -358,7 +372,7 @@ function StudioWorkspace() {
   function selectFiles(selected: FileList | null) {
     if (!selected || !selected.length) return;
     const next = Array.from(selected).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    if (next.length > 10 || next.some(f => !["image/png", "image/jpeg", "image/webp"].includes(f.type) || !f.size || f.size > 10 * 1024 * 1024)) { toast.error("Manga images were not selected", { description: "Choose 1–10 nonempty PNG, JPEG or WebP images, no larger than 10 MB each.", duration: 10000 }); return; }
+    if (next.length > (hosted ? 40 : 10) || next.some(f => !["image/png", "image/jpeg", "image/webp"].includes(f.type) || !f.size || f.size > 10 * 1024 * 1024)) { toast.error("Manga images were not selected", { description: `Choose 1–${hosted ? 40 : 10} nonempty PNG, JPEG or WebP images, no larger than 10 MB each.`, duration: 10000 }); return; }
     setFiles(next); setPageIndex(0); toast.success(`${next.length} manga image(s) selected`, { description: "Review their order, then create the chapter to detect panels and annotations." });
   }
   function saveCast(approve = false) { if (!draft) return; void run("cast", { cast: Object.entries(draft.cast).map(([speaker_id, c]) => ({ speaker_id, name: c.name, voice: c.voice, pronunciation: c.pronunciation, acting_notes: c.acting_notes ?? "" })), appearances: draft.appearances.map(({ char_id, speaker_id, rejected }) => ({ char_id, speaker_id, rejected })), new_characters: draft.pending_characters ?? [], approve }); }
@@ -427,8 +441,8 @@ function StudioWorkspace() {
         </section>
         <section className="reading-card" aria-label="Production workspace">
           {!snapshot || !draft ? <><div className="panel-meta"><span>Start a production</span><span>01 / Upload</span></div><fieldset disabled={!!busy}><div className="story-section"><h2 className="eyebrow">BRING YOUR STORY</h2><div className="segmented-control">{[["images", "Images"], ["chapter", "Chapter ZIP"], ["restore", "Restore ZIP"]].map(([id, label]) => <ActionButton key={id} aria-pressed={mode === id} onClick={() => { setMode(id); setArchive(null); }}>{label}</ActionButton>)}</div><input ref={fileInput} className="visually-hidden" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Upload manga images" onChange={e => { selectFiles(e.target.files); e.target.value = ""; setMode("images"); }} />
-            {mode === "images" ? <><p className="control-note">Choose up to 10 images, 10 MB each. Arrange the numbered thumbnails before extracting. Drag to reorder or use the move buttons.</p><ActionButton className="button" onClick={() => fileInput.current?.click()}>＋ Choose images</ActionButton><label className="field-label">Reading direction<select value={direction} onChange={e => setDirection(e.target.value)}><option value="rtl">Right to left · MagiV3 order</option><option value="ltr">Left to right · layout proposal</option></select></label></> : <label className="field-label">{mode === "restore" ? "Saved project bundle" : "Chapter analysis bundle"}<input key={mode} type="file" accept=".zip" onChange={e => setArchive(e.target.files?.[0] ?? null)} /><span className="control-note">{mode === "restore" ? "Restores references, approvals and retained audio without new generation." : "Use the chapter_analysis.zip produced by your extraction workflow."}</span></label>}
-            {mode !== "restore" && <label className="field-label">Cast references ZIP <span className="muted">Optional; you can also create characters from panel crops.</span><input type="file" accept=".zip" onChange={e => setCastZip(e.target.files?.[0] ?? null)} /></label>}
+            {mode === "images" ? <><p className="control-note">Choose up to {hosted ? 40 : 10} images, 10 MB each. Arrange the numbered thumbnails before extracting. Drag to reorder or use the move buttons.</p><ActionButton className="button" onClick={() => fileInput.current?.click()}>＋ Choose images</ActionButton><label className="field-label">Reading direction<select value={direction} onChange={e => setDirection(e.target.value)}><option value="rtl">Right to left · MagiV3 order</option><option value="ltr">Left to right · layout proposal</option></select></label></> : <label className="field-label">{mode === "restore" ? "Saved project bundle" : "Chapter analysis bundle"}<input key={mode} type="file" accept=".zip" onChange={e => setArchive(e.target.files?.[0] ?? null)} /><span className="control-note">{mode === "restore" ? "Restores references, approvals and retained audio without new generation." : "Use the chapter_analysis.zip produced by your extraction workflow."}{hosted ? " ZIP files must be no larger than 10 MiB." : ""}</span></label>}
+            {mode !== "restore" && <label className="field-label">Cast references ZIP <span className="muted">Optional; you can also create characters from panel crops.</span><input type="file" accept=".zip" onChange={e => setCastZip(e.target.files?.[0] ?? null)} />{hosted && <span className="control-note">ZIP files must be no larger than 10 MiB.</span>}</label>}
             <div className="action-row"><ActionButton className="button primary" disabled={mode === "images" ? !files.length : !archive} reason={mode === "images" ? "Choose manga images first." : "Choose a ZIP file first."} onClick={createProject}>{mode === "images" ? "Extract & create project" : mode === "restore" ? "Restore project" : "Create project"}</ActionButton></div></div></fieldset><div className="story-section"><h2 className="eyebrow">FROM PANEL TO PERFORMANCE</h2><ol className="journey"><li><strong>Read the page</strong><span>Recover text and propose its order.</span></li><li><strong>Find each voice</strong><span>Match appearances to your cast.</span></li><li><strong>Approve the story</strong><span>Review dialogue and delivery before synthesis.</span></li><li><strong>Listen & export</strong><span>Choose takes and download your chapter.</span></li></ol></div></> : <>
             <div className="panel-meta"><span>{tabs.find(([id]) => id === tab)?.[1]}</span><span className={dirty ? "unsaved" : ""}>{dirty ? "Unsaved edits" : "Applied state saved"}</span></div>
             <fieldset disabled={!!busy}>

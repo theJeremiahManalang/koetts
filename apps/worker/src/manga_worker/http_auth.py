@@ -94,7 +94,7 @@ class CredentialBoundary:
         verifier = auth.verify_session_cookie if session else auth.verify_id_token
         return verifier(token, app=app, check_revoked=True)
 
-    def authorize(self, request: Request, action: str, *, user=True):
+    def authorize(self, request: Request, action: str, *, user=True, admin=True):
         authorization = request.headers.getlist("authorization")
         if len(authorization) != 1:
             raise HTTPException(401, "Service credential required")
@@ -139,6 +139,6 @@ class CredentialBoundary:
                 raise ValueError("Invalid user claims")
         except Exception:  # noqa: BLE001 - Credential SDK errors must fail closed without leaking details.
             raise HTTPException(401, "Invalid user credential") from None
-        if principal.get("admin") is not True:
+        if admin and principal.get("admin") is not True:
             raise HTTPException(403, "Administrator required")
         return {"kind": "firebase", "uid": uid, "project_id": self.config.project_id}

@@ -415,3 +415,43 @@ need implementation. Source schemas and phase plan remain authority.
 Goal stays active: full offline implementation plus separately authorized live gates.
 No deployment, paid-provider test, human approval or publication authorized by these
 phase changes. Build verification remains limited by unavailable Docker.
+
+### Hosted phase 3 — transport checkpoint, critical policy pending
+
+Implemented Next private service transport/stream proxy, individual bounded uploads,
+cloud workflow/asset/shared routes, cloud signing key requirement, hosted studio upload
+helper and preserved client auth wrapper. Python HTTP independently verifies reader vs
+admin, derives actors server-side, validates JSON/uploads, and exposes cloud service
+operations. CloudApplication handles trusted uploads, immutable snapshots, expected
+revision rejection and shared review/publication under writer ownership. OCR runs as
+a finite queued operation. Local Python bridge refuses cloud/frontend-only execution.
+
+Reader policy optional for local stores, enabled for hosted service:5 pending any time,
+10 new perUTCday; daily ledger is nonrefundable on deletion, duplicates first, approved
+work adds no pendingcount. Monthly ledger class supports prepared UTC callbacks and
+atomic Firestore enqueue (rollback/no phantomquota tests). Driver is NOT wired pending
+explicit critical question already sent via request_user_input_async: require approved
+shared chapter work before hostedcreation, or count each unlinked project as one
+monthlychapter. No answer has arrived. Do not choose through silence; do not close
+phase3 or advancephase4 until it is resolved and driver reviewed. Independent work
+continues with review of current transport.
+
+Checks: /tmp/hosted-phase3-check.log passed239 Python(50 optional skips),79 web,repo,
+Ruff,typecheck/build. /tmp/hosted-phase3-admission-firestore.log passed70 loopback/demo
+tests. /tmp/hosted-phase3-http.log studio+frontend-only acceptancepassed, exec37494
+terminalexit0. Focused hostedextract/workflow webchecks pass after rawOCR upload MIME
+alignment. Initial emulator test used invalid browserrevision and failedexpectedly;
+updated onlyvalid revision fixture, preserving stalehash rejection tests.
+
+Browser QA completed viaLuna with Browserpluginabsent regularPlaywright fallback,
+disposable syntheticadmin/APIcopy, webpackdev. Evidence/tmp/hosted-phase3-browser-
+evidence.json plus screenshotdesktop/selection/failure/mobile and privateAPIjsonl.
+Two68-byteuploads sequential then301-byteenqueue; controlledfailure retainsselection;
+no console/pageerrors/externalrequests/mobileoverflow. Ownedservergroup16663 stopped
+anddisposablecopyremoved; screenshots/evidencepreserved. No liveauthclaim.
+
+Changed paths span worker cloud_admission/cloud_application/runtime/HTTP, engine shared
+metadata/requests, Next private-api/workflow/shared/asset/extract routes, studio upload
+client, focused unit/emulator/web tests and docs. Next: commit substantial transport
+checkpoint, independent Standards/Spec review from06d4808, fix findings. Monthlydriver
+remains pending userdecision, later budgets/cleanup/infra and livegates remain undone.

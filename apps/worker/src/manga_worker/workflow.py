@@ -259,6 +259,8 @@ def operation_source_fingerprint(request: dict[str, Any], *, root: Path | None =
             names = ["chapter.zip"]
         elif action == "cast-import":
             names = ["cast.zip"]
+        elif action == "ocr":
+            names = ["panel.png"]
         else:
             raise ValueError("Unexpected upload for this workflow action")
         if action == "create" and (upload / "cast.zip").is_file():

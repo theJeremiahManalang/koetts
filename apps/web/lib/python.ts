@@ -4,6 +4,9 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 function repositoryRoot() {
+  // Cloud routes use the private service. Importing shared local adapters must
+  // not require a Python checkout inside the hosted Next.js runtime.
+  if (process.env.MANGA_EXECUTION_MODE === "cloud") return process.cwd();
   const configured = process.env.MANGA_REPO_ROOT;
   if (configured) {
     if (!path.isAbsolute(configured)) throw new Error("MANGA_REPO_ROOT must be absolute");
@@ -23,11 +26,14 @@ function repositoryRoot() {
 }
 
 export const root = repositoryRoot();
-export const dataRoot = process.env.MANGA_DATA_ROOT || path.join(root, "results", "web");
+export const dataRoot = (process.env.MANGA_EXECUTION_MODE === "cloud" ? undefined : process.env.MANGA_DATA_ROOT) || path.join(root, "results", "web");
 if (!path.isAbsolute(dataRoot)) throw new Error("MANGA_DATA_ROOT must be absolute");
 const local = path.join(root, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 const execute = promisify(execFile);
 export function python(module: string, args: string[]) {
+  if (process.env.MANGA_FRONTEND_ONLY === "1" || process.env.MANGA_EXECUTION_MODE && process.env.MANGA_EXECUTION_MODE !== "local") {
+    return Promise.reject(new Error("Local Python execution is unavailable in hosted mode."));
+  }
   const executable = process.env.PYTHON_EXECUTABLE || local;
   return execute(executable, ["-m", module, ...args], {
     cwd: root, timeout: 30 * 60 * 1000, maxBuffer: 20 * 1024 * 1024,
@@ -37,6 +43,9 @@ export function python(module: string, args: string[]) {
 
 /** Send short application requests over stdin, keeping private fields out of argv. */
 export function pythonJSON(module: string, input: unknown): Promise<unknown> {
+  if (process.env.MANGA_FRONTEND_ONLY === "1" || process.env.MANGA_EXECUTION_MODE && process.env.MANGA_EXECUTION_MODE !== "local") {
+    return Promise.reject(new Error("Local Python execution is unavailable in hosted mode."));
+  }
   const body = JSON.stringify(input);
   if (Buffer.byteLength(body, "utf8") > 65536) return Promise.reject(new Error("Request too large"));
   const executable = process.env.PYTHON_EXECUTABLE || local;

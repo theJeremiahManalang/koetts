@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -27,13 +28,13 @@ PROJECT_ID = "b" * 32
 UPLOAD_TOKEN = "c" * 32
 
 
-def operation(*, payload=None, checkpoint=None):
+def operation(*, payload=None, checkpoint=None, stage="pipeline"):
     return Operation(
         operation_id=OPERATION_ID,
         idempotency_key="runtime-test",
         request_fingerprint="request",
         project_id=PROJECT_ID,
-        stage="pipeline",
+        stage=stage,
         payload=payload or {
             "project": PROJECT_ID,
             "action": "create",
@@ -77,6 +78,9 @@ class MemoryOperationStore:
         self.order = []
         self.duplicate = False
         self.events = []
+        self.reject_completion = False
+        self.lose_heartbeat = False
+        self.heartbeat_lost = threading.Event()
 
     def get(self, operation_id):
         assert operation_id == self.value.operation_id
@@ -90,6 +94,9 @@ class MemoryOperationStore:
         return self.value
 
     def heartbeat(self, claim, progress=None, checkpoint=None, provider_result_checkpointed=False):
+        if self.lose_heartbeat:
+            self.heartbeat_lost.set()
+            raise OperationConflict("stale_fence", "Operation fence is no longer current.")
         if checkpoint is not None:
             self.checkpoint = dict(checkpoint)
         self.progress.append((dict(progress or {}), dict(checkpoint) if checkpoint is not None else None,
@@ -101,6 +108,8 @@ class MemoryOperationStore:
         self.provider_pending = True
 
     def complete(self, claim, result):
+        if self.reject_completion:
+            raise OperationConflict("stale_fence", "Operation fence is no longer current.")
         self.order.append("complete")
         self.completed = result
 
@@ -218,6 +227,95 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertFalse(self.runtime.run(OperationClaim(OPERATION_ID, 7), "execution-one"))
 
         self.assertEqual(called, [])
+        self.assertIsNone(self.persistence.writer)
+
+    def _ocr_runtime(self, texts=None):
+        payload = {
+            "action": "ocr",
+            "upload_token": UPLOAD_TOKEN,
+            "cloud_uploads": {"panel.png": vars(self.artifacts.ref)},
+            "source_hashes": [self.artifacts.ref.sha256],
+        }
+        self.value = operation(payload=payload, stage="magi")
+        self.store.value = self.value
+        verified = []
+
+        def verify(op, request, *, root):
+            image = Path(root) / "uploads" / UPLOAD_TOKEN / "panel.png"
+            self.assertEqual(request["action"], "ocr")
+            self.assertEqual(op.source_fingerprint, "source")
+            self.assertTrue(image.is_file())
+            verified.append(image)
+
+        runtime = CloudRuntime(
+            self.store,
+            self.persistence,
+            self.artifacts,
+            self.root,
+            extractor=lambda image: {"texts": texts if texts is not None else ["line one", "line two"]},
+            source_verifier=verify,
+            stop_process=lambda: None,
+        )
+        return runtime, verified
+
+    def test_ocr_materializes_verified_panel_and_completes_only_text_result_without_project_write(self):
+        runtime, verified = self._ocr_runtime()
+
+        self.assertTrue(runtime.run(OperationClaim(OPERATION_ID, 7), "magi-execution"))
+
+        self.assertEqual(len(verified), 1)
+        self.assertEqual(self.store.completed, {"texts": ["line one", "line two"]})
+        self.assertIsNone(self.persistence.writer)
+        self.assertEqual(self.persistence.release_order, [])
+        self.assertFalse((self.root / "attempts" / OPERATION_ID / "7" / "projects").exists())
+        self.assertEqual(self.store.order, ["complete"])
+
+    def test_duplicate_ocr_execution_does_not_extract_twice(self):
+        runtime, _ = self._ocr_runtime()
+        self.store.duplicate = True
+        extracted = []
+        runtime.extractor = lambda image: extracted.append(image)
+
+        self.assertFalse(runtime.run(OperationClaim(OPERATION_ID, 7), "magi-duplicate"))
+
+        self.assertEqual(extracted, [])
+        self.assertIsNone(self.store.completed)
+        self.assertIsNone(self.persistence.writer)
+
+    def test_fenced_ocr_completion_is_not_accepted(self):
+        runtime, _ = self._ocr_runtime()
+        self.store.reject_completion = True
+
+        self.assertTrue(runtime.run(OperationClaim(OPERATION_ID, 7), "magi-stale"))
+
+        self.assertIsNone(self.store.completed)
+        self.assertEqual(self.store.failures[0][1], "stale_fence")
+        self.assertIsNone(self.persistence.writer)
+
+    def test_heartbeat_fence_loss_during_ocr_prevents_result_completion(self):
+        runtime, _ = self._ocr_runtime()
+        self.store.lose_heartbeat = True
+        self.store.policy = OperationPolicy(heartbeat_seconds=1, lease_seconds=120)
+
+        def wait_for_fence_loss(image):
+            self.assertTrue(self.store.heartbeat_lost.wait(timeout=2))
+            return {"texts": ["must not be accepted"]}
+
+        runtime.extractor = wait_for_fence_loss
+        self.assertTrue(runtime.run(OperationClaim(OPERATION_ID, 7), "magi-heartbeat-lost"))
+
+        self.assertIsNone(self.store.completed)
+        self.assertEqual(self.store.failures[0][1], "stale_fence")
+        self.assertIsNone(self.persistence.writer)
+
+    def test_invalid_ocr_response_has_sanitized_failure(self):
+        runtime, _ = self._ocr_runtime()
+        runtime.extractor = lambda image: {"texts": ["valid", 7], "secret": "provider content"}
+
+        self.assertTrue(runtime.run(OperationClaim(OPERATION_ID, 7), "magi-invalid"))
+
+        self.assertIsNone(self.store.completed)
+        self.assertEqual(self.store.failures, [("OCR returned an invalid response.", "invalid_ocr_response", False)])
         self.assertIsNone(self.persistence.writer)
 
     def test_persisted_uploads_and_request_are_the_only_engine_inputs(self):
