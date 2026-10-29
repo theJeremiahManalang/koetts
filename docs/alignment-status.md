@@ -872,3 +872,25 @@ Browser plugin was absent. Synthetic identity/private transport fixtures and web
 dev fallback were used; this does not establish live Firebase or production adapter
 acceptance. No external requests, console/page errors or mobile horizontal overflow
 were observed. No inference, paid calls, deployment, IAM or live data changes occurred.
+
+### Phase 3 review and recovery corrections
+
+Standards review found two maintainability issues; shared metadata response dispatch
+is now common and the unused unlocked helper is removed. Spec review identified
+unstable projectless OCR retry IDs, corrected in `fa1cfc3`. Monthly production identity
+remains an explicit unresolved requirement, so phase 3 is not closed.
+
+Further recovery inspection found that short API reviews could strand durable writer
+ownership after an API crash. `fd33acc` instead checks the immutable project pointer
+inside the same metadata transaction as review/publication. Actual project mutations
+retain writer fences. `7133eab` recovers only a matching committed enqueue intent
+after bounded SDK retries exhaust; it never starts another operation. Independent
+Standards/Spec rechecks found no new material findings in these corrections.
+
+Final pinned check passed 251 Python tests with 62 optional skips, 80 web tests, Ruff,
+repository checks, typecheck and build. The dedicated loopback gate passed 73 tests;
+normal emulator skips ran there. Production HTTP regressions passed. Earlier duplicate
+transaction contention failed one emulator run; deterministic recovery coverage and
+the subsequent complete emulator run passed. Docker and live deployment/provider
+checks remain unverified. The remaining critical monthly identity choice must be
+answered and implemented before phase 3 or the hosted release can be accepted.
