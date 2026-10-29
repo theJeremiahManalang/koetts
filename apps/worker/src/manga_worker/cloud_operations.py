@@ -393,7 +393,26 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 **{k: v for k, v in doc.items() if k != "schema_version"}, worker_pid=None, worker_created_at=None
             ), bound
 
-        return self._run(operation, bind_if_missing=True)
+        try:
+            return self._run(operation, bind_if_missing=True)
+        except Exception as error:
+            from google.api_core.exceptions import Aborted, DeadlineExceeded, ServiceUnavailable
+
+            cause = error.__cause__ if isinstance(error, ValueError) else error
+            if not isinstance(cause, (Aborted, DeadlineExceeded, ServiceUnavailable)):
+                raise
+            # A concurrent duplicate can commit while this transaction exhausts
+            # its bounded SDK retries. Resolve only the immutable matching intent;
+            # never start another write or treat an unrelated failure as success.
+            try:
+                existing = self.get_by_key(idempotency_key)
+            except FileNotFoundError:
+                raise error
+            if existing.request_fingerprint != fingerprint:
+                raise OperationConflict(
+                    "idempotency_conflict", "This idempotency key already belongs to a different request.",
+                ) from None
+            return existing
 
     def get(self, operation_id: str) -> Operation:
         def operation(tx):

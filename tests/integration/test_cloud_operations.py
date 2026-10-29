@@ -54,6 +54,27 @@ class FirestoreOperationStoreTests(unittest.TestCase):
         self.assertEqual(self.store.get_by_key("reader/request/42").operation_id, operation.operation_id)
         self.assertEqual(self.enqueue("reader/request/42").operation_id, operation.operation_id)
 
+    def test_exhausted_duplicate_transaction_recovers_only_matching_committed_intent(self):
+        from google.api_core.exceptions import Aborted
+        from unittest.mock import patch
+
+        original = self.store._run
+        injected = False
+        def committed_then_ambiguous(callback, *, bind_if_missing=False):
+            nonlocal injected
+            result = original(callback, bind_if_missing=bind_if_missing)
+            if bind_if_missing and not injected:
+                injected = True
+                raise ValueError("Failed to commit transaction in 5 attempts") from Aborted("Synthetic contention")
+            return result
+        with patch.object(self.store, "_run", side_effect=committed_then_ambiguous):
+            recovered = self.enqueue("ambiguous-duplicate")
+        self.assertTrue(injected)
+        self.assertEqual(recovered.operation_id, self.store.get_by_key("ambiguous-duplicate").operation_id)
+        self.assertEqual(len(list(self.store.root.collection("operations").stream())), 1)
+        with self.assertRaises(OperationConflict):
+            self.enqueue("ambiguous-duplicate", payload={"action": "changed"})
+
     def test_stage_and_project_capacity_and_stale_fence(self):
         first = self.enqueue("first", project="p1")
         blocked_stage = self.enqueue("second", project="p2")
