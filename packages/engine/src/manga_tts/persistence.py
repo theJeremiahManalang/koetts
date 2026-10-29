@@ -242,9 +242,6 @@ class ProjectPersistence:
         """Read the accepted revision without materializing or modifying a workspace."""
         return self._revisions.current(project_id)
 
-    def current(self, project_id: str) -> ProjectRevision | None:
-        return self._revisions.current(project_id)
-
     def recover(self, project_id: str, owner_id: str, fence: int, worker_stopped: bool) -> None:
         """Release an interrupted owner only after its execution is confirmed stopped."""
         self._revisions.recover(WriteFence(project_id, owner_id, fence), worker_stopped)

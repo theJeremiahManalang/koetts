@@ -377,3 +377,18 @@ Standards/Spec review from8dd4b42, implement findings and recheck before phase3.
 Final task remains full hosted product; browser transport, public quotas, cost controls,
 reference-aware cleanup, deployment preparation and separately authorized live gates
 are not yet complete.
+
+### Hosted phase 2 review resolution
+
+Phase2 implementation6cc4ebc reviewed independently against8dd4b42. Standards found
+one duplicate ProjectPersistence.current definition introduced during integration;
+removed duplicate and retained original behavior plus docstring. Spec found zero
+phase2 findings. Correct earlier handoff wording: current() already existed; this
+phase only documents it, rather than adding a new API. Affected persistence/runtime
+unittest suite passed21 tests after fix. HTTP exec73198 is complete, exit0; log
+/tmp/hosted-phase2-http.log passes production and frontend-only checks.
+
+Zero-platform-retry policy is specified for deployment; actual deployed job templates
+have not been created or verified. Docker build and real Cloud Run/GCS behavior remain
+unverified. Next: commit fix, recheck Standards finding, then phase3 hosted transport,
+public intake quotas and authenticated streaming. No cloud deployment authorized.
