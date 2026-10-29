@@ -272,3 +272,54 @@ PR16 is the existing handoff target:
 https://github.com/theJeremiahManalang/koetts/pull/16
 Next action after branch update: inspect CI/review PR16. Merge and deployment require
 separate instruction. No implementation blocker remains.
+
+## API documentation tooling research — complete
+
+Objective: identify API documentation tools that fit the implemented Next.js and
+private FastAPI surfaces. The user explicitly approved the proposed research scope
+with “yes”. Scope includes source-based comparison, private access, schema accuracy,
+drift checks, maintenance/cost, and staged adoption; implementation is not included.
+
+Findings are in docs/research/api-documentation-tools.md. Recommend separate
+OpenAPI 3.1 browser/worker contracts, Scalar presentation, and Redocly CLI linting
+and bundling. Swagger UI is the minimum-work worker-only alternative. Defer a hosted
+portal until an external documentation audience warrants it. Contract completeness
+is the prerequisite: offline app.openapi() inspection found six worker paths but
+no security schemes, no operation request body, and empty success schemas. The asset
+handler advertises a generated 200 despite always returning 503.
+
+Changed paths: docs/research/api-documentation-tools.md and this checkpoint.
+Research checked repository source, Context7, and official upstream documentation.
+No application source, manifests, lockfiles, credentials, or saved results changed.
+No renderer/browser smoke test, live authentication, inference, or deployment ran.
+
+Validation: offline schema inspection passed using .venv/bin/python and synthetic
+BoundaryConfig values, without provider calls or workflow operations. Pinned Node
+22.22.3 npm run check:repo passed. Initial sandbox attempt could not write uv's
+cache lock; approved escalation passed (uv rebuilt the local worker editable
+installation). Report relative links and git diff --check passed. Full acceptance
+suite was not run for this documentation-only task.
+
+No blocker remains. Next action: review the report; implementing the proposed
+contracts and renderer is a separate scope requiring approval.
+
+## API documentation findings review — 2026-10-29
+
+- Objective: Review `docs/research/api-documentation-tools.md` for local team documentation covering Next.js browser-facing APIs and private worker APIs, with optional GitHub Pages hosting.
+- Authorization: User requested a focused review. No implementation or publication was requested; this targeted lookup uses the quick-question path in `docs/agents/prompt-approval.md`.
+- Findings: OpenAPI 3.1, Scalar, and Redocly CLI remain suitable. The proposal should prioritize a standalone static artifact over a Next.js documentation handler, explicitly distinguish private APIs from private documentation, and add local/static hosting acceptance criteria. GitHub Pages private publication requires the documented Enterprise Cloud organization setup; a private source repository alone does not establish private site access.
+- Evidence: Read root README, documentation authority, scoped web/worker instructions, manifests, route inventory, and the research document. Checked Scalar static hosting and multiple-source support through Context7; checked GitHub Pages static hosting and visibility against official GitHub documentation.
+- Changed paths: Appended this handoff to the already modified `CONTEXT.md`; preserved existing content. Research document and runtime source remain unchanged.
+- Checks: Read-only source inspection and upstream documentation verification completed. No runtime tests, dependency installation, live-provider calls, or deployment performed.
+- Blockers: None for review. Documentation visibility must be decided before any publication.
+- Next action: If requested, revise the proposal around one static site with separate browser/worker contracts, pinned local assets, relative paths, disabled request execution, and independent build/preview commands.
+
+## API documentation issue creation — 2026-10-29
+
+- Objective and authorization: User explicitly requested a detailed GitHub issue for the reviewed API documentation proposal, with the current branch attached and no blockers or dependencies. This is an authorized tracker follow-up, not approval to implement or deploy.
+- Created issue: https://github.com/theJeremiahManalang/koetts/issues/17 — Add standalone team API documentation for Next.js and private workers. The configured origin repository name redirects to `theJeremiahManalang/koetts`.
+- Issue content: Detailed local/static use cases; current source evidence; two OpenAPI contracts; Scalar/Redocly recommendation; alternatives and qualitative cost/maintenance comparisons; Pages visibility; acceptance criteria; no blockers/dependencies.
+- Branch attachment: Created the remote `feat/api-docs` branch at the current local HEAD, `0bdacc5cd0092cf33d53afb4d12f6b64b5ba16bb`, with GitHub's `createLinkedBranch` mutation. No commit was created; staged research/checkpoint edits remain local and the issue explicitly records that limitation.
+- Checks: Issue creation returned URL; branch-link mutation returned the expected name and commit. No runtime tests or deployment performed.
+- Changed paths: Appended this checkpoint to `CONTEXT.md`; issue body temporary source is `/tmp/manga-api-docs-issue.md`. Existing staged changes preserved.
+- Next action: Implement issue #17 only when requested under the repository's applicable approval workflow.
