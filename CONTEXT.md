@@ -272,3 +272,37 @@ PR16 is the existing handoff target:
 https://github.com/theJeremiahManalang/koetts/pull/16
 Next action after branch update: inspect CI/review PR16. Merge and deployment require
 separate instruction. No implementation blocker remains.
+
+## Hosted service implementation — phase 0
+
+- Objective: implement approved full GCP/Firebase hosted-service plan on
+  `feat/hosted-service`, created from fetched `origin/main` at the prior main head.
+- Authorization: user instructed implementation, separate feature branch, a
+  `$caveman-commit` for each substantial phase, and `$code-review` after each phase
+  with review findings fixed before advancing. User confirmed hosted pilot limits,
+  separate infrastructure/provider budgets, clean cloud dataset, request quotas,
+  authenticated audio streaming, and CPU failure blocking full hosted launch.
+- Phase 0 scope: documentation only. Added `docs/hosted-service-plan.md` as
+  implementation spec, recorded resolved S5 planning choices in `docs/target-design.md`,
+  and added ADR 0001 for the distributed hosted execution choice. These do not claim
+  cloud integration or live verification.
+- Decisions: public Google signup; five pending and ten successful new requests per
+  reader per UTC day; five new chapter works/month and forty pages/chapter; twenty
+  active readers as sizing target, not signup cap. Infrastructure target USD 10/month,
+  desired maximum USD 20 (not guaranteed); alert at 10/15/20 and pause new production
+  at reported USD 15 or earlier when reservations exhaust allowance. Existing
+  developer-controlled USD 80 provider budget is separate. Scale-to-zero CPU jobs,
+  one slot per stage, one-minute coordinator; Cloud Run retries zero and durable
+  operation ceiling three, 30-minute timeout, 15-second heartbeat, 60-second lease.
+  Keep existing Firebase project/backend/database, use us-east4 regional resources,
+  and use a clean cloud dataset. Preserve referenced artifacts; collect only
+  unreferenced temporary objects after seven days. Authenticate each audio range
+  request through same-origin streaming.
+- Changed paths: `docs/hosted-service-plan.md`, `docs/target-design.md`,
+  `docs/adr/0001-hosted-execution.md`, `CONTEXT.md`.
+- Checks: `uv run --locked python tools/check_repo.py` passed; `git diff --check`
+  passed. Phase review remains required before phase 1.
+- Blockers: no phase 0 blocker. Live deployment, CPU benchmark, paid-provider test,
+  and hosted acceptance remain gated as specified.
+- Next action: run scoped documentation checks, review/fix findings, commit phase 0,
+  then begin durable cloud persistence only after phase review is clean.
