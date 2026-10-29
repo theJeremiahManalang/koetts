@@ -458,7 +458,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
           </>}
         </section>
       </div>
-      <footer className="reader-footer"><span>Original images preserved · Human approval before speech</span><span>Local workspace · Mono 24 kHz WAV · Resumable projects</span></footer>
+      <footer className="reader-footer"><span>Original images preserved · Human approval before speech</span><span>{hosted ? "Shared workspace" : "Local workspace"} · Mono 24 kHz WAV · Resumable projects</span></footer>
     </main>
     </div>
   </div></BusyContext.Provider>;
