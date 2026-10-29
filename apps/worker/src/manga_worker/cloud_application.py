@@ -454,50 +454,8 @@ class CloudApplication:
                 if action == "review":
                     return self._shared_export("review", request, workspace, link, reader)
                 return self._shared_export("publish", request, workspace, link, reader)
-        return self._shared_execute(request)
-
-    def _shared_execute(self, request):
-        # Preserve the local service's established action dispatch without constructing a local store.
-        action = request.get("action")
-        store = self.shared_requests
-        if action == "submit":
-            return store.submit(request["reader"], request["title"], request["chapter"], request.get("notes", ""))
-        if action == "requests": return store.list_reader(request["reader"])
-        if action == "delete": store.delete(request["reader"], self.identifier(request["request_id"])); return {"deleted": True}
-        if action == "work":
-            result = store.list_work()
-            for item in result:
-                item["requests"] = store.work_requests(item["id"]); item["link"] = store.get_link(item["id"])
-                item.update(store.review_state(item["id"])); publication = store.publication(item["id"])
-                item["publication_id"] = publication["id"] if publication else None
-            return result
-        if action == "approve": store.approve(self.identifier(request["work_id"]), request["actor"]); return {"approved": True}
-        if action == "catalog": return store.catalog()
-        if action == "published":
-            publication = store.publication(self.identifier(request["work_id"]))
-            if not publication:
-                raise ValueError("Publication not found")
-            expected = request.get("publication_id", publication["id"])
-            self.identifier(expected)
-            if expected != publication["id"]:
-                raise ValueError("Publication changed")
-            return {"publication_id": expected}
-        if action == "candidate":
-            candidate = self.identifier(request["candidate_id"])
-            self.candidate_path(candidate)
-            return {"candidate_id": candidate}
-        raise ValueError("Unsupported shared action")
-
-    def _shared_workspace(self, work_id):
-        from contextlib import contextmanager
-        @contextmanager
-        def held():
-            link = self.shared_requests.get_link(self.identifier(work_id))
-            if not link:
-                raise ValueError("Work has no linked studio project")
-            revision, workspace, _ = self._read_project(link["project_id"])
-            yield workspace, revision, link
-        return held()
+        from .shared_actions import metadata_action
+        return metadata_action(self.shared_requests, request)
 
     def _held_project(self, project_id):
         from contextlib import contextmanager
