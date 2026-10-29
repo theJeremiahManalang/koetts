@@ -392,3 +392,26 @@ Zero-platform-retry policy is specified for deployment; actual deployed job temp
 have not been created or verified. Docker build and real Cloud Run/GCS behavior remain
 unverified. Next: commit fix, recheck Standards finding, then phase3 hosted transport,
 public intake quotas and authenticated streaming. No cloud deployment authorized.
+
+### Hosted phase 2 gate closed; phase 3 started
+
+Standards recheck is clean at06d4808 after duplicate reader fix; Spec review had
+zero findings. All phase2 findings are resolved before phase3 work.
+
+Phase3 fixed point06d4808. Active bounded worker /root/reader_intake_quotas owns
+shared_requests.py, shared_metadata.py, shared unit tests and new cloud quota emulator
+tests. Assignment: optional hosted-only five-pending/ten-UTC-day transactional intake
+policy, nondeletable daily ledger, duplicate-first semantics, deletion not refunding
+daily quota, concurrent threshold tests. Worker must not commit or delegate. Collect
+its native result and integrate before phase3 review.
+
+Primary retains cloud HTTP application/verified reader identity, Next private service
+transport, bounded individual uploads, snapshots and authenticated range streaming.
+Phase3 prep identified local filesystem reads and direct inline extraction requiring
+finite-job integration; preserve current local behavior. No critical product decision
+is open at this point. Public admission, monthly/page limits and budget controls still
+need implementation. Source schemas and phase plan remain authority.
+
+Goal stays active: full offline implementation plus separately authorized live gates.
+No deployment, paid-provider test, human approval or publication authorized by these
+phase changes. Build verification remains limited by unavailable Docker.
