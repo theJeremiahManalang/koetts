@@ -455,3 +455,19 @@ metadata/requests, Next private-api/workflow/shared/asset/extract routes, studio
 client, focused unit/emulator/web tests and docs. Next: commit substantial transport
 checkpoint, independent Standards/Spec review from06d4808, fix findings. Monthlydriver
 remains pending userdecision, later budgets/cleanup/infra and livegates remain undone.
+
+### Phase 3 review — independent fixes, policy gate retained
+
+Commit1db72bf reviewed against06d4808. Standards: no hard violations, two heuristic
+findings (duplicated shared dispatch/work assembly and unused unlocked workspace
+helper). Spec: monthlydriver missing is a phaseclosure blocker pendinguserchoice,
+and projectlessOCR allocated unstable projectIDs on identical-key retries.
+
+OCR now derives its ephemeral project identity from the stable upload intent token.
+Regression forbids random allocation and compares two genuinely separate request
+bodies for samekey/image. Four hostedextract tests pass on pinned Node22. Shared
+metadata action dispatch is factored into shared_actions.py, preserving local path
+augmentation and cloud metadata-only responses; unused unlocked helper removed.
+Thirteen affected worker/engine shared tests pass. Next: commit these fixes, rerun
+emulator/HTTP gates, recheck review findings. Do not closephase3 or advancephase4
+without the explicit monthlychapter identity answer.

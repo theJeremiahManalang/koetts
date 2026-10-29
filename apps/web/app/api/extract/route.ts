@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { requireAdmin, trustedSessionRequest } from "../../../features/identity/require-admin";
-import { id, validId, validIdempotencyKey } from "../../../lib/workflow";
+import { validId, validIdempotencyKey } from "../../../lib/workflow";
 import { hostedMode, privateJson, PrivateApiError } from "../../../lib/private-api";
 import { python } from "../../../lib/python";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -67,15 +67,15 @@ async function enqueueHostedOcr(request: Request): Promise<Response> {
     return Response.json({ error: "Choose a PNG, JPEG or WebP image up to 10 MB." }, { status: 400 });
   }
 
+  const token = uploadToken(key);
   const projectValue = form.get("project");
   const project = typeof projectValue === "string" && /^[a-f0-9]{32}$/.test(projectValue)
     ? validId(projectValue)
-    : id();
+    : token;
   const revisionValue = form.get("revision");
   if (revisionValue !== null && (typeof revisionValue !== "string" || revisionValue.length > 200 || /[\u0000-\u001f\u007f]/.test(revisionValue))) {
     return Response.json({ error: "The selected project revision is invalid." }, { status: 400 });
   }
-  const token = uploadToken(key);
   await privateJson(request, `/uploads/${token}/panel.png`, {
     method: "PUT",
     headers: { "Content-Type": "application/octet-stream" },

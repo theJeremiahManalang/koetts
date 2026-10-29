@@ -18,7 +18,7 @@ function loadRoute({ key = "caller-intent", apiFailure } = {}) {
   new Function("exports", "require", compile())(route, name => {
     if (name.endsWith("/require-admin")) return { requireAdmin: async () => null, trustedSessionRequest: () => true };
     if (name.endsWith("/workflow")) return {
-      id: () => "d".repeat(32),
+      id: () => assert.fail("Projectless OCR must not allocate a random identity on retry"),
       validId: value => { if (!/^[a-f0-9]{32}$/.test(value)) throw new Error("Invalid identifier"); return value; },
       validIdempotencyKey: value => { if (!value || value.length > 200) throw new Error("A valid Idempotency-Key header is required."); return value; },
     };
@@ -74,12 +74,22 @@ test("hosted extraction creates ephemeral project identity and rejects non-MAGI 
   const { route, calls } = loadRoute();
   const noProject = await route.POST(request({ fields: { project: "untrusted" } }));
   assert.equal(noProject.status, 202);
-  assert.equal(JSON.parse(calls[1].init.body).project, "d".repeat(32));
+  assert.equal(JSON.parse(calls[1].init.body).project, JSON.parse(calls[1].init.body).upload_token);
 
   const badModel = await route.POST(request({ fields: { model: "other" } }));
   assert.equal(badModel.status, 400);
   const badType = await route.POST(request({ fields: { type: "image/gif" } }));
   assert.equal(badType.status, 400);
+});
+
+test("projectless OCR keeps the same operation intent across lost-response retries", async () => {
+  const { route, calls } = loadRoute();
+  assert.equal((await route.POST(request())).status, 202);
+  assert.equal((await route.POST(request())).status, 202);
+  const operations = calls.filter(call => call.path === "/operations");
+  assert.equal(operations.length, 2);
+  assert.deepEqual(JSON.parse(operations[0].init.body), JSON.parse(operations[1].init.body));
+  assert.equal(operations[0].init.headers["Idempotency-Key"], operations[1].init.headers["Idempotency-Key"]);
 });
 
 test("hosted extraction bounds actual multipart bytes and forwards only sanitized private errors", async () => {
