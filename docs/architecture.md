@@ -133,3 +133,20 @@ and namespace identity; it does not use local identity files. Firestore stores e
 artifact generations behind the shared checksum contract. Local materializations
 are disposable caches. This storage selection does not enable hosted routes or
 replace local operation scheduling. See the [hosted plan](hosted-service-plan.md).
+
+## Hosted transport under implementation
+
+Explicit `MANGA_EXECUTION_MODE=cloud` selects server-only Next-to-Python HTTP for
+studio, shared metadata and artifact requests. Local subprocess calls fail closed
+in that mode. The private service independently verifies service and user identity;
+readers receive only shared catalog, their own requests and published audio. Admin
+actions retain expected project hashes, pinned actors and engine review decisions.
+Uploads are bounded individual objects whose immutable references remain server-owned.
+Cloud OCR is a finite queued operation; published audio streams through authenticated
+same-origin byte-range routes using the configured signing secret.
+
+Hosted reader quotas and an atomic monthly production ledger are implemented. The
+monthly ledger's chapter identity driver is pending the user's explicit decision
+about approved shared work versus unlinked project admission. The checked-in
+frontend-only guards remain enabled; cost controls, deployment and live acceptance
+remain separate unfinished gates. This is not evidence of a launched hosted product.

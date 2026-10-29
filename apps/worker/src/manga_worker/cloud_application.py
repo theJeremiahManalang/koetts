@@ -436,8 +436,14 @@ class CloudApplication:
         request["actor"] = reader
         if action == "link":
             project_id = self.identifier(request.get("project_id"))
-            with self._held_project(project_id) as (workspace, revision):
-                return self.shared_requests.link_project(self.identifier(request["work_id"]), project_id, reader)
+            revision = self.stores.persistence.current(project_id)
+            if revision is None:
+                raise FileNotFoundError("Project not found")
+            if "revision" in request:
+                self._require_revision(request.get("revision"), revision.project_hash)
+            self._read_project(project_id, revision_id=revision.revision_id)
+            shared = self._guarded_shared_requests(project_id, revision.revision_id)
+            return shared.link_project(self.identifier(request["work_id"]), project_id, reader)
         if action in {"prepare", "review", "publish"}:
             work_id = request.get("work_id")
             link = self.shared_requests.get_link(self.identifier(work_id))
@@ -447,46 +453,44 @@ class CloudApplication:
             if visible_revision is None:
                 raise FileNotFoundError("Project not found")
             self._require_revision(request.get("revision"), visible_revision.project_hash)
-            with self._held_project(link["project_id"]) as (workspace, revision):
-                self._require_revision(request.get("revision"), revision.project_hash)
-                if action == "prepare":
-                    return self._shared_export("prepare", request, workspace, link, reader)
-                if action == "review":
-                    return self._shared_export("review", request, workspace, link, reader)
-                return self._shared_export("publish", request, workspace, link, reader)
+            revision, workspace, _ = self._read_project(
+                link["project_id"], revision_id=visible_revision.revision_id
+            )
+            self._require_revision(request.get("revision"), revision.project_hash)
+            shared = self._guarded_shared_requests(link["project_id"], revision.revision_id)
+            return self._shared_export(action, request, workspace, link, reader, shared)
         from .shared_actions import metadata_action
         return metadata_action(self.shared_requests, request)
 
-    def _held_project(self, project_id):
-        from contextlib import contextmanager
-        @contextmanager
-        def held():
-            target_project_id = self.identifier(project_id)
-            owner = "hosted-read-review-" + uuid.uuid4().hex
-            writer = self.stores.persistence.acquire(target_project_id, owner)
-            temporary = tempfile.TemporaryDirectory(prefix="hosted-review-", dir=self.root)
-            workspace = Path(temporary.name) / target_project_id
-            try:
-                revision = writer.load(workspace)
-                if revision is None:
-                    raise FileNotFoundError("Project not found")
-                if len(read_json(workspace / "project.json").get("chapter", {}).get("pages", [])) > _MAX_PAGES:
-                    raise ValueError("Hosted projects are limited to 40 pages")
-                yield workspace, revision
-            finally:
-                writer.release()
-                temporary.cleanup()
-        return held()
+    def _guarded_shared_requests(self, project_id: str, revision_id: str):
+        from .shared_firestore import FirestoreSharedMetadata, SharedProjectRevisionGuard
 
-    def _shared_export(self, action, request, workspace, link, actor):
+        revisions = self.stores.revisions
+        guard = SharedProjectRevisionGuard(
+            revisions._project(project_id), revision_id,
+            binding_document=revisions.root,
+            artifact_store_id=self.stores.artifacts.artifact_store_id,
+            project_id=project_id,
+        )
+        metadata = FirestoreSharedMetadata(
+            self.client, self.settings.dataset, self.stores.artifacts.artifact_store_id,
+            project_guard=guard,
+        )
+        return SharedRequests(
+            self.root / "shared-unused.sqlite3", metadata=metadata,
+            artifacts=self.stores.shared_artifacts, intake_policy=self.shared_requests.intake_policy,
+            clock=self.shared_requests.clock,
+        )
+
+    def _shared_export(self, action, request, workspace, link, actor, shared_requests):
         from .workflow import _export_snapshot
         snapshot = _export_snapshot(workspace, request["revision"], work_id=request["work_id"], link=link)
-        if action == "prepare": return self.shared_requests.prepare_audio_review(snapshot, actor=actor)
-        if action == "review": return self.shared_requests.approve_audio_review(snapshot, candidate_id=self.identifier(request["candidate_id"]), actor=actor)
+        if action == "prepare": return shared_requests.prepare_audio_review(snapshot, actor=actor)
+        if action == "review": return shared_requests.approve_audio_review(snapshot, candidate_id=self.identifier(request["candidate_id"]), actor=actor)
         expected_publication = request.get("expected_publication")
         if expected_publication is not None:
             expected_publication = self.identifier(expected_publication)
-        return self.shared_requests.publish_review(snapshot, review_id=self.identifier(request["review_id"]), actor=actor,
+        return shared_requests.publish_review(snapshot, review_id=self.identifier(request["review_id"]), actor=actor,
                                           expected_publication=expected_publication)
 
     def asset_path(self, project_id: str, relative: str) -> Path:

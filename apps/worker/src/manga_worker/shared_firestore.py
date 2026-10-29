@@ -10,6 +10,7 @@ import json
 import re
 from pathlib import Path
 
+from manga_tts.operations import OperationConflict
 from manga_tts.shared_metadata import KEYS
 
 SCHEMA_VERSION = 1
@@ -25,10 +26,37 @@ def _unique_key(table, fields, record):
     return hashlib.sha256(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
 
 
+class SharedProjectRevisionGuard:
+    """Require a project pointer to remain pinned during a shared mutation."""
+
+    def __init__(self, project_document, expected_revision_id: str, *, binding_document,
+                 artifact_store_id: str, project_id: str):
+        self.project_document = project_document
+        self.expected_revision_id = expected_revision_id
+        self.binding_document = binding_document
+        self.artifact_store_id = artifact_store_id
+        self.project_id = project_id
+
+    def verify(self, transaction) -> None:
+        from .cloud_revisions import SCHEMA_VERSION, FirestoreRevisionStore
+
+        binding = self.binding_document.get(transaction=transaction)
+        state = binding.to_dict() if binding.exists else None
+        if (not isinstance(state, dict) or set(state) != {"schema_version", "artifact_store_id"}
+                or state.get("schema_version") != SCHEMA_VERSION
+                or isinstance(state.get("schema_version"), bool)
+                or state.get("artifact_store_id") != self.artifact_store_id):
+            raise ValueError("Hosted dataset belongs to a different schema or artifact store")
+        project = self.project_document.get(transaction=transaction)
+        current = FirestoreRevisionStore._project_state(project, self.project_id)["current_revision_id"]
+        if current != self.expected_revision_id:
+            raise OperationConflict("revision_conflict", "Project changed during shared workflow. Reload and try again.")
+
+
 class FirestoreSharedMetadata:
     """Buffer metadata writes until all transactional reads have completed."""
 
-    def __init__(self, client, dataset: str, artifact_store_id: str):
+    def __init__(self, client, dataset: str, artifact_store_id: str, *, project_guard=None):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", dataset):
             raise ValueError("Invalid shared dataset")
         if not re.fullmatch(r"[a-f0-9]{32}|gcs-v1:[a-f0-9]{64}", artifact_store_id):
@@ -36,6 +64,7 @@ class FirestoreSharedMetadata:
         self.client = client
         self.root = client.collection("shared_workflow_v1").document(dataset)
         self.artifact_store_id = artifact_store_id
+        self.project_guard = project_guard
 
     def run(self, operation):
         from google.cloud import firestore
@@ -48,6 +77,8 @@ class FirestoreSharedMetadata:
             }
             if state.get("schema_version") != SCHEMA_VERSION or state.get("artifact_store_id") != self.artifact_store_id:
                 raise ValueError("Shared dataset belongs to a different schema or artifact store")
+            if self.project_guard is not None:
+                self.project_guard.verify(transaction)
             unit = _FirestoreTransaction(self.root, transaction, state)
             result = operation(unit)
             if unit.pending:

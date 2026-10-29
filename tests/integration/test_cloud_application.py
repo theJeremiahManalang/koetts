@@ -69,9 +69,11 @@ class CloudApplicationTests(unittest.TestCase):
             app.shared({"action": "approve", "work_id": request["work_id"]}, admin)
             approved_work = app.shared({"action": "work", "actor": "forged-actor"}, admin)[0]
             self.assertEqual(approved_work["approved_by"], '["demo-hosted-application","admin-1"]')
-            link = app.shared({"action": "link", "work_id": request["work_id"], "project_id": project_id}, admin)
+            link = app.shared({"action": "link", "work_id": request["work_id"], "project_id": project_id,
+                               "revision": revision.project_hash}, admin)
             self.assertEqual(link["project_id"], project_id)
-            fence_before_stale = app.stores.revisions._project(project_id).get().to_dict()["last_fence"]
+            ownership = app.stores.revisions._project(project_id).get().to_dict()
+            fence_before_stale = ownership["last_fence"]
             with self.assertRaises(WorkflowError) as stale_prepare:
                 app.shared({"action": "prepare", "work_id": request["work_id"], "revision": "0" * 64}, admin)
             self.assertEqual(stale_prepare.exception.detail.code, "revision_conflict")
@@ -79,6 +81,7 @@ class CloudApplicationTests(unittest.TestCase):
             self.assertIsNone(app.shared({"action": "work"}, admin)[0]["candidate"])
             candidate = app.shared({"action": "prepare", "work_id": request["work_id"],
                                     "revision": revision.project_hash}, admin)
+            self.assertEqual(app.stores.revisions._project(project_id).get().to_dict(), ownership)
             fence_before_stale = app.stores.revisions._project(project_id).get().to_dict()["last_fence"]
             with self.assertRaises(WorkflowError) as stale_review:
                 app.shared({"action": "review", "work_id": request["work_id"], "revision": "0" * 64,
@@ -88,10 +91,12 @@ class CloudApplicationTests(unittest.TestCase):
             self.assertIsNone(app.shared({"action": "work"}, admin)[0]["review"])
             review = app.shared({"action": "review", "work_id": request["work_id"],
                                  "candidate_id": candidate["id"], "revision": revision.project_hash}, admin)
+            self.assertEqual(app.stores.revisions._project(project_id).get().to_dict(), ownership)
             publication = app.shared({"action": "publish", "work_id": request["work_id"],
                                       "review_id": review["id"], "revision": revision.project_hash,
                                       "expected_publication": None}, admin)
             self.assertEqual(publication["id"], app.shared({"action": "published", "work_id": request["work_id"]}, actor)["publication_id"])
+            self.assertEqual(app.stores.revisions._project(project_id).get().to_dict(), ownership)
             audio = app.published_path(request["work_id"], publication["id"])
             self.assertGreater(audio.stat().st_size, 0)
             storage = Mock()
@@ -168,6 +173,64 @@ class CloudApplicationTests(unittest.TestCase):
             app.stores.revisions._revision(project_id, revision.revision_id).update({"project_hash": "0" * 64})
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 app.snapshot(project_id)
+
+    def test_shared_review_flow_preserves_active_worker_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            project_id, revision = self._seed_exported_project(app, Path(directory))
+            admin = {"kind": "firebase", "uid": "admin", "project_id": self.settings.project}
+            request = app.shared({"action": "submit", "title": "Active writer", "chapter": "1", "notes": ""}, admin)
+            app.shared({"action": "approve", "work_id": request["work_id"]}, admin)
+            app.shared({"action": "link", "work_id": request["work_id"], "project_id": project_id,
+                        "revision": revision.project_hash}, admin)
+
+            with app.stores.persistence.acquire(project_id, "active-finite-job"):
+                project_ref = app.stores.revisions._project(project_id)
+                ownership = project_ref.get().to_dict()
+                self.assertEqual(ownership["owner_id"], "active-finite-job")
+                candidate = app.shared({"action": "prepare", "work_id": request["work_id"],
+                                        "revision": revision.project_hash}, admin)
+                review = app.shared({"action": "review", "work_id": request["work_id"],
+                                     "candidate_id": candidate["id"], "revision": revision.project_hash}, admin)
+                app.shared({"action": "publish", "work_id": request["work_id"], "review_id": review["id"],
+                            "revision": revision.project_hash, "expected_publication": None}, admin)
+                self.assertEqual(project_ref.get().to_dict(), ownership)
+
+    def test_project_pointer_race_rejects_candidate_write(self):
+        from manga_worker.shared_firestore import FirestoreSharedMetadata
+
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            project_id, revision = self._seed_exported_project(app, Path(directory))
+            admin = {"kind": "firebase", "uid": "admin", "project_id": self.settings.project}
+            request = app.shared({"action": "submit", "title": "Pointer race", "chapter": "1", "notes": ""}, admin)
+            app.shared({"action": "approve", "work_id": request["work_id"]}, admin)
+            app.shared({"action": "link", "work_id": request["work_id"], "project_id": project_id,
+                        "revision": revision.project_hash}, admin)
+
+            original_run = FirestoreSharedMetadata.run
+            advanced = False
+
+            def race_before_transaction(metadata, operation):
+                nonlocal advanced
+                if metadata.project_guard is not None and not advanced:
+                    advanced = True
+                    workspace = Path(directory) / "advanced"
+                    with app.stores.persistence.acquire(project_id, "concurrent-commit") as writer:
+                        writer.load(workspace)
+                        from manga_tts.storage import read_json
+                        state = read_json(workspace / "project.json")
+                        state["title"] = "Advanced during review"
+                        writer.commit(workspace, state, revision.revision_id)
+                return original_run(metadata, operation)
+
+            with unittest.mock.patch.object(FirestoreSharedMetadata, "run", race_before_transaction):
+                with self.assertRaises(OperationConflict) as conflict:
+                    app.shared({"action": "prepare", "work_id": request["work_id"],
+                                "revision": revision.project_hash}, admin)
+            self.assertEqual(conflict.exception.code, "revision_conflict")
+            self.assertTrue(advanced)
+            self.assertIsNone(app.shared({"action": "work"}, admin)[0]["candidate"])
 
     def test_asset_read_downloads_only_the_requested_manifest_entry(self):
         with tempfile.TemporaryDirectory() as directory:
