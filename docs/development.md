@@ -286,9 +286,11 @@ bytes through Secret Manager. Missing or invalid keys never select a local-file
 fallback. Private responses stream through the application with `private, no-store`
 and `nosniff`; draft assets and audition audio remain admin-only.
 
-The monthly production ledger supports atomic reservation with operation creation
-and a five-chapter/UTC-month ceiling. Its chapter identity driver is not yet wired:
-the user must choose whether hosted creation requires approved shared work or
-whether each unlinked project consumes a monthly allowance. Do not enable hosted
-production before this decision, operational cost controls, and the remaining
+Hosted project creation requires a valid `work_id` for approved shared chapter work.
+The server checks the work and its recorded approval inside the same transaction
+as monthly reservation and operation creation. The allowance counts distinct work
+IDs; retries and replacement projects for the same work do not consume another
+chapter slot. Creation never implicitly links a project. Open the studio from the
+approved request dashboard, then attach the intended project explicitly.
+Do not enable hosted production before operational cost controls and the remaining
 acceptance gates are complete.

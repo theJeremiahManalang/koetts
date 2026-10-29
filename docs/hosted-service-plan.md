@@ -20,6 +20,12 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
 - Size initial pilot for five new chapter works per UTC month, at most forty source
   pages per chapter, and twenty active readers. Twenty readers is a sizing target,
   not a signup cap. Enforce the chapter and page limits at production admission.
+- Every new hosted project requires approved shared chapter work. Verify the work
+  and its recorded admin approval in the operation transaction, and count distinct
+  work IDs against the monthly allowance. Retries and replacement projects for the
+  same work do not consume another chapter slot. Creation does not implicitly link
+  the project to the work; explicit admin linking remains separate. Local creation
+  retains its existing behavior.
 - Target USD 10/month and seek to keep infrastructure below USD 20/month. This is
   not a guaranteed ceiling: billing is delayed and existing service traffic can
   continue accruing charges. Alert at USD 10, 15, and 20 reported spend. Pause new

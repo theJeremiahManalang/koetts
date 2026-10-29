@@ -79,6 +79,7 @@ def main():
                             "tests.integration.test_cloud_execution",
                             "tests.integration.test_cloud_request_quotas", "tests.integration.test_cloud_application",
                             "tests.integration.test_cloud_admission",
+                            "tests.integration.test_cloud_metadata_views",
                             "tests.unit.engine.test_shared_requests", "tests.unit.worker.test_shared_service", "-v"],
                            cwd=root, env=env, check=True, timeout=180)
             print("Firestore emulator contracts and SQLite parity passed; no live project was used.")

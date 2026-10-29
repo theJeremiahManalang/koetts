@@ -138,6 +138,67 @@ class FirestoreHostedPersistenceTests(unittest.TestCase):
             foreign.current("project")
         self.assertEqual(restarted.current("project"), revision)
 
+    def test_binding_initialization_is_separate_and_rejects_orphans(self):
+        from manga_worker.cloud_revisions import FirestoreRevisionStore
+        from unittest.mock import patch
+
+        blank = FirestoreRevisionStore(
+            self.client, "test-" + uuid.uuid4().hex, self.artifact_store_id,
+        )
+        self.assertIsNone(blank.current("project"))
+        self.assertFalse(blank.root.get().exists, "read-only current() must not initialize namespace binding")
+
+        blank.ensure_binding()
+        self.assertEqual(blank.root.get().to_dict(), {
+            "schema_version": 1,
+            "artifact_store_id": self.artifact_store_id,
+        })
+
+        orphaned = FirestoreRevisionStore(
+            self.client, "test-" + uuid.uuid4().hex, self.artifact_store_id,
+        )
+        orphaned.root.collection("operations").document("orphan").set({"operation_id": "orphan"})
+        with self.assertRaisesRegex(ValueError, "orphaned records"):
+            orphaned.ensure_binding()
+        self.assertFalse(orphaned.root.get().exists)
+
+        racing = FirestoreRevisionStore(
+            self.client, "test-" + uuid.uuid4().hex, self.artifact_store_id,
+        )
+
+        def concurrent_initializer_published_root():
+            racing.root.set({
+                "schema_version": 1,
+                "artifact_store_id": self.artifact_store_id,
+            })
+            racing.root.collection("projects").document("legitimate").set({"created": True})
+            return True
+
+        with patch.object(racing, "_has_orphan_records", side_effect=concurrent_initializer_published_root):
+            racing.ensure_binding()
+        self.assertEqual(racing.root.get().to_dict(), {
+            "schema_version": 1,
+            "artifact_store_id": self.artifact_store_id,
+        })
+
+    def test_reads_reject_records_under_a_missing_namespace_binding(self):
+        from manga_worker.cloud_revisions import FirestoreRevisionStore
+
+        orphaned = FirestoreRevisionStore(
+            self.client, "test-" + uuid.uuid4().hex, self.artifact_store_id,
+        )
+        orphaned.root.collection("projects").document("project").set({
+            "schema_version": 1,
+            "project_id": "project",
+            "last_fence": 0,
+            "owner_id": None,
+            "active_fence": None,
+            "current_revision_id": None,
+        })
+        with self.assertRaisesRegex(ValueError, "without a namespace binding"):
+            orphaned.current("project")
+        self.assertFalse(orphaned.root.get().exists)
+
     def test_artifact_reference_idempotency_conflict_and_restart(self):
         with self.assertRaises(FileNotFoundError):
             self.artifacts.get("c" * 64)

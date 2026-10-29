@@ -894,3 +894,23 @@ transaction contention failed one emulator run; deterministic recovery coverage 
 the subsequent complete emulator run passed. Docker and live deployment/provider
 checks remain unverified. The remaining critical monthly identity choice must be
 answered and implemented before phase 3 or the hosted release can be accepted.
+
+### Phase 3 monthly policy resolved and implemented
+
+The user selected approved shared chapter work as the required identity before
+hosted creation. The application now validates bound work plus its recorded approval
+and reserves the monthly allowance in the enqueue transaction. Replacements and
+retries for the same work do not consume another chapter slot; project linking is
+still explicit. The UI waits for verified eligible context before any upload.
+
+Final pinned checks passed 263 Python tests with 71 optional skips, 86 web tests,
+repository checks, Ruff, typecheck and build. The expanded loopback gate passed 82
+tests, including policy races, quota concurrency, namespace initialization and
+metadata-view parity. A bounded UI test fixture replaced an obsolete hanging
+fixture; TypeScript narrowing and two synthetic metadata fixtures were corrected.
+
+Read-only snapshots and source pinning now use accepted immutable manifest metadata
+without downloading chapter images or takes. Export review reads only its required
+export files; byte delivery and worker restore retain generation/checksum validation.
+A daemon restart interrupted a worker; the parent inspected and tested the saved
+changes. Final policy review and rendered UI QA remain before closing phase 3.

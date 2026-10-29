@@ -19,6 +19,7 @@ from manga_tts.shared_requests import ReaderIntakePolicy, SharedRequests
 from manga_tts.storage import digest, read_json
 
 from .cloud import CloudSettings, cloud_stores
+from .cloud_admission import CloudChapterAdmission
 from .cloud_operations import FirestoreOperationStore
 from .workflow import WORKFLOW_ACTIONS, operation_pipeline_config
 
@@ -29,7 +30,7 @@ _MAX_IMAGE_PIXELS = 25_000_000
 _SAFE_NAME = re.compile(r"[A-Za-z0-9._/-]{1,240}\Z")
 _OPERATION_FIELDS = {
     "action", "project", "revision", "actor", "upload_token", "images", "source_hashes",
-    "cloud_uploads", "project_revision_id", "mode", "direction", "mp3", "command",
+    "cloud_uploads", "project_revision_id", "mode", "direction", "mp3", "command", "work_id",
 }
 
 
@@ -37,7 +38,7 @@ class CloudApplication:
     """Per-request hosted service. Scratch contains verified cache data only."""
 
     def __init__(self, settings: CloudSettings, *, firestore_client=None, storage_client=None,
-                 cache_root: Path, admission_policy=None):
+                 cache_root: Path, admission_clock=None):
         self.settings = settings
         self.root = Path(cache_root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -50,7 +51,10 @@ class CloudApplication:
             self.root / "shared-unused.sqlite3", metadata=self.stores.shared_metadata,
             artifacts=self.stores.shared_artifacts, intake_policy=ReaderIntakePolicy(),
         )
-        self.admission_policy = admission_policy
+        self.admission = CloudChapterAdmission(
+            self.stores.revisions.client, settings.dataset, self.stores.artifacts.artifact_store_id,
+            clock=admission_clock,
+        )
         self.client = self.stores.revisions.client
         self.uploads = self.client.collection("hosted_workflow_v1").document(settings.dataset).collection("uploads")
 
@@ -122,7 +126,7 @@ class CloudApplication:
 
         try:
             with Image.open(path) as image:
-                if image.format not in {"PNG", "JPEG", "WEBP", "GIF", "BMP"}:
+                if image.format not in {"PNG", "JPEG", "WEBP"}:
                     raise ValueError("Upload must contain a supported image")
                 width, height = image.size
                 if (not isinstance(width, int) or not isinstance(height, int) or width < 1 or height < 1
@@ -170,9 +174,13 @@ class CloudApplication:
         doc = self.uploads.document(token)
         from google.cloud import firestore
 
+        self.stores.revisions.ensure_binding()
+
         @firestore.transactional
         def commit(tx):
             bound = self.stores.revisions._binding(tx)
+            if not bound:
+                raise ValueError("Hosted dataset namespace binding is missing")
             snap = doc.get(transaction=tx)
             prior = snap.to_dict() if snap.exists else {"owner_uid": actor["uid"], "project_id": actor["project_id"], "files": {}}
             if prior.get("owner_uid") != actor["uid"] or prior.get("project_id") != actor["project_id"]:
@@ -186,17 +194,23 @@ class CloudApplication:
                 raise ValueError("An upload token cannot contain more than 42 files")
             files[name] = encoded
             tx.set(doc, {"owner_uid": actor["uid"], "project_id": actor["project_id"], "files": files})
-            self.stores.revisions._finish_binding(tx, bound)
         commit(self.client.transaction())
         return {"name": name, "sha256": ref.sha256, "size": total}
 
-    def _read_project(self, project_id: str, *, revision_id: str | None = None, materialize: bool = True):
+    def _read_project_manifest(self, revision):
+        manifest = self.stores.persistence.read_manifest(revision.manifest)
+        for entry in manifest.entries.values():
+            self.stores.artifacts.validate_ref(entry.artifact)
+        return manifest
+
+    def _read_project(self, project_id: str, *, revision_id: str | None = None, materialize: bool = True,
+                      manifest=None):
         project_id = self.identifier(project_id)
         revision = (self.stores.persistence.current(project_id) if revision_id is None
                     else self.stores.revisions.get_revision(project_id, revision_id))
         if revision is None:
             raise FileNotFoundError("Project not found")
-        manifest = self.stores.persistence.read_manifest(revision.manifest)
+        manifest = manifest or self._read_project_manifest(revision)
         project_entry = manifest.entries.get("project.json")
         if project_entry is None:
             raise ValueError("Hosted project manifest has no project state")
@@ -236,15 +250,20 @@ class CloudApplication:
         return {"projects": projects, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
 
     def snapshot(self, project_id: str) -> dict:
-        _, workspace, _ = self._read_project(project_id)
+        revision = self.stores.persistence.current(self.identifier(project_id))
+        if revision is None:
+            raise FileNotFoundError("Project not found")
+        manifest = self._read_project_manifest(revision)
+        _, workspace, _ = self._read_project(project_id, revision_id=revision.revision_id, manifest=manifest,
+                                             materialize=False)
         router = PipelineRouter(operation_pipeline_config(workspace))
         router.load_project()
-        return self._snapshot(router)
+        return self._snapshot(router, manifest)
 
     @staticmethod
-    def _snapshot(router):
+    def _snapshot(router, manifest=None):
         from .workflow import snapshot
-        return snapshot(router)
+        return snapshot(router, manifest)
 
     def _verified_uploads(self, payload: dict, actor: dict):
         token = payload.get("upload_token")
@@ -284,9 +303,9 @@ class CloudApplication:
             hashes.append(ref.sha256)
         return refs, hashes, token
 
-    def _validate_archive_pages(self, action: str, request: dict, refs: dict) -> None:
+    def _validate_archive_pages(self, action: str, request: dict, refs: dict) -> int | None:
         if action != "create" or request.get("mode") not in {"chapter", "restore"}:
-            return
+            return None
         name = "chapter.zip" if request["mode"] == "chapter" else "project.zip"
         # Restore callers historically upload their bundle as chapter.zip.
         if name not in refs and "chapter.zip" in refs:
@@ -320,6 +339,40 @@ class CloudApplication:
                 raise ValueError("Chapter archive metadata is invalid") from exc
             if not isinstance(page_count, int) or isinstance(page_count, bool) or not 1 <= page_count <= _MAX_PAGES:
                 raise ValueError("Hosted projects are limited to 40 pages")
+            return page_count
+
+    def _work_admission(self, request: dict, key: str, page_count: int):
+        work_id = request.get("work_id")
+        if not isinstance(work_id, str) or not re.fullmatch(r"[a-f0-9]{32}", work_id):
+            raise ValueError("Approved shared chapter work is required before hosted project creation")
+        reservation = self.admission.prepare(work_id, key, page_count)
+        root = self.client.collection("shared_workflow_v1").document(self.settings.dataset)
+        work_ref = root.collection("chapter_work").document(work_id)
+        approval_ref = root.collection("work_approvals").document(work_id)
+
+        def admit(transaction):
+            # Recheck trusted shared metadata in the operation transaction before
+            # the reservation callback stages any ledger writes.
+            shared_snapshot = root.get(transaction=transaction)
+            shared = shared_snapshot.to_dict() if shared_snapshot.exists else None
+            if (not isinstance(shared, dict)
+                    or shared.get("schema_version") != 1
+                    or isinstance(shared.get("schema_version"), bool)
+                    or shared.get("artifact_store_id") != self.stores.artifacts.artifact_store_id):
+                raise ValueError("Shared chapter work belongs to a different schema or artifact store")
+            work_snapshot = work_ref.get(transaction=transaction)
+            approval_snapshot = approval_ref.get(transaction=transaction)
+            work = work_snapshot.to_dict() if work_snapshot.exists else None
+            approval = approval_snapshot.to_dict() if approval_snapshot.exists else None
+            if (not isinstance(work, dict) or work.get("id") != work_id
+                    or work.get("status") not in {"approved", "published"}
+                    or not isinstance(approval, dict) or approval.get("work_id") != work_id
+                    or not isinstance(approval.get("actor"), str) or not approval["actor"]
+                    or not isinstance(approval.get("created_at"), str) or not approval["created_at"]):
+                raise ValueError("Approved shared chapter work is required before hosted project creation")
+            reservation(transaction)
+
+        return admit
 
     def enqueue_operation(self, payload: dict, key: str) -> Operation:
         if not isinstance(payload, dict) or set(payload) - _OPERATION_FIELDS:
@@ -335,7 +388,7 @@ class CloudApplication:
         project = self.identifier(request.get("project"))
         actor = self._actor(payload.get("actor"), self.settings.project)
         refs, hashes, token = self._verified_uploads(request, actor)
-        self._validate_archive_pages(action, request, refs)
+        archive_page_count = self._validate_archive_pages(action, request, refs)
         request.update({"actor": actor, "upload_token": token, "cloud_uploads": refs, "source_hashes": hashes})
 
         # Fingerprint original user intent before consulting the mutable project pointer.
@@ -373,8 +426,15 @@ class CloudApplication:
             pinned = current.revision_id
             self._require_revision(request.get("revision"), current.project_hash)
         request["project_revision_id"] = pinned
-        if self.admission_policy is not None:
-            self.admission_policy(request, actor)
+        admission = None
+        if action == "create":
+            if request.get("mode") == "images":
+                page_count = len(request.get("images", []))
+            else:
+                page_count = archive_page_count
+            if page_count is None:
+                raise ValueError("Hosted chapter page count could not be verified")
+            admission = self._work_admission(request, key, page_count)
         source_fingerprint = self._source_fingerprint(request, refs, hashes, current)
         configuration = {k: request[k] for k in ("mode", "direction", "mp3") if k in request}
         command = request.get("command")
@@ -383,7 +443,8 @@ class CloudApplication:
         stage = "magi" if (action == "create" and request.get("mode") == "images") or action == "ocr" else "pipeline"
         return self.operations.enqueue(idempotency_key=key, payload=request, project_id=project, stage=stage,
                                        revision=request.get("revision"), source_fingerprint=source_fingerprint,
-                                       configuration_fingerprint=digest(configuration), request_fingerprint=request_fingerprint)
+                                       configuration_fingerprint=digest(configuration), request_fingerprint=request_fingerprint,
+                                       admission=admission)
 
     @staticmethod
     def _require_revision(expected: str | None, current: str) -> None:
@@ -397,21 +458,28 @@ class CloudApplication:
         if request.get("action") == "ocr":
             return digest({"uploads": hashes, "project_evidence": []})
         from .workflow import operation_source_fingerprint
-        with tempfile.TemporaryDirectory(prefix="hosted-source-fingerprint-") as td:
-            root = Path(td)
-            token = request.get("upload_token")
-            if token:
-                upload = root / "uploads" / token
-                upload.mkdir(parents=True)
-                for name, raw_ref in refs.items():
-                    target = upload.joinpath(*self._safe_name(name).parts)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    self.stores.artifacts.copy_to(ArtifactRef(**raw_ref), target)
-            if current is not None and request.get("action") not in {"create"}:
-                _, workspace, _ = self._read_project(request["project"], revision_id=current.revision_id)
-                shutil.copytree(workspace, root / "projects" / request["project"])
-            fingerprint_request = dict(request, source_hashes=hashes)
-            return operation_source_fingerprint(fingerprint_request, root=root)
+        root = self.root / "source-fingerprint-metadata"
+        token = request.get("upload_token")
+        checksums = {}
+        if token:
+            for name, raw_ref in refs.items():
+                self._safe_name(name)
+                reference = ArtifactRef(**raw_ref)
+                self.stores.artifacts.validate_ref(reference)
+                checksums[f"uploads/{token}/{name}"] = reference.sha256
+
+        project_data = None
+        if current is not None and request.get("action") != "create":
+            manifest = self._read_project_manifest(current)
+            _, _, project_data = self._read_project(request["project"], revision_id=current.revision_id,
+                                                     materialize=False, manifest=manifest)
+            project_prefix = f"projects/{request['project']}/"
+            checksums.update({project_prefix + path: entry.artifact.sha256
+                              for path, entry in manifest.entries.items()})
+
+        fingerprint_request = dict(request, source_hashes=hashes)
+        return operation_source_fingerprint(fingerprint_request, root=root,
+                                            source_checksums=checksums, project_data=project_data)
 
     def operation_status(self, operation_id: str) -> dict | None:
         try:
@@ -441,7 +509,7 @@ class CloudApplication:
                 raise FileNotFoundError("Project not found")
             if "revision" in request:
                 self._require_revision(request.get("revision"), revision.project_hash)
-            self._read_project(project_id, revision_id=revision.revision_id)
+            self._read_project(project_id, revision_id=revision.revision_id, materialize=False)
             shared = self._guarded_shared_requests(project_id, revision.revision_id)
             return shared.link_project(self.identifier(request["work_id"]), project_id, reader)
         if action in {"prepare", "review", "publish"}:
@@ -453,9 +521,18 @@ class CloudApplication:
             if visible_revision is None:
                 raise FileNotFoundError("Project not found")
             self._require_revision(request.get("revision"), visible_revision.project_hash)
+            manifest = self._read_project_manifest(visible_revision)
             revision, workspace, _ = self._read_project(
-                link["project_id"], revision_id=visible_revision.revision_id
+                link["project_id"], revision_id=visible_revision.revision_id,
+                manifest=manifest, materialize=False,
             )
+            from .workflow import EXPORT_REVIEW_FILES
+
+            for name in (*EXPORT_REVIEW_FILES, "chapter_narration.mp3"):
+                relative = f"exports/{name}"
+                entry = manifest.entries.get(relative)
+                if entry is not None:
+                    self._cache_entry(workspace, relative, entry)
             self._require_revision(request.get("revision"), revision.project_hash)
             shared = self._guarded_shared_requests(link["project_id"], revision.revision_id)
             return self._shared_export(action, request, workspace, link, reader, shared)

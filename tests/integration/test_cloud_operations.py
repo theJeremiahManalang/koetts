@@ -38,21 +38,81 @@ class FirestoreOperationStoreTests(unittest.TestCase):
         )
 
     def test_same_key_contention_and_changed_input_conflict(self):
-        def submit(_):
-            return self.enqueue("same-key")
+        from manga_worker.cloud_operations import FirestoreOperationStore
 
+        for round_number in range(3):
+            store = self.store if round_number == 0 else FirestoreOperationStore(
+                self.client,
+                "test-" + uuid.uuid4().hex,
+                "gcs-v1:" + uuid.uuid4().hex * 2,
+                policy=OperationPolicy(max_attempts=3, stage_capacities={"magi": 1, "pipeline": 1}),
+            )
+
+            def submit(_):
+                return store.enqueue(
+                    idempotency_key="same-key",
+                    payload={"action": "extract"},
+                    project_id="project",
+                    stage="magi",
+                    revision="rev",
+                    source_fingerprint="source",
+                    configuration_fingerprint="config",
+                )
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                operations = list(pool.map(submit, range(4)))
+            self.assertEqual(len({op.operation_id for op in operations}), 1)
+            self.assertEqual(store.get_by_key("same-key").operation_id, operations[0].operation_id)
+            binding = store.root.get().to_dict()
+            self.assertEqual(binding, {
+                "schema_version": 1,
+                "artifact_store_id": store.artifact_store_id,
+            })
+            self.assertEqual(len(list(store.root.collection("operations").stream())), 1)
+            self.assertEqual(len(list(store.root.collection("operation_idempotency_keys").stream())), 1)
+
+        store = FirestoreOperationStore(
+            self.client,
+            "test-" + uuid.uuid4().hex,
+            "gcs-v1:" + uuid.uuid4().hex * 2,
+            policy=OperationPolicy(max_attempts=3, stage_capacities={"magi": 1, "pipeline": 1}),
+        )
         with ThreadPoolExecutor(max_workers=4) as pool:
-            operations = list(pool.map(submit, range(4)))
-        self.assertEqual(len({op.operation_id for op in operations}), 1)
-        self.assertEqual(self.store.get_by_key("same-key").operation_id, operations[0].operation_id)
+            different = list(pool.map(lambda i: store.enqueue(
+                idempotency_key=f"fresh-{i}", payload={"action": "extract"}, project_id="project",
+                stage="magi", revision="rev", source_fingerprint="source",
+                configuration_fingerprint="config",
+            ), range(4)))
+        self.assertEqual(len({op.operation_id for op in different}), 4)
+        self.assertEqual(len(list(store.root.collection("operations").stream())), 4)
+        self.assertEqual(len(list(store.root.collection("operation_idempotency_keys").stream())), 4)
+        self.assertEqual(store.root.get().to_dict(), {
+            "schema_version": 1,
+            "artifact_store_id": store.artifact_store_id,
+        })
+
         with self.assertRaises(OperationConflict) as caught:
-            self.enqueue("same-key", payload={"action": "different"})
+            store.enqueue(
+                idempotency_key="fresh-0", payload={"action": "different"}, project_id="project",
+                stage="magi", revision="rev", source_fingerprint="source",
+                configuration_fingerprint="config",
+            )
         self.assertEqual(caught.exception.code, "idempotency_conflict")
 
     def test_slash_in_idempotency_key_matches_sqlite_behavior(self):
         operation = self.enqueue("reader/request/42")
         self.assertEqual(self.store.get_by_key("reader/request/42").operation_id, operation.operation_id)
         self.assertEqual(self.enqueue("reader/request/42").operation_id, operation.operation_id)
+
+    def test_reads_reject_operations_under_a_missing_namespace_binding(self):
+        operation = self.enqueue("unbound-read")
+        self.store.root.delete()
+
+        with self.assertRaisesRegex(ValueError, "without a namespace binding"):
+            self.store.get(operation.operation_id)
+        with self.assertRaisesRegex(ValueError, "without a namespace binding"):
+            self.store.get_by_key("unbound-read")
+        self.assertFalse(self.store.root.get().exists)
 
     def test_exhausted_duplicate_transaction_recovers_only_matching_committed_intent(self):
         from google.api_core.exceptions import Aborted

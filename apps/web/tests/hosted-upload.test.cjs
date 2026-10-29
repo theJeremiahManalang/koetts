@@ -31,7 +31,7 @@ test("hosted image upload sends bounded canonical files sequentially and returns
     submitted.push([name, file.name, token]);
     await Promise.resolve();
     inFlight--;
-  }, uploadToken, "b".repeat(32));
+  }, uploadToken, "b".repeat(32), "approved");
 
   assert.equal(submitted.length, 40);
   assert.equal(maxInFlight, 1);
@@ -51,7 +51,7 @@ test("hosted ZIP and cast import uploads use their canonical names and retain pr
     [form({ action: "cast-import", project: "d".repeat(32), revision: "revision-2", cast: zip }), "cast.zip", "cast-import"],
   ]) {
     const sent = [];
-    const payload = await hostedUpload.prepareHostedUpload(input, async name => sent.push(name), token);
+    const payload = await hostedUpload.prepareHostedUpload(input, async name => sent.push(name), token, expectedAction === "create" ? "f".repeat(32) : undefined, expectedAction === "create" ? "published" : undefined);
     assert.deepEqual(sent, [expectedName]);
     assert.equal(payload.action, expectedAction);
     assert.equal(payload.upload_token, token);
@@ -65,10 +65,22 @@ test("oversized hosted file is rejected before any upload request", async () => 
   const tooLarge = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "big.zip");
   let sends = 0;
   await assert.rejects(
-    hostedUpload.prepareHostedUpload(form({ action: "create", mode: "chapter", chapter: tooLarge }), async () => { sends++; }, "e".repeat(32)),
+    hostedUpload.prepareHostedUpload(form({ action: "create", mode: "chapter", chapter: tooLarge }), async () => { sends++; }, "e".repeat(32), "f".repeat(32), "approved"),
     /no larger than 10 MiB/,
   );
   assert.equal(sends, 0);
+});
+
+test("hosted project creation requires a syntactically valid work ID before uploading", async () => {
+  const zip = new File(["zip"], "source.zip", { type: "application/zip" });
+  for (const [workId, workStatus] of [[undefined, "approved"], ["invalid-work-id", "approved"], ["f".repeat(32), "pending"]]) {
+    let sends = 0;
+    await assert.rejects(
+      hostedUpload.prepareHostedUpload(form({ action: "create", mode: "chapter", chapter: zip }), async () => { sends++; }, "e".repeat(32), workId, workStatus),
+      /approved or published request/,
+    );
+    assert.equal(sends, 0);
+  }
 });
 
 test("invalid work query values are ignored", () => {
@@ -80,4 +92,14 @@ test("the same idempotency intent maps to the same UUID32 upload token", () => {
   const key = "12345678-1234-4234-9234-123456789abc";
   assert.equal(hostedUpload.uploadTokenForIntent(key), "12345678123442349234123456789abc");
   assert.equal(hostedUpload.uploadTokenForIntent(key), hostedUpload.uploadTokenForIntent(key));
+});
+
+test("hosted create idempotency fingerprint includes work identity while retrying same work remains stable", () => {
+  const filesAndMode = JSON.stringify({ action: "create", mode: "images", files: ["same.png"] });
+  const workA = hostedUpload.hostedIntentFingerprint(filesAndMode, "create", "a".repeat(32));
+  const workARetry = hostedUpload.hostedIntentFingerprint(filesAndMode, "create", "a".repeat(32));
+  const workB = hostedUpload.hostedIntentFingerprint(filesAndMode, "create", "b".repeat(32));
+  assert.equal(workA, workARetry);
+  assert.notEqual(workA, workB);
+  assert.equal(hostedUpload.hostedIntentFingerprint(filesAndMode, "cast-import", "a".repeat(32)), filesAndMode);
 });

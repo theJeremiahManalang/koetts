@@ -73,34 +73,85 @@ class _FirestoreHostedStore:
     def _binding(self, transaction):
         snapshot = self.root.get(transaction=transaction)
         if not snapshot.exists:
-            for collection in ("projects", "artifact_references", "operations", "operation_idempotency_keys",
-                               "operation_stage_slots", "operation_project_slots", "uploads",
-                               "production_months", "production_admissions"):
-                if list(self.root.collection(collection).limit(1).stream(transaction=transaction)):
-                    raise ValueError("Hosted dataset has orphaned records without a namespace binding")
             return False
+        self._validate_binding(snapshot)
+        return True
+
+    def _validate_binding(self, snapshot):
         state = snapshot.to_dict()
         if (not isinstance(state, dict) or set(state) != {"schema_version", "artifact_store_id"}
                 or state.get("schema_version") != SCHEMA_VERSION or isinstance(state.get("schema_version"), bool)
                 or state.get("artifact_store_id") != self.artifact_store_id):
             raise ValueError("Hosted dataset belongs to a different schema or artifact store")
+
+    @staticmethod
+    def _contains_data(value) -> bool:
+        if value is None or isinstance(value, FileNotFoundError):
+            return False
+        if isinstance(value, (list, tuple, set, dict)):
+            return bool(value)
         return True
 
-    def _finish_binding(self, transaction, exists: bool):
-        if not exists:
+    def _has_orphan_records(self) -> bool:
+        for collection in ("projects", "artifact_references", "operations", "operation_idempotency_keys",
+                           "operation_stage_slots", "operation_project_slots", "uploads",
+                           "production_months", "production_admissions"):
+            if list(self.root.collection(collection).limit(1).stream()):
+                return True
+        return False
+
+    def ensure_binding(self) -> None:
+        """Bind an empty dataset before a domain transaction writes any records."""
+        from google.cloud import firestore
+
+        # Check orphan namespaces before opening the single-document binding
+        # transaction. Keeping collection range reads out of competing root
+        # creation transactions avoids emulator/server lock cycles. All hosted
+        # writers initialize first, so no supported writer can add children in
+        # this interval without first creating the same root binding.
+        snapshot = self.root.get()
+        if snapshot.exists:
+            self._validate_binding(snapshot)
+            return
+        if self._has_orphan_records():
+            # A legitimate initializer may have published the root while the
+            # collection scan was in flight. Accept that binding after checking
+            # its identity; otherwise preserve the orphan rejection.
+            snapshot = self.root.get()
+            if snapshot.exists:
+                self._validate_binding(snapshot)
+                return
+            raise ValueError("Hosted dataset has orphaned records without a namespace binding")
+
+        @firestore.transactional
+        def initialize(transaction):
+            snapshot = self.root.get(transaction=transaction)
+            if snapshot.exists:
+                self._validate_binding(snapshot)
+                return
             transaction.create(self.root, {
                 "schema_version": SCHEMA_VERSION,
                 "artifact_store_id": self.artifact_store_id,
             })
 
+        initialize(self.client.transaction())
+
     def _run(self, operation, *, bind_if_missing: bool = False):
         from google.cloud import firestore
 
+        if bind_if_missing:
+            self.ensure_binding()
+
         @firestore.transactional
         def execute(transaction):
+            # A mutation may proceed only under the binding established before
+            # this transaction. If it vanished, fail closed instead of adopting
+            # a namespace that changed between initialization and the write.
+            if bind_if_missing and not self._binding(transaction):
+                raise ValueError("Hosted dataset namespace binding is missing")
             result, binding_exists = operation(transaction)
-            if bind_if_missing:
-                self._finish_binding(transaction, binding_exists)
+            if not binding_exists and self._contains_data(result):
+                raise ValueError("Hosted dataset has records without a namespace binding")
             return result
 
         return execute(self.client.transaction())
@@ -156,6 +207,8 @@ class FirestoreRevisionStore(_FirestoreHostedStore):
         def operation(transaction):
             bound = self._binding(transaction)
             project_snapshot = project.get(transaction=transaction)
+            if project_snapshot.exists and not bound:
+                raise ValueError("Hosted project exists without a namespace binding")
             state = self._validated_project_state(project, project_snapshot, project_id, transaction)
             revision_id = state["current_revision_id"]
             if revision_id is None:
@@ -173,7 +226,10 @@ class FirestoreRevisionStore(_FirestoreHostedStore):
 
         def operation(transaction):
             bound = self._binding(transaction)
-            state = self._project_state(project.get(transaction=transaction), project_id)
+            project_snapshot = project.get(transaction=transaction)
+            if project_snapshot.exists and not bound:
+                raise ValueError("Hosted project exists without a namespace binding")
+            state = self._project_state(project_snapshot, project_id)
             if state["owner_id"] is None:
                 return None, bound
             return WriteFence(project_id, state["owner_id"], state["active_fence"]), bound

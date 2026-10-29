@@ -19,8 +19,8 @@ import { useAuth } from "../identity/auth-provider";
 import { RequireSignIn } from "../identity/require-sign-in";
 
 import { AdminNav } from "../identity/admin-nav";
-import { StudioRequestContext } from "./studio-request-context";
-import { hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
+import { StudioRequestContext, type HostedWorkState } from "./studio-request-context";
+import { hostedIntentFingerprint, hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -139,6 +139,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [bundleReady, setBundleReady] = useState(false);
   const [hasKey, setHasKey] = useState(false);
+  const [hostedWorkState, setHostedWorkState] = useState<HostedWorkState>(null);
   const [focusSource, setFocusSource] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
@@ -342,19 +343,24 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
   }
   async function upload(form: FormData) {
     if (busy) return;
+    const action = String(form.get("action") || "");
+    const intentWorkId = hosted && action === "create" ? hostedWorkId(window.location.search) : undefined;
+    const workState = hostedWorkState;
+    const workStatus = workState && workState.id === intentWorkId ? workState.status : undefined;
     operationSection.current = "cast";
     setErrorSection(null);
-    const operation = { ...operationFor(String(form.get("action")), {}, String(form.get("mode") || "")), section: operationSection.current };
+    const operation = { ...operationFor(action, {}, String(form.get("mode") || "")), section: operationSection.current };
     startOperation(operation);
     try {
-      const key = idempotencyKeyForIntent(formFingerprint(form));
+      const fingerprint = hostedIntentFingerprint(formFingerprint(form), hosted && action === "create" ? action : "", intentWorkId);
+      const key = idempotencyKeyForIntent(fingerprint);
       const job = hosted
         ? await (async () => {
           const uploadToken = uploadTokenForIntent(key);
           const payload = await prepareHostedUpload(form, async (name, file, token) => api(
             `/api/workflow/upload?token=${encodeURIComponent(token)}&name=${encodeURIComponent(name)}`,
             { method: "PUT", headers: { "X-Manga-Workflow": "1", "Content-Type": "application/octet-stream" }, body: file },
-          ), uploadToken, hostedWorkId(window.location.search));
+          ), uploadToken, intentWorkId, workStatus);
           return api("/api/workflow", { method: "POST", headers: { "Content-Type": "application/json", "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: JSON.stringify(payload) }, key);
         })()
         : await api("/api/workflow", { method: "POST", headers: { "X-Manga-Workflow": "1", "Idempotency-Key": key }, body: form }, key);
@@ -425,7 +431,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     {busy && !initialLoading && <LoadingState compact label={busy} />}
     <header className="site-header"><a className="brand" href="/" aria-label="KoeTTS home"><span className="brand-icon" aria-hidden="true">▥</span><span><span className="eyebrow">A STORY IN EVERY PANEL</span><span className="brand-title">KoeTTS<span className="brand-dot">.</span></span></span></a><div className="header-actions"><AdminNav active="studio" canNavigate={async () => !busy && await canLeave()} /><label className="visually-hidden" htmlFor="projects">Saved project</label><select id="projects" value={projectId} disabled={!!busy} onChange={async e => { const id = e.target.value; if (id && await canLeave()) { void openProject(id); } }}><option value="">Saved projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0, 6)}</option>)}</select><ActionButton className="button" disabled={!!busy} onClick={async () => { if (!await canLeave()) return; setSnapshot(null); setDraft(null); setProjectId(""); setDirty(false); setFiles([]); setArchive(null); setPageIndex(0); localStorage.removeItem("manga-tts-project"); }}>＋ New chapter</ActionButton></div></header>
     <main>
-      <StudioRequestContext />
+      <StudioRequestContext onWorkState={setHostedWorkState} />
       <div className="reader-heading"><div><div className="eyebrow">YOUR READING SPACE</div><h1>A voice for every character.</h1><p>{snapshot ? "Review the story, direct the voices, and create your audiobook." : "Start with manga images or pick up a saved production."}</p></div><span className="mode-label"><span className="status-dot" />{snapshot ? `${(snapshot.project.title || snapshot.project.chapter_id)} · ${snapshot.approved_scenes.length}/${snapshot.project.scenes.length} scenes approved` : "Reviewed manga audio"}</span></div>
       {snapshot && <div className="project-title-row">{renaming ? <form className="action-row" onSubmit={e => { e.preventDefault(); if (titleDraft.trim() && !dirty) void run("rename", { title: titleDraft.trim() }); }}><label className="field-label">Project title<input autoFocus maxLength={120} required value={titleDraft} disabled={!!busy} onChange={e => setTitleDraft(e.target.value)} /></label><ActionButton type="submit" className="button primary" disabled={dirty || !titleDraft.trim()} reason={dirty ? "Apply your section edits before saving a new title." : "Enter a project title."}>Save title</ActionButton><ActionButton type="button" className="button" onClick={() => { setRenaming(false); setTitleDraft(snapshot.project.title || snapshot.project.chapter_id); }}>Cancel</ActionButton></form> : <><strong>{snapshot.project.title || snapshot.project.chapter_id}</strong><ActionButton className="button small" disabled={dirty} reason="Apply or discard your section edits before renaming the project." onClick={() => setRenaming(true)}>Rename project</ActionButton></>}</div>}
       {snapshot && <nav className="workflow-tabs" aria-label="Production steps">{tabs.map(([id, title], i) => <ActionButton key={id} className="button" aria-current={tab === id ? "step" : undefined} disabled={!!busy} onClick={() => switchTab(id)}><span aria-hidden="true">{sectionStatus(id).icon}</span><span className="step-title">{title}<small>{sectionStatus(id).label}</small></span></ActionButton>)}</nav>}
@@ -443,7 +449,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
           {!snapshot || !draft ? <><div className="panel-meta"><span>Start a production</span><span>01 / Upload</span></div><fieldset disabled={!!busy}><div className="story-section"><h2 className="eyebrow">BRING YOUR STORY</h2><div className="segmented-control">{[["images", "Images"], ["chapter", "Chapter ZIP"], ["restore", "Restore ZIP"]].map(([id, label]) => <ActionButton key={id} aria-pressed={mode === id} onClick={() => { setMode(id); setArchive(null); }}>{label}</ActionButton>)}</div><input ref={fileInput} className="visually-hidden" type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Upload manga images" onChange={e => { selectFiles(e.target.files); e.target.value = ""; setMode("images"); }} />
             {mode === "images" ? <><p className="control-note">Choose up to {hosted ? 40 : 10} images, 10 MB each. Arrange the numbered thumbnails before extracting. Drag to reorder or use the move buttons.</p><ActionButton className="button" onClick={() => fileInput.current?.click()}>＋ Choose images</ActionButton><label className="field-label">Reading direction<select value={direction} onChange={e => setDirection(e.target.value)}><option value="rtl">Right to left · MagiV3 order</option><option value="ltr">Left to right · layout proposal</option></select></label></> : <label className="field-label">{mode === "restore" ? "Saved project bundle" : "Chapter analysis bundle"}<input key={mode} type="file" accept=".zip" onChange={e => setArchive(e.target.files?.[0] ?? null)} /><span className="control-note">{mode === "restore" ? "Restores references, approvals and retained audio without new generation." : "Use the chapter_analysis.zip produced by your extraction workflow."}{hosted ? " ZIP files must be no larger than 10 MiB." : ""}</span></label>}
             {mode !== "restore" && <label className="field-label">Cast references ZIP <span className="muted">Optional; you can also create characters from panel crops.</span><input type="file" accept=".zip" onChange={e => setCastZip(e.target.files?.[0] ?? null)} />{hosted && <span className="control-note">ZIP files must be no larger than 10 MiB.</span>}</label>}
-            <div className="action-row"><ActionButton className="button primary" disabled={mode === "images" ? !files.length : !archive} reason={mode === "images" ? "Choose manga images first." : "Choose a ZIP file first."} onClick={createProject}>{mode === "images" ? "Extract & create project" : mode === "restore" ? "Restore project" : "Create project"}</ActionButton></div></div></fieldset><div className="story-section"><h2 className="eyebrow">FROM PANEL TO PERFORMANCE</h2><ol className="journey"><li><strong>Read the page</strong><span>Recover text and propose its order.</span></li><li><strong>Find each voice</strong><span>Match appearances to your cast.</span></li><li><strong>Approve the story</strong><span>Review dialogue and delivery before synthesis.</span></li><li><strong>Listen & export</strong><span>Choose takes and download your chapter.</span></li></ol></div></> : <>
+            <div className="action-row"><ActionButton className="button primary" disabled={(hosted && !hostedWorkState) || (mode === "images" ? !files.length : !archive)} reason={hosted && !hostedWorkState ? "Choose an approved or published request first." : mode === "images" ? "Choose manga images first." : "Choose a ZIP file first."} onClick={createProject}>{mode === "images" ? "Extract & create project" : mode === "restore" ? "Restore project" : "Create project"}</ActionButton></div>{hosted && !hostedWorkState && <p className="control-note" role="status">Hosted project creation needs an approved or published request. <a href="/admin/requests">Open the request dashboard</a> to prepare an eligible request.</p>}</div></fieldset><div className="story-section"><h2 className="eyebrow">FROM PANEL TO PERFORMANCE</h2><ol className="journey"><li><strong>Read the page</strong><span>Recover text and propose its order.</span></li><li><strong>Find each voice</strong><span>Match appearances to your cast.</span></li><li><strong>Approve the story</strong><span>Review dialogue and delivery before synthesis.</span></li><li><strong>Listen & export</strong><span>Choose takes and download your chapter.</span></li></ol></div></> : <>
             <div className="panel-meta"><span>{tabs.find(([id]) => id === tab)?.[1]}</span><span className={dirty ? "unsaved" : ""}>{dirty ? "Unsaved edits" : "Applied state saved"}</span></div>
             <fieldset disabled={!!busy}>
               {tab === "cast" && <CastWorkspace key={projectId} project={draft} voices={snapshot.voices} pages={snapshot.pages} currentPageId={page?.page_id || ""} dirty={dirty} approved={snapshot.cast_approved} asset={path => assetUrl(projectId, path)} edit={edit} save={saveCast} importReferences={importCast} showPage={id => { const index = snapshot.pages.findIndex(p => p.page_id === id); if (index >= 0) setPageIndex(index); }} Button={ActionButton} />}

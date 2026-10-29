@@ -63,14 +63,17 @@ Use delivery speech/thought/shout/whisper/narration. Output matches the supplied
 """
 
 
-def page_image(p: dict[str, Any], root: PathLike, page: dict[str, Any]) -> tuple[Path, str]:
+def page_image(p: dict[str, Any], root: PathLike, page: dict[str, Any], *,
+               exists: Callable[[Path], bool] | None = None) -> tuple[Path, str]:
     """Return (Path, evidence_kind) for a page, preferring originals over previews.
 
-    Reads file existence under root; raises ValueError if no visual evidence is available."""
+    Reads file existence under root, or consults the supplied metadata callback;
+    raises ValueError if no visual evidence is available."""
+    is_file = exists or (lambda path: path.is_file())
     for rel in (f"originals/{page['image_filename']}", f"input/{page['image_filename']}",
                 f"input/previews/page_{page['page_index']:03d}_annotated.jpg"):
         path = asset(root, rel)
-        if path.is_file():
+        if is_file(path):
             return path, "annotated preview" if "/previews/" in rel else "original"
     raise ValueError(f"No visual evidence for {page['page_id']}")
 

@@ -145,8 +145,9 @@ Uploads are bounded individual objects whose immutable references remain server-
 Cloud OCR is a finite queued operation; published audio streams through authenticated
 same-origin byte-range routes using the configured signing secret.
 
-Hosted reader quotas and an atomic monthly production ledger are implemented. The
-monthly ledger's chapter identity driver is pending the user's explicit decision
-about approved shared work versus unlinked project admission. The checked-in
+Hosted reader quotas and an atomic monthly production ledger are implemented. New
+hosted projects require approved shared chapter work; the work and its recorded
+approval are checked with the monthly reservation and enqueue transaction. The
+monthly allowance counts verified work IDs. Project linking remains explicit. The checked-in
 frontend-only guards remain enabled; cost controls, deployment and live acceptance
 remain separate unfinished gates. This is not evidence of a launched hosted product.

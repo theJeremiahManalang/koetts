@@ -7,6 +7,10 @@ export function uploadTokenForIntent(idempotencyKey: string): string {
   return token;
 }
 
+export function hostedIntentFingerprint(formFingerprint: string, action: string, workId?: string): string {
+  return action === "create" ? JSON.stringify({ form: formFingerprint, work_id: workId }) : formFingerprint;
+}
+
 type SendFile = (name: string, file: File, uploadToken: string) => Promise<unknown>;
 
 function fileFrom(form: FormData, name: string): File | null {
@@ -20,11 +24,15 @@ export async function prepareHostedUpload(
   sendFile: SendFile,
   uploadToken: string,
   workId?: string,
+  workStatus?: string,
 ) {
   if (!VALID_ID.test(uploadToken)) throw new Error("The upload could not be identified. Retry the operation.");
 
   const action = String(form.get("action") || "");
   const mode = String(form.get("mode") || "");
+  if (action === "create" && (typeof workId !== "string" || !VALID_ID.test(workId) || !["approved", "published"].includes(workStatus || ""))) {
+    throw new Error("Choose an approved or published request before creating a hosted project.");
+  }
   const uploads: { name: string; file: File }[] = [];
   let images: string[] | undefined;
 
@@ -68,7 +76,7 @@ export async function prepareHostedUpload(
   const revision = form.get("revision");
   if (typeof revision === "string" && revision) payload.revision = revision;
   if (images) payload.images = images;
-  if (typeof workId === "string" && VALID_ID.test(workId)) payload.work_id = workId;
+  if (action === "create") payload.work_id = workId;
   return payload;
 }
 

@@ -18,6 +18,7 @@ from manga_worker import workflow as web_workflow
 from manga_tts import PipelineConfig, PipelineRouter
 from manga_tts.cli import review_document
 from manga_tts.operations import OperationConflict, SQLiteOperationStore
+from manga_tts.persistence import ArtifactRef, ManifestEntry, ProjectManifest
 from manga_tts.storage import read_json, write_json
 
 
@@ -86,6 +87,71 @@ class WebWorkflowTests(unittest.TestCase):
         self.assertEqual(state["pages"][0]["original_path"], "input/page_001.png")
         self.assertEqual(state["pages"][0]["annotated_path"], "input/previews/page_001_annotated.jpg")
         self.assertNotIn("api_key", state["project"])
+
+    def test_metadata_snapshot_matches_local_view_with_selected_audio(self):
+        from manga_tts import PipelineConfig, PipelineRouter, schemas
+
+        router = PipelineRouter(PipelineConfig(workspace=self.workspace),
+                                client_factory=lambda: object(),
+                                renderer_factory=lambda *_: lambda request: fixtures.wav_bytes())
+        router.load_project()
+        router.render_selected(schemas.RenderCommand(scene_ids=["scene_001"]))
+        local = web_workflow.snapshot(router)
+        entries = {}
+        for path in self.workspace.rglob("*"):
+            if path.is_file():
+                relative = path.relative_to(self.workspace).as_posix()
+                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+                entries[relative] = ManifestEntry(relative, ArtifactRef("fixture/" + checksum, "1", checksum))
+        metadata = ProjectManifest(entries)
+
+        self.assertEqual(web_workflow.snapshot(router, metadata), local)
+        self.assertEqual(local["workflow_status"]["audio_ready_scenes"], ["scene_001"])
+
+    def test_metadata_source_fingerprint_matches_local_for_plan_and_cast_actions(self):
+        project = read_json(self.workspace / "project.json")
+        checksums = {}
+        for path in self.workspace.rglob("*"):
+            if path.is_file():
+                relative = path.relative_to(self.workspace).as_posix()
+                checksums[f"projects/{self.project_id}/{relative}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+        requests = [
+            {"action": "plan", "project": self.project_id},
+            {"action": "cast", "project": self.project_id, "command": {"new_characters": []}},
+            {"action": "cast-create", "project": self.project_id,
+             "command": {"char_id": project["appearances"][0]["char_id"]}},
+        ]
+        for request in requests:
+            with self.subTest(action=request["action"]):
+                self.assertEqual(
+                    web_workflow.operation_source_fingerprint(request, root=self.root),
+                    web_workflow.operation_source_fingerprint(
+                        request, root=self.root, source_checksums=checksums, project_data=project),
+                )
+
+    def test_metadata_source_fingerprint_preserves_missing_page_and_reference_evidence(self):
+        project = read_json(self.workspace / "project.json")
+        page = project["chapter"]["pages"][0]
+        page_image = self.workspace / "input" / page["image_filename"]
+        page_image.unlink()
+        (self.workspace / "originals" / page["image_filename"]).unlink(missing_ok=True)
+        (self.workspace / "input/previews" / f"page_{page['page_index']:03d}_annotated.jpg").unlink(missing_ok=True)
+        speaker = next(iter(project["cast"]))
+        project["cast"][speaker]["references"] = ["references/missing-reference.png"]
+        write_json(self.workspace / "project.json", project)
+        checksums = {}
+        for path in self.workspace.rglob("*"):
+            if path.is_file():
+                relative = path.relative_to(self.workspace).as_posix()
+                checksums[f"projects/{self.project_id}/{relative}"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        request = {"action": "plan", "project": self.project_id}
+
+        self.assertEqual(
+            web_workflow.operation_source_fingerprint(request, root=self.root),
+            web_workflow.operation_source_fingerprint(
+                request, root=self.root, source_checksums=checksums, project_data=project),
+        )
 
     def test_durable_worker_leaves_retry_authority_with_operation_store(self):
         config = web_workflow.operation_pipeline_config(self.workspace)

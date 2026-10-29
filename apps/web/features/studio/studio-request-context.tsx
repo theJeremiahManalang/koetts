@@ -4,16 +4,19 @@ import { useAuth } from "../identity/auth-provider";
 import { useVerifiedFetch } from "../identity/use-verified-fetch";
 
 type WorkContext = { id: string; title: string; chapter: number; status: string; requests: { notes: string; requester_name?: string }[] };
+export type HostedWorkState = { id: string; status: "approved" | "published" } | null;
 
 /** Shared work is a reference; it never overwrites or implicitly links a project. */
-export function StudioRequestContext() {
+export function StudioRequestContext({ onWorkState }: { onWorkState?: (work: HostedWorkState) => void } = {}) {
   const { user, authorizationReady } = useAuth();
   const verifiedFetch = useVerifiedFetch();
   const [work, setWork] = useState<WorkContext | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("work");
-    if (!id || !user || !authorizationReady) return;
+    onWorkState?.(null);
+    if (!id) { onWorkState?.(null); return; }
+    if (!user || !authorizationReady) return;
     const controller = new AbortController();
     void (async () => {
       try {
@@ -23,13 +26,19 @@ export function StudioRequestContext() {
         if (!response.ok) throw new Error("Shared request context could not be loaded.");
         const item = data.work?.[0];
         if (!item || item.id !== id || typeof item.title !== "string" || !Number.isInteger(item.chapter) || !Array.isArray(item.requests)) throw new Error("Invalid shared work context.");
-        if (!controller.signal.aborted) { setWork(item); setError(""); }
+        if (!controller.signal.aborted) {
+          setWork(item); setError("");
+          onWorkState?.(item.status === "approved" || item.status === "published" ? { id: item.id, status: item.status } : null);
+        }
       } catch (failure) {
-        if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Shared request context could not be loaded.");
+        if (!controller.signal.aborted) {
+          setError(failure instanceof Error ? failure.message : "Shared request context could not be loaded.");
+          onWorkState?.(null);
+        }
       }
     })();
     return () => controller.abort();
-  }, [user?.uid, authorizationReady, verifiedFetch]);
+  }, [user?.uid, authorizationReady, verifiedFetch, onWorkState]);
   if (error) return <p className="notice error" role="alert">{error} <a href="/admin/requests">Back to requests</a></p>;
   if (!work) return null;
   return <section className="request-notes" aria-label="Selected audiobook request"><h2>{work.title} · Chapter {work.chapter}</h2>

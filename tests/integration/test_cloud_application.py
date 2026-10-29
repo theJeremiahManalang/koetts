@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import os
 import hashlib
+import json
 import tempfile
 import unittest
 import uuid
+import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
@@ -39,6 +42,21 @@ class CloudApplicationTests(unittest.TestCase):
         self.settings = settings
         return CloudApplication(settings, firestore_client=self.client, storage_client=storage,
                                 cache_root=Path(directory) / "scratch")
+
+    def _approved_work(self, app, actor, *, title=None, chapter="1"):
+        request = app.shared({"action": "submit", "title": title or uuid.uuid4().hex,
+                              "chapter": chapter, "notes": "fixture"}, actor)
+        app.shared({"action": "approve", "work_id": request["work_id"]}, actor)
+        return request["work_id"]
+
+    def _image_upload(self, app, directory, actor, count=1):
+        from PIL import Image
+        token = uuid.uuid4().hex
+        image = Path(directory) / f"page-{uuid.uuid4().hex}.png"
+        Image.new("RGB", (1, 1), "white").save(image)
+        for index in range(count):
+            app.upload(token, f"{index}.png", image, actor)
+        return token
 
     def _seed_exported_project(self, app, root):
         from tests.unit.engine.test_audio_pipeline import PipelineTests
@@ -151,9 +169,10 @@ class CloudApplicationTests(unittest.TestCase):
             image_token = uuid.uuid4().hex
             app.upload(image_token, "1.png", image, actor)
             app.upload(image_token, "0.png", image, actor)
+            work_id = self._approved_work(app, actor)
             create = app.enqueue_operation({"action": "create", "mode": "images", "project": uuid.uuid4().hex,
                                             "upload_token": image_token, "images": ["1.png", "0.png"],
-                                            "actor": actor}, "ordered-image-operation")
+                                            "work_id": work_id, "actor": actor}, "ordered-image-operation")
             self.assertEqual(create.payload["images"], ["0.png", "1.png"])
 
             wrong_bucket = type(app.stores.artifacts.bucket)()
@@ -282,6 +301,137 @@ class CloudApplicationTests(unittest.TestCase):
             with self.assertRaises(OperationConflict) as idempotency:
                 app.enqueue_operation(changed, "rename-key")
             self.assertEqual(idempotency.exception.code, "idempotency_conflict")
+
+    def test_create_requires_real_approved_work_and_rechecks_current_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            actor = {"kind": "firebase", "uid": "creator", "project_id": self.settings.project}
+            token = self._image_upload(app, directory, actor)
+            base = {"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                    "upload_token": token, "actor": actor}
+            for key, payload in (("missing-work", base), ("null-work", {**base, "work_id": None}),
+                                 ("fake-work", {**base, "work_id": "a" * 32})):
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    app.enqueue_operation(payload, key)
+                with self.assertRaises(FileNotFoundError):
+                    app.operations.get_by_key(key)
+            pending = app.shared({"action": "submit", "title": uuid.uuid4().hex,
+                                  "chapter": "1", "notes": ""}, actor)["work_id"]
+            with self.assertRaisesRegex(ValueError, "Approved shared chapter"):
+                app.enqueue_operation({**base, "work_id": pending}, "pending-work")
+            for collection in ("production_months", "production_admissions"):
+                self.assertEqual(list(app.admission.root.collection(collection).limit(1).stream()), [])
+
+            approved = self._approved_work(app, actor)
+            app.client.collection("shared_workflow_v1").document(self.settings.dataset).collection(
+                "chapter_work").document(approved).update({"status": "pending"})
+            accepted = {**base, "work_id": approved}
+            with self.assertRaisesRegex(ValueError, "Approved shared chapter"):
+                app.enqueue_operation(accepted, "approval-race")
+            with self.assertRaises(FileNotFoundError):
+                app.operations.get_by_key("approval-race")
+            self.assertEqual(list(app.admission.root.collection("production_months").limit(1).stream()), [])
+
+    def test_monthly_quota_counts_distinct_work_once_and_rejects_sixth_operation(self):
+        from manga_worker.cloud_admission import ProductionLimitExceeded
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            actor = {"kind": "firebase", "uid": "creator", "project_id": self.settings.project}
+            work_ids = []
+            for index in range(1, 6):
+                work_id = self._approved_work(app, actor, title=f"Monthly {index}")
+                work_ids.append(work_id)
+                token = self._image_upload(app, directory, actor)
+                app.enqueue_operation({"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                                       "upload_token": token, "work_id": work_id, "actor": actor}, f"monthly-{index}")
+            sixth = self._approved_work(app, actor, title="Monthly 6")
+            token = self._image_upload(app, directory, actor)
+            payload = {"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                       "upload_token": token, "work_id": sixth, "actor": actor}
+            with self.assertRaises(ProductionLimitExceeded):
+                app.enqueue_operation(payload, "monthly-6")
+            with self.assertRaises(FileNotFoundError):
+                app.operations.get_by_key("monthly-6")
+            # A different project and intent still represent the same chapter.
+            token = self._image_upload(app, directory, actor)
+            app.enqueue_operation({"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                                   "upload_token": token, "work_id": work_ids[0], "actor": actor}, "same-work-new-project")
+            month = app.admission._month(app.admission.clock())
+            chapters = app.admission.root.collection("production_months").document(month).get().to_dict()["chapter_ids"]
+            self.assertEqual(set(chapters), set(work_ids))
+
+    def test_lost_response_retry_keeps_original_admission_after_work_status_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            actor = {"kind": "firebase", "uid": "creator", "project_id": self.settings.project}
+            work_id = self._approved_work(app, actor)
+            token = self._image_upload(app, directory, actor)
+            payload = {"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                       "upload_token": token, "work_id": work_id, "actor": actor}
+            first = app.enqueue_operation(payload, "lost-create-response")
+            work_ref = app.client.collection("shared_workflow_v1").document(self.settings.dataset).collection(
+                "chapter_work").document(work_id)
+            work_ref.update({"status": "pending"})
+            recovered = app.enqueue_operation(payload, "lost-create-response")
+            self.assertEqual(recovered.operation_id, first.operation_id)
+            changed = {**payload, "work_id": "f" * 32}
+            with self.assertRaises(OperationConflict) as conflict:
+                app.enqueue_operation(changed, "lost-create-response")
+            self.assertEqual(conflict.exception.code, "idempotency_conflict")
+
+    def test_concurrent_monthly_threshold_has_one_operation_winner(self):
+        from manga_worker.cloud_admission import ProductionLimitExceeded
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            actor = {"kind": "firebase", "uid": "creator", "project_id": self.settings.project}
+            for index in range(1, 5):
+                work_id = self._approved_work(app, actor, title=f"Concurrent {index}")
+                token = self._image_upload(app, directory, actor)
+                app.enqueue_operation({"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                                       "upload_token": token, "work_id": work_id, "actor": actor},
+                                      f"concurrent-prefill-{index}")
+            candidates = []
+            for index in (5, 6):
+                work_id = self._approved_work(app, actor, title=f"Concurrent {index}")
+                token = self._image_upload(app, directory, actor)
+                candidates.append((index, {"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                                           "upload_token": token, "work_id": work_id, "actor": actor}))
+
+            def submit(item):
+                index, payload = item
+                try:
+                    app.enqueue_operation(payload, f"concurrent-final-{index}")
+                    return "accepted"
+                except ProductionLimitExceeded:
+                    return "rejected"
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                outcomes = list(pool.map(submit, candidates))
+            self.assertCountEqual(outcomes, ["accepted", "rejected"])
+            month = app.admission._month(app.admission.clock())
+            chapters = app.admission.root.collection("production_months").document(month).get().to_dict()["chapter_ids"]
+            self.assertEqual(len(chapters), 5)
+
+    def test_archive_page_count_is_validated_and_over_limit_does_not_reserve(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            actor = {"kind": "firebase", "uid": "creator", "project_id": self.settings.project}
+            work_id = self._approved_work(app, actor)
+            archive = Path(directory) / "chapter.zip"
+            chapter = {"chapter_id": "fixture", "pages": [
+                {"page_id": f"page-{index}", "page_index": index, "texts": [], "characters": []}
+                for index in range(41)]}
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("chapter_analysis.json", json.dumps(chapter))
+            token = uuid.uuid4().hex
+            app.upload(token, "chapter.zip", archive, actor)
+            with self.assertRaisesRegex(ValueError, "40 pages"):
+                app.enqueue_operation({"action": "create", "mode": "chapter", "project": uuid.uuid4().hex,
+                                       "upload_token": token, "work_id": work_id, "actor": actor}, "too-many-pages")
+            for collection in ("production_months", "production_admissions"):
+                self.assertEqual(list(app.admission.root.collection(collection).limit(1).stream()), [])
+            with self.assertRaises(FileNotFoundError):
+                app.operations.get_by_key("too-many-pages")
 
 
 if __name__ == "__main__":

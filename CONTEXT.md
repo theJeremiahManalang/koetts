@@ -23,7 +23,7 @@ worker adapters. Firestore operations coordinate stage/project slots, attempts,
 fences, dispatch intent, and execution reconciliation. Finite Cloud Run jobs restore
 accepted checkpoints into disposable scratch. Local SQLite and CLI behavior remain.
 
-Phase 3 is implemented except for the critical monthly-admission identity driver:
+Phase 3 final admission and bounded metadata-view work is in progress:
 
 - Next uses explicit cloud HTTP transport; local Python execution fails closed in
   cloud/frontend-only mode. Individual uploads are bounded, then operations submit
@@ -34,8 +34,8 @@ Phase 3 is implemented except for the critical monthly-admission identity driver
 - Shared audio streams through same-origin authenticated range requests. Cloud mode
   requires an explicit signing secret; no local signing-key fallback is selected.
 - Hosted request quotas use transactional metadata and a persistent daily ledger.
-  A monthly chapter ledger and atomic enqueue hook exist, but are not wired to
-  production until the user resolves chapter identity policy.
+  The monthly chapter driver now checks approved work and reserves capacity with
+  enqueue; final tests and review remain.
 - Shared reviews read immutable snapshots and check the exact project pointer in
   the same Firestore metadata transaction. They do not acquire unrecoverable API
   writer ownership. Actual project edits retain writer fencing and ownership.
@@ -44,16 +44,17 @@ Phase 3 is implemented except for the critical monthly-admission identity driver
 
 Frontend-only deployment guards remain enabled. This is not a deployed hosted product.
 
-## Critical decision still pending
+## Resolved monthly admission decision
 
-An asynchronous question was sent and no answer has arrived:
+On 30 October 2026 the user replied "1": new hosted projects require approved
+shared chapter work. The application must check the work and its recorded approval
+in the same transaction as monthly reservation and operation creation. The monthly
+allowance counts verified work IDs. Creation does not implicitly link the project.
+Local creation remains unchanged; standalone OCR creates no durable project.
 
-1. Require approved shared chapter work before hosted project creation (recommended).
-2. Allow unlinked projects; each new project consumes one monthly chapter allowance.
-
-Do not infer an answer from elapsed time or automatic goal continuations. This choice
-changes the production identity driver and monthly admission tests. Phase 3 cannot
-close, and phase 4 cannot begin, until the driver is implemented and reviewed.
+The driver and UI gating are being verified. Phase 3 review must confirm this
+remaining requirement before phase 4 implementation begins. The prior critical
+question is resolved; do not ask it again or keep treating it as a blocker.
 
 ## Commits and review
 
@@ -68,7 +69,8 @@ close, and phase 4 cannot begin, until the driver is implemented and reviewed.
 
 Phase 3 Standards review found no hard violations and two maintainability findings;
 both were fixed. Spec review found OCR idempotency and unwired monthly admission.
-OCR is fixed; monthly admission remains the explicit policy blocker. Independent
+OCR is fixed; the user has now resolved monthly identity policy. Driver acceptance
+and review remain. Independent
 rechecks found no new material issue in revision guards or contention recovery.
 Review does not establish live provider/platform behavior.
 
@@ -106,9 +108,56 @@ when needed rather than treating missing logs or old process handles as live wor
 
 ## Next action
 
-Obtain the monthly identity decision, implement the production admission driver
-atomically with enqueue, add its end-to-end tests, and finish phase 3 review.
+Finish phase 3 approved-work driver acceptance, bounded metadata views, and review.
 Then implement phase 4 budget controls, reference-aware cleanup, narrow infrastructure,
 rollout/rollback preparation, and monitoring. Only after offline completion and review
 request concrete authorization for the separately gated live validation phase.
 The full goal remains active and incomplete; do not mark it complete.
+
+## Current verification work after policy resolution
+
+Approved-work backend and UI changes are uncommitted. The first full check exposed a
+hanging full-workspace React test fixture and a TypeScript nullability error. The
+fixture is now a bounded request-context harness, and eligible work state is captured
+before await. The owned obsolete test processes were verified and terminated; this
+was not a product runtime hang. Pinned isolated typecheck and focused tests passed.
+
+A repeated first-enqueue emulator contention failure exposed namespace initialization
+range-lock cycles. Binding initialization now uses a separate root-only transaction
+before domain mutation; read-only calls do not initialize and fail closed on orphaned
+records. Expanded race/orphan regressions require parent emulator acceptance.
+
+A worker is removing readonly cloud snapshot/enqueue overfetch through accepted
+manifest metadata. It owns workflow snapshot/fingerprint helpers, resolution.page_image
+existence injection, and CloudApplication snapshot/source-fingerprint methods. Another
+worker completed only CloudApplication upload/binding initialization. Preserve these
+concurrent edits. No phase 4 implementation, deployment, or paid call has begun.
+
+## Phase 3 policy implementation verification
+
+The approved-work driver is implemented. It validates the bound shared work and
+its explicit admin approval in the same Firestore transaction as chapter allowance
+and enqueue. Distinct work IDs count once per UTC month; no automatic project link
+is created. The UI requires verified approved/published context before uploading,
+and work identity participates in retry keys. Tests cover missing/pending/fake work,
+approval races, five-work capacity, same-work replacements, and idempotent retries.
+
+Namespace initialization now uses a root-only initialization transaction, avoiding
+first-mutation range-lock cycles. It rechecks concurrent valid root publication and
+rejects orphan reads. The initial added UI fixture hung; a bounded context harness
+replaced it. TypeScript work-state narrowing and two new metadata test fixtures were
+corrected; no product auth bypass or live provider call was used.
+
+Read-only cloud snapshots/source fingerprints now use accepted immutable manifest
+checksums rather than hydrate source/audio bytes. Actual asset fetch and worker
+restore still verify exact generation bytes. Export review hydrates only required
+export files. The interrupted worker's changes were inspected and verified by the
+parent after daemon restart.
+
+Final pinned acceptance: /tmp/hosted-phase3-accepted-final-check.log passed 263 Python
+tests (71 optional skips), 86 web tests, repository checks, Ruff, typecheck and build.
+/tmp/hosted-phase3-policy-accepted-firestore.log passed 82 loopback/demo tests.
+The daemon restart removed child handles; no old process was assumed live.
+Rendered approved-work UI QA is being rebuilt in a disposable fixture. Next: commit
+phase 3 policy and bounded-view changes, run independent Standards/Spec review and
+resolve findings before phase 4. No deployment or paid call is authorized yet.
