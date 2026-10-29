@@ -306,3 +306,12 @@ separate instruction. No implementation blocker remains.
   and hosted acceptance remain gated as specified.
 - Next action: run scoped documentation checks, review/fix findings, commit phase 0,
   then begin durable cloud persistence only after phase review is clean.
+
+### Phase 0 review resolution
+
+Standards review found one conflicting-authority finding and duplicate policy lists.
+Spec review found the same stale S5 status plus ambiguous pending-quota wording.
+Resolved by making hosted-service-plan the single policy authority, replacing stale
+open decisions with remaining implementation/measurement inputs, and specifying
+five outstanding pending requests at any time separately from ten new requests/day.
+No runtime behavior changed. Phase 0 implementation commit: 5c41b81.

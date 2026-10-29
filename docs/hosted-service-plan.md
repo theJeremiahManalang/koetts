@@ -14,8 +14,8 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
 
 - Launch to public Google signups. Require trusted admin approval before any
   production. A reader request never starts paid work.
-- Accept at most five pending requests and ten successful new requests per reader
-  per UTC day. Enforce counters transactionally. An idempotent duplicate does not
+- Allow at most five outstanding pending requests per reader at any time, plus
+  ten successful new requests per reader per UTC day. Enforce counters transactionally. An idempotent duplicate does not
   consume another request. A request removed by its owner follows existing S4 rules.
 - Size initial pilot for five new chapter works per UTC month, at most forty source
   pages per chapter, and twenty active readers. Twenty readers is a sizing target,

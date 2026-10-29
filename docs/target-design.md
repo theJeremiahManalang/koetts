@@ -136,49 +136,21 @@ SQLite/WAL is not the distributed production scheduler and must stay on local st
 Existing JSON job files remain untouched and readable for polling. New enqueues use
 SQLite; old queued/running jobs are not imported or automatically restarted.
 
-| Decision or measurement | Must be resolved before |
+| Remaining measurement or implementation input | Required before |
 | --- | --- |
-| Production global stage capacities, dispatcher, timeout/retry policy, and hosted execution reconciliation | S5 cloud integration |
-| Dispatcher choice; Workflows/Eventarc/scheduler use; bucket layout | S5 infrastructure integration |
-| Retention periods, reference tracking, deletion and recovery policy | S5 cleanup implementation |
-| Project/regions, budget, service IAM, secrets, actual deployed state | S5 provisioning/deployment |
+| Concrete bucket namespace, runtime identities, narrow IAM and secrets | S5 provisioning |
+| Dispatch/reconciliation integration and reference tracking | S5 execution/cleanup acceptance |
+| Current deployed state and measured infrastructure/provider costs | S5 rollout |
 | MAGI resources/startup and Gemini/MP3 compatibility and listening quality | S5 live compatibility and sizing acceptance |
-
-The resolved 1/1 capacity defaults apply to the same-host local SQLite scheduler;
-they do not establish production global limits. Cloud adapters and hosted stage
-capacity remain open for S5.
 
 ### Resolved for S5 planning — hosted pilot constraints
 
-The implementation plan is [`hosted-service-plan.md`](hosted-service-plan.md).
-The hosted pilot keeps the existing Firebase project, App Hosting backend, and
-`koetts-default` Firestore database; new regional resources use `us-east4`. It uses
-a clean cloud dataset and imports no local projects, legacy requests, or publication
-records. Public Google signups may create reader requests; only trusted admins may
-authorize production. Enforce at most five pending requests and ten successful new
-requests per reader per UTC day. Size the pilot for five new chapter works/month,
-forty pages/chapter, and twenty active readers; the reader count is a sizing target,
-not a signup restriction. Duplicate idempotent intake does not consume quota again.
+The authoritative hosted pilot policies, limits, execution timings, and phase gates
+are in [`hosted-service-plan.md`](hosted-service-plan.md). They resolve production
+stage capacity, dispatcher, retries/reconciliation, retention, project/region, budget
+posture, and clean-dataset policy. Local S2 limits remain separate from hosted policy.
 
-Target USD 10/month infrastructure spend and seek to stay below USD 20. These are
-not hard billing caps. Alert at reported spend of USD 10/15/20 and pause new
-extraction/generation at USD 15 or earlier when conservative reservations exhaust
-the remaining allowance. Preserve login and published playback. Keep the existing
-developer-controlled USD 80 provider budget separate. Production admission must
-respect pilot and provider controls; uncertain provider calls are never retried
-automatically.
-
-Use scale-to-zero CPU Cloud Run Jobs, one global slot per stage, and one-minute
-private dispatch/reconciliation. Platform retries are zero; the operation service
-owns at most three total attempts, a 30-minute attempt timeout, 15-second heartbeat,
-and 60-second lease. Reconcile worker identity and durable checkpoints before
-releasing ownership. Retain accepted/referenced artifacts; collect only unreferenced
-temporary artifacts after seven days. Authenticate every audio/range request through
-the same-origin application path before streaming private GCS bytes.
-
-CPU extraction must pass representative quality, time, memory, and budget benchmarks
-before hosted launch. Failure blocks full hosted launch and requires an explicit
-compute/budget decision; it does not permit silent GPU escalation. Deployment,
-inference, and paid-provider acceptance remain separately authorized gates. These
-choices define intended behavior; no cloud adapter, budget enforcement, or live
-acceptance is implied by this decision record.
+These choices define intended behavior; cloud adapters, enforcement, and live
+acceptance remain implementation and verification work. CPU benchmark failure blocks
+full hosted launch pending an explicit compute/budget decision. Deployment, inference,
+paid-provider acceptance, human approval, and publication retain their separate gates.
