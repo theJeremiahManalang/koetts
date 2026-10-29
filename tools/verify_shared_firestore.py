@@ -74,6 +74,7 @@ def main():
                     time.sleep(.1)
             env = {**os.environ, "FIRESTORE_EMULATOR_HOST": f"127.0.0.1:{port}", "MANGA_SHARED_BACKEND": "sqlite"}
             subprocess.run([sys.executable, "-m", "unittest", "tests.integration.test_shared_firestore",
+                            "tests.integration.test_cloud_persistence",
                             "tests.unit.engine.test_shared_requests", "tests.unit.worker.test_shared_service", "-v"],
                            cwd=root, env=env, check=True, timeout=180)
             print("Firestore emulator contracts and SQLite parity passed; no live project was used.")

@@ -31,7 +31,7 @@ class FirestoreSharedMetadata:
     def __init__(self, client, dataset: str, artifact_store_id: str):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", dataset):
             raise ValueError("Invalid shared dataset")
-        if not re.fullmatch(r"[a-f0-9]{32}", artifact_store_id):
+        if not re.fullmatch(r"[a-f0-9]{32}|gcs-v1:[a-f0-9]{64}", artifact_store_id):
             raise ValueError("Invalid artifact store identity")
         self.client = client
         self.root = client.collection("shared_workflow_v1").document(dataset)

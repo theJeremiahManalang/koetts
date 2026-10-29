@@ -188,3 +188,32 @@ SHA-256-verified emulator version pinned in the runner; set
 `FIRESTORE_EMULATOR_JAR` to supply that exact jar offline. CI runs this command.
 Ordinary Python discovery skips emulator tests when no emulator is configured;
 those skips are not Firestore acceptance evidence.
+
+## Cloud persistence adapters
+
+The hosted pilot specification is [the hosted service plan](hosted-service-plan.md).
+Cloud persistence adapters are optional worker dependencies:
+
+```bash
+uv sync --locked --package manga-worker --extra cloud --extra api
+```
+
+`CloudSettings` requires `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`,
+`MANGA_CLOUD_DATASET`, `MANGA_ARTIFACT_BUCKET`, and `MANGA_ARTIFACT_NAMESPACE`.
+Select a clean dataset and canonical namespace for the hosted pilot. Do not reuse
+the same-host Firestore dataset: its metadata binds to local artifact identity.
+The cloud factory uses attached ADC and never falls back to SQLite or local bytes.
+`MANGA_SHARED_BACKEND=cloud` selects cloud metadata and artifacts at the worker
+service boundary. This is not an activation command for the hosted product;
+frontend-only and private API verification guards remain enabled.
+
+Project artifacts and shared audio use exact GCS generations and SHA-256 checksums.
+Firestore stores conditional revision ownership and durable shared artifact references
+under `hosted_workflow_v1/{dataset}`; shared request metadata remains under
+`shared_workflow_v1/{dataset}`. Both bind to the same bucket/namespace identity.
+Scratch caches are disposable. These adapters do not yet replace local operation
+scheduling, workspace dispatch, or the hosted transport. No local data is imported.
+
+The Firestore acceptance runner also covers hosted revision/reference transactions.
+GCS behavior is tested with injected provider fakes; this does not establish real
+bucket IAM, GCS semantics, or deployed durability. Those remain live acceptance gates.

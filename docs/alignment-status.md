@@ -782,3 +782,24 @@ HTTP acceptance uses emulator-backed Firestore metadata for the complete local S
 flow; frontend-only refusal is checked separately. Exact logs/results and limitations
 are recorded in `CONTEXT.md`. No live data migration, publication, deployment or
 IAM/rules change was performed; six legacy requests remain outside the new namespace.
+
+## Hosted service — phase 1 storage implementation
+
+Optional worker cloud adapters now provide create-only, content-addressed GCS
+artifacts, exact-generation/checksum reads, Firestore writer ownership and immutable
+conditional revisions, and durable checksum-to-generation references for shared audio.
+Cloud shared metadata binds to stable bucket/namespace identity. An explicit factory
+and backend selector fail closed; local adapters remain defaults. Scratch replacement
+recovers accepted project revisions and reviewed shared publications in tests.
+
+Pinned root acceptance passed (162 Python tests, 24 optional skips; 58 web tests;
+repository checks, Ruff, typecheck and production build). Expanded loopback Firestore
+acceptance passed 34 tests, including ten hosted persistence tests. Focused artifact/
+configuration tests passed 13 tests after namespace/cache hardening. Production HTTP
+and frozen fresh-checkout acceptance passed. These are synthetic/emulator checks,
+not live GCS or deployment acceptance. Phase review remains pending.
+
+The active shell's Node24 caused an initial onboarding EBADENGINE failure; rerun
+with pinned Node22.22.3/npm10 passed. Initial sandbox uv cache restriction was resolved
+by approved test execution. Existing named database is STANDARD/FIRESTORE_NATIVE
+in nam5, verified read-only. No live record, IAM/rules, model, or deployment changed.

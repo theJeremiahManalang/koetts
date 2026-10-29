@@ -52,10 +52,12 @@ If pointer promotion succeeds but local materialization fails, the router report
 `checkpoint_materialization_pending`; the revision remains accepted, and another
 commit requires reloading that revision first.
 
-The in-memory adapters exist for project-revision contract tests only. No
-Firestore/GCS operation adapter, distributed scheduler, or cloud durability is
-implemented. Legacy JSON job files remain readable for existing IDs; new work uses
-SQLite.
+The in-memory adapters exist for project-revision contract tests only. Optional
+worker-owned GCS artifact and Firestore revision adapters now implement the storage
+protocols, with explicit cloud construction and exact-generation shared artifact
+references. They are not yet integrated into hosted execution. No distributed
+operation scheduler or live cloud durability is established. Legacy JSON job files
+remain readable for existing IDs; new local work uses SQLite.
 
 The web worker reports stale project-hash rejection with a machine-readable
 `failure_code`. Server-owned project metadata uses the router commit seam, alongside
@@ -123,3 +125,10 @@ commit together. Candidate/review order uses an explicit sequence, and retryable
 callbacks contain metadata operations only. Artifact bytes, verification cache,
 production workspaces and locks remain local; hosted shared routes stay disabled.
 The legacy `manga_requests` collection is not read, migrated or modified.
+
+`MANGA_SHARED_BACKEND=cloud` explicitly selects Firestore metadata with GCS shared
+artifacts using a clean cloud dataset. The cloud dataset binds to a stable bucket
+and namespace identity; it does not use local identity files. Firestore stores exact
+artifact generations behind the shared checksum contract. Local materializations
+are disposable caches. This storage selection does not enable hosted routes or
+replace local operation scheduling. See the [hosted plan](hosted-service-plan.md).

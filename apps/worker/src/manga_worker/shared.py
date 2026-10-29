@@ -20,7 +20,13 @@ class SharedService:
     def __init__(self, root: Path):
         backend = os.environ.get("MANGA_SHARED_BACKEND", "sqlite")
         metadata = None
-        if backend == "firestore":
+        artifacts = None
+        if backend == "cloud":
+            from .cloud import CloudSettings, cloud_stores
+
+            stores = cloud_stores(CloudSettings.from_environment(), root / "shared-cache")
+            metadata, artifacts = stores.shared_metadata, stores.shared_artifacts
+        elif backend == "firestore":
             from .shared_cutover import FirestoreSettings, bind_firestore
             from .shared_firestore import FirestoreSharedMetadata, artifact_store_identity
 
@@ -35,7 +41,7 @@ class SharedService:
                 raise ValueError("Data root is bound to Firestore; explicit cutover reconciliation required")
         else:
             raise ValueError("Invalid shared metadata backend")
-        self.store = SharedRequests(root / "shared.sqlite3", metadata=metadata)
+        self.store = SharedRequests(root / "shared.sqlite3", metadata=metadata, artifacts=artifacts)
 
     def execute(self, request: dict):
         action = request.get("action")

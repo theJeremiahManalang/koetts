@@ -315,3 +315,27 @@ Resolved by making hosted-service-plan the single policy authority, replacing st
 open decisions with remaining implementation/measurement inputs, and specifying
 five outstanding pending requests at any time separately from ten new requests/day.
 No runtime behavior changed. Phase 0 implementation commit: 5c41b81.
+
+### Hosted phase 1 — ready for review
+
+Phase0 Standards/Spec rechecks both clean at248d219; implemented phase1 from that
+fixed point. Worker cloud.py builds explicit cloud stores; cloud_artifacts.py handles
+frozen create-only uploads, verified exact generations and disposable shared caches;
+cloud_revisions.py owns Firestore revisions, fences and artifact references. Optional
+worker cloud extra pins existing SDK versions without dependency upgrades. Shared
+cloud selector and stable storage identity preserve local defaults and fail closed.
+Docs, environment example and emulator runner describe/exercise the boundary.
+
+Checks: /tmp/hosted-phase1-check.log passed pinned full check:162 Python tests with
+24 skips,58 web tests,Ruff,repo,typecheck/build. /tmp/hosted-phase1-firestore.log
+passed34 tests (10 hosted), demo projects/loopback only. Focused artifact/settings
+tests passed13 after final cache namespace check; Ruff/diff check pass.
+/tmp/hosted-phase1-http.log production HTTP plus frontend-only checks passed.
+/tmp/hosted-phase1-onboarding.log frozen fresh-checkout passed with pinned Node22;
+initial Node24 attempt failed EBADENGINE and was corrected. Workers' first sandbox
+HTTP discovery stalled and was interrupted; authoritative escalated root suite passed.
+
+Authorization unchanged: implementation/commits/reviews approved, deployment, paid
+inference/provider tests and human publication remain gated. Existing local data and
+legacy records preserved. No phase1 live durability claim. Next: commit phase1, run
+independent Standards/Spec review from248d219, fix findings and recheck before phase2.
