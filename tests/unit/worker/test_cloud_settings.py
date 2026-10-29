@@ -28,7 +28,7 @@ class CloudSettingsTests(unittest.TestCase):
 
     def test_cloud_selection_uses_remote_metadata_and_artifacts(self):
         metadata, artifacts = Mock(), Mock()
-        stores = CloudStores(Mock(), metadata, artifacts)
+        stores = CloudStores(Mock(), metadata, artifacts, Mock(), Mock())
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
                 "MANGA_SHARED_BACKEND": "cloud"}, clear=True):
             root = Path(temporary)

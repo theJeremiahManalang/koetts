@@ -55,9 +55,10 @@ commit requires reloading that revision first.
 The in-memory adapters exist for project-revision contract tests only. Optional
 worker-owned GCS artifact and Firestore revision adapters now implement the storage
 protocols, with explicit cloud construction and exact-generation shared artifact
-references. They are not yet integrated into hosted execution. No distributed
-operation scheduler or live cloud durability is established. Legacy JSON job files
-remain readable for existing IDs; new local work uses SQLite.
+references. Live cloud durability is not yet established. A worker-owned Firestore operation adapter and
+finite Cloud Run dispatcher/runtime now provide offline-tested distributed scheduling
+contracts; hosted browser transport and rollout are still pending. Legacy JSON job
+files remain readable for existing IDs; new local work uses SQLite.
 
 The web worker reports stale project-hash rejection with a machine-readable
 `failure_code`. Server-owned project metadata uses the router commit seam, alongside

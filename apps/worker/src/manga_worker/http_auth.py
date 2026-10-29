@@ -29,7 +29,7 @@ class BoundaryConfig:
     def __post_init__(self):
         if (not isinstance(self.project_id, str) or not self.project_id.strip() or self.project_id != self.project_id.strip()
                 or not isinstance(self.audience, str) or not self.audience.strip() or self.audience != self.audience.strip()
-                or not isinstance(self.mode, str) or self.mode not in {"verification", "local"}):
+                or not isinstance(self.mode, str) or self.mode not in {"verification", "local", "cloud"}):
             raise ValueError("Explicit project, audience and valid API mode required")
         if not isinstance(self.permissions, Mapping) or any(
             not isinstance(subject, str) or not subject or not isinstance(actions, frozenset)

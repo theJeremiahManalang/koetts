@@ -217,3 +217,36 @@ scheduling, workspace dispatch, or the hosted transport. No local data is import
 The Firestore acceptance runner also covers hosted revision/reference transactions.
 GCS behavior is tested with injected provider fakes; this does not establish real
 bucket IAM, GCS semantics, or deployed durability. Those remain live acceptance gates.
+
+## Hosted operation adapters
+
+The optional Firestore operation store implements the same durable operation shape
+as local SQLite, while keeping cloud execution identities separate from local PIDs.
+Claims reserve global stage and project slots and persist dispatch intent before
+Cloud Run is called. A lost start response is reconciled using the recorded execution
+or matching execution environment; it never triggers a blind repeat of `jobs.run`.
+Only an intent still transactionally proven unsubmitted can be safely retired without
+an execution identity. Lease expiry alone never proves that a submitted job stopped.
+
+Cloud mode adds `POST /internal/coordinator`, requiring an explicitly allowlisted
+service subject with the `coordinate` action. It does not require or impersonate a
+Firebase user. `S3_API_MODE=verification` and local mode refuse coordination; cloud
+mode still refuses hosted project/operation/asset routes until transport integration.
+Keep App Hosting frontend-only mode enabled. These are construction contracts, not
+instructions to change deployed settings before the rollout gates pass.
+
+The coordinator requires the cloud storage variables above, `MANGA_CLOUD_REGION`
+(default `us-east4`), and explicit `MANGA_MAGI_JOB` / `MANGA_PIPELINE_JOB` names.
+`Dockerfile.jobs` has `pipeline` and CPU `magi` targets and a dedicated build-context
+allowlist. Jobs require explicit `CLOUD_RUN_PROJECT` and `CLOUD_RUN_LOCATION`; Cloud
+Run supplies `CLOUD_RUN_JOB` and `CLOUD_RUN_EXECUTION`. Dispatch overrides provide only
+the persisted operation ID and fence. Task retry zero and 30-minute timeout belong
+to the reviewed deployment configuration; the application owns the attempt ceiling.
+
+The worker restores pinned revisions and uploads into disposable scratch, persists
+provider uncertainty before calls, and acknowledges accepted checkpoints only after
+cloud persistence. After confirmed termination, the coordinator verifies/restores
+the accepted manifest and recovers matching writer ownership. Uncertain provider
+outcomes retain their slots until explicit operator resolution; accepted audio remains
+eligible for reuse. The emulator gate exercises interrupted rendering with synthetic
+audio and fresh scratch, not real model or provider compatibility.

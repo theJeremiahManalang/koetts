@@ -239,6 +239,10 @@ class ProjectPersistence:
         return ProjectWriter(self._artifacts, self._revisions, fence)
 
     def current(self, project_id: str) -> ProjectRevision | None:
+        """Read the accepted revision without materializing or modifying a workspace."""
+        return self._revisions.current(project_id)
+
+    def current(self, project_id: str) -> ProjectRevision | None:
         return self._revisions.current(project_id)
 
     def recover(self, project_id: str, owner_id: str, fence: int, worker_stopped: bool) -> None:

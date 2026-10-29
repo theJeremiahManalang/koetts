@@ -28,6 +28,7 @@ from manga_tts.operations import (
     OperationClaim,
     OperationConflict,
     OperationStage,
+    OperationStore,
     ReconciliationAction,
     SQLiteOperationStore,
     process_identity,
@@ -49,6 +50,8 @@ class WorkflowExecution:
     upload: Path
     operation: Operation | None
     before_provider: Callable[[], None] | None
+    store: OperationStore | None = None
+    data_root: Path = ROOT
 
     @property
     def command(self) -> dict[str, Any]:
@@ -153,7 +156,7 @@ def _render_segments(context: WorkflowExecution) -> dict[str, Any]:
     command = schemas.RenderCommand.model_validate(context.command)
     if context.operation is not None:
         operation = context.operation
-        store = operation_store()
+        store = context.store if context.store is not None else operation_store()
         claim = OperationClaim(operation.operation_id, operation.fence)
         checkpoint = dict(operation.checkpoint or {})
         data = schemas.dump(context.router.project)
@@ -190,7 +193,7 @@ def _export_audio(context: WorkflowExecution) -> None:
 
 
 def _bundle_project(context: WorkflowExecution) -> None:
-    context.router.bundle_project(ROOT / "downloads" / (context.request["project"] + ".zip"))
+    context.router.bundle_project(context.data_root / "downloads" / (context.request["project"] + ".zip"))
 
 
 def _record_source_review(context: WorkflowExecution) -> None:
@@ -241,13 +244,14 @@ def _source_file_hash(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
-def operation_source_fingerprint(request: dict[str, Any]) -> str:
+def operation_source_fingerprint(request: dict[str, Any], *, root: Path | None = None) -> str:
     """Fingerprint staged upload bytes and project visual evidence used by queued work."""
+    root = ROOT if root is None else root
     upload_token = request.get("upload_token")
     expected_hashes = request.get("source_hashes", [])
     actual_hashes = []
     if upload_token is not None:
-        upload = ROOT / "uploads" / identifier(upload_token)
+        upload = root / "uploads" / identifier(upload_token)
         action = request.get("action")
         if action == "create" and request.get("mode") == "images":
             names = list(request.get("images", []))
@@ -270,7 +274,7 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
     elif expected_hashes:
         raise ValueError("Source fingerprints require staged upload files")
 
-    workspace = ROOT / "projects" / identifier(request["project"])
+    workspace = root / "projects" / identifier(request["project"])
     project_path = workspace / "project.json"
     evidence = []
     action = request.get("action")
@@ -327,9 +331,9 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
     return digest({"uploads": actual_hashes, "project_evidence": evidence})
 
 
-def verify_operation_sources(operation: Operation, request: dict[str, Any]) -> None:
+def verify_operation_sources(operation: Operation, request: dict[str, Any], *, root: Path | None = None) -> None:
     try:
-        current_fingerprint = operation_source_fingerprint(request)
+        current_fingerprint = operation_source_fingerprint(request, root=root)
     except (OSError, ValueError):
         current_fingerprint = None
     if current_fingerprint != operation.source_fingerprint:
@@ -606,13 +610,15 @@ def snapshot(router):
             "workflow_status": workflow_status(data, router.root), "exports": exports, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
 
 
-def perform(router, request, progress, *, operation: Operation | None = None, before_provider=None):
+def perform(router, request, progress, *, operation: Operation | None = None, before_provider=None,
+            store: OperationStore | None = None, root: Path | None = None):
     action = request["action"]
     handler = WORKFLOW_ACTIONS.get(action)
     if handler is None:
         raise ValueError("Unknown workflow action")
-    upload = ROOT / "uploads" / identifier(request["job"])
-    context = WorkflowExecution(router, request, progress, upload, operation, before_provider)
+    root = ROOT if root is None else root
+    upload = root / "uploads" / identifier(request["job"])
+    context = WorkflowExecution(router, request, progress, upload, operation, before_provider, store, root)
     if action != "create":
         router.load_project()
         current_revision = digest(schemas.dump(router.project))

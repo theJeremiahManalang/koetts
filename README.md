@@ -43,4 +43,4 @@ uv run manga-vision --help
 uv run manga-worker --help
 ```
 
-[Documentation index](docs/README.md) routes developer, domain, operational, and agent guidance. [Contribution guide](CONTRIBUTING.md) defines the review workflow. Saved projects and local shared publications remain under `results/web` by default; preserve them during cleanup. Shared state coordinates one host only; distributed processing and cloud storage remain future migration scopes.
+[Documentation index](docs/README.md) routes developer, domain, operational, and agent guidance. [Contribution guide](CONTRIBUTING.md) defines the review workflow. Saved projects and local shared publications remain under `results/web` by default; preserve them during cleanup. Local execution coordinates one host. Optional cloud storage and finite-job adapters remain behind the [hosted implementation gates](docs/hosted-service-plan.md); they do not yet enable the hosted product.

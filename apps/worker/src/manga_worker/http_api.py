@@ -69,11 +69,12 @@ async def _operation_request(request: Request):
 
 
 def create_app(
-    config=None, *, service_verifier=None, user_verifier=None, workflow=None
+    config=None, *, service_verifier=None, user_verifier=None, workflow=None, coordinator=None
 ):
     config = config or BoundaryConfig.from_environment()
     boundary = CredentialBoundary(config, service_verifier, user_verifier)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    coordinator_instance = coordinator
 
     @app.middleware("http")
     async def private_response_headers(request, call_next):
@@ -116,6 +117,18 @@ def create_app(
             "principal": boundary.authorize(request, "identity"),
             "mode": config.mode,
         }
+
+    @app.post("/internal/coordinator")
+    def coordinate(request: Request):
+        nonlocal coordinator_instance
+        boundary.authorize(request, "coordinate", user=False)
+        if config.mode != "cloud":
+            raise HTTPException(503, "Hosted coordination unavailable")
+        if coordinator_instance is None:
+            from .cloud_coordinator import coordinator_from_environment
+
+            coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
+        return coordinator_instance.tick()
 
     @app.get("/projects/{project_id}")
     def snapshot(project_id: str, request: Request):

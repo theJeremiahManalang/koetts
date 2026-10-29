@@ -73,10 +73,10 @@ class _FirestoreHostedStore:
     def _binding(self, transaction):
         snapshot = self.root.get(transaction=transaction)
         if not snapshot.exists:
-            projects = list(self.root.collection("projects").limit(1).stream(transaction=transaction))
-            references = list(self.root.collection("artifact_references").limit(1).stream(transaction=transaction))
-            if projects or references:
-                raise ValueError("Hosted dataset has orphaned records without a namespace binding")
+            for collection in ("projects", "artifact_references", "operations", "operation_idempotency_keys",
+                               "operation_stage_slots", "operation_project_slots"):
+                if list(self.root.collection(collection).limit(1).stream(transaction=transaction)):
+                    raise ValueError("Hosted dataset has orphaned records without a namespace binding")
             return False
         state = snapshot.to_dict()
         if (not isinstance(state, dict) or set(state) != {"schema_version", "artifact_store_id"}
@@ -163,6 +163,19 @@ class FirestoreRevisionStore(_FirestoreHostedStore):
             if not revision_snapshot.exists:
                 raise ValueError("Hosted project pointer references a missing revision")
             return _revision_from_document(revision_snapshot.to_dict(), project_id, revision_id), bound
+
+        return self._run(operation)
+
+    def active_owner(self, project_id: str) -> WriteFence | None:
+        """Read ownership for reconciliation after authoritative execution termination."""
+        project = self._project(project_id)
+
+        def operation(transaction):
+            bound = self._binding(transaction)
+            state = self._project_state(project.get(transaction=transaction), project_id)
+            if state["owner_id"] is None:
+                return None, bound
+            return WriteFence(project_id, state["owner_id"], state["active_fence"]), bound
 
         return self._run(operation)
 

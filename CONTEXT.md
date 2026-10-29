@@ -347,3 +347,33 @@ Spec axes both report zero findings. Persistence phase is complete for offline
 implementation; no live cloud durability claim. Phase2 may now begin: abstract the
 operation store, transactional Firestore scheduling/attempts/outbox, finite jobs and
 execution-identity reconciliation. Keep PID reconciliation local-only.
+
+### Hosted phase 2 — implementation ready for review
+
+Phase2 starts at8dd4b42 after clean phase1 reviews. Added common OperationStore
+protocol, injected workflow store/root seams, Firestore operation store, Cloud Run
+v2 job control, dispatcher/reconciler, finite worker runtime, service-only coordinator
+and image targets/context allowlist. CloudStores exposes artifacts/revisions and
+ProjectPersistence.current reads accepted revision without scratch mutation.
+
+Integration fixes: v2 LRO metadata.name and CONDITION states; only completionTime
+permits terminal treatment; uncertain rows remain candidates; pending intent recovery
+uses CAS while submitting intents never blindly re-run; empty execution cannot prove
+stop; failed writer release retains slot. Writer release precedes operation completion
+or retryable failure. Provider base revision is persisted before calls. Restart test
+terminates a synthetic render after accepted first segment, requires explicit operator
+retry for uncertain next call, then restores fresh scratch without regenerating first.
+
+Checks: /tmp/hosted-phase2-final-check.log passed218 Python tests(43 optional skips),
+58 web tests,Ruff,repo,typecheck/build. /tmp/hosted-phase2-final-firestore.log passed50
+loopback/demo tests, covering15 operations+10 persistence+1 real-engine interrupted
+render plus prior shared contracts. Docker image builds remain unverified: Docker
+unavailable in this WSL environment. /tmp/hosted-phase2-http.log running under exec
+session73198; revalidate handle before claiming result. No paid/live cloud work.
+
+Changed boundaries: engine operations/persistence, worker cloud modules/workflow/HTTP,
+focused unit/emulator tests, image files and documentation. Next: commit phase2, run
+Standards/Spec review from8dd4b42, implement findings and recheck before phase3.
+Final task remains full hosted product; browser transport, public quotas, cost controls,
+reference-aware cleanup, deployment preparation and separately authorized live gates
+are not yet complete.

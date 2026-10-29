@@ -807,3 +807,30 @@ in nam5, verified read-only. No live record, IAM/rules, model, or deployment cha
 Phase1 independent Standards and Spec review against248d219 found zero remaining
 findings at92083d9. Offline storage implementation gate passed; hosted execution and
 live deployment gates remain outstanding.
+
+## Hosted service — phase 2 execution implementation
+
+The common OperationStore lifecycle now has a Firestore implementation with durable
+requests, idempotency indexes, global stage/project slots, attempts and dispatch
+intent. Cloud execution identities remain separate from local PIDs. A transaction
+retires provably unsubmitted intents; submitting/started work requires authoritative
+Cloud Run termination. Uncertain paid calls retain capacity until explicit resolution.
+
+Cloud Run v2 control, dispatcher and finite runtime use exact persisted operation
+parameters, recover cloud-backed projects into disposable scratch, and checkpoint
+provider uncertainty before calls. Confirmed-stop reconciliation restores/validates
+the accepted manifest and preserves eligible audio. The private coordinator requires
+a dedicated service permission; verification/local modes refuse it. Hosted browser
+transport remains disabled and local SQLite execution is preserved. Pipeline and CPU
+MAGI image targets have an allowlisted context and writable temporary model cache.
+
+Final pinned root check passed218 Python tests (43 skips),58 web tests,repository
+checks,Ruff,typecheck/build. The dedicated loopback gate passed50 tests, including
+fifteen cloud-operation tests and interrupted render recovery with real engine
+persistence, Firestore emulator metadata and injected GCS/audio providers. Unit job
+control tests cover v2 LRO metadata, terminal conditions, lost replies, pending intent
+recovery and uncertain execution revisits. HTTP acceptance remains in progress at
+this checkpoint. Container builds are unverified because Docker is unavailable.
+No live deployment, provider call, inference, data migration or IAM/rules change ran.
+Phase2 independent review is next; public transport, quotas, operational infrastructure
+and live acceptance remain later gates.

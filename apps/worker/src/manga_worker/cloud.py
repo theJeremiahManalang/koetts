@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from manga_tts.persistence import ProjectPersistence
+from manga_tts.persistence import ArtifactStore, ProjectPersistence, RevisionStore
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,8 @@ class CloudStores:
     persistence: ProjectPersistence
     shared_metadata: object
     shared_artifacts: object
+    artifacts: ArtifactStore
+    revisions: RevisionStore
 
 
 def cloud_stores(settings: CloudSettings, cache_root: Path, *, firestore_client=None, storage_client=None):
@@ -65,4 +67,6 @@ def cloud_stores(settings: CloudSettings, cache_root: Path, *, firestore_client=
         persistence=ProjectPersistence(artifacts, revisions),
         shared_metadata=FirestoreSharedMetadata(firestore_client, settings.dataset, identity),
         shared_artifacts=GCSSharedArtifacts(artifacts, references, cache_root),
+        artifacts=artifacts,
+        revisions=revisions,
     )
