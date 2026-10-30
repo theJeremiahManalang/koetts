@@ -927,3 +927,40 @@ synthetic identities and backend fixtures; this establishes no live cloud claim.
 Phase 4 budget, operational visibility, cleanup and rollout preparation are in
 progress. Live deployment, CPU inference, provider cost and rollback acceptance
 remain unverified and separately authorized under phase 5.
+
+
+### Hosted phase 4 offline acceptance — 2026-10-30
+
+Offline implementation and review are complete through `8703d04`. Budget controls
+reserve admission and provider calls transactionally, latch production pause,
+validate authenticated billing notifications, and provide audited settlement and
+reconciliation. Admin controls expose pause and quotas. Infrastructure defines
+private services, bounded CPU jobs, narrow identities, Secret Manager access,
+paused schedules, named-database browser denial rules, and budget alerts. No cloud
+resources were provisioned or changed.
+
+Reference-aware collection fences writers and promotions, preserves accepted
+revision history and published audio through immutable review references, and
+recovers uncertain exact-generation deletions without expiring ownership. The
+rollback acceptance executes actual prior source `fef5b8a` against candidate state,
+checks unchanged complete Firestore trees and exact published bytes during reads,
+and recovers the interrupted GC chain with candidate code. Its service map denies
+enqueue and coordination; it does not prove all shared mutations are forbidden.
+
+Independent Standards review found three maintainability issues, fixed in
+`364c4a6`. Spec review required offline rollback evidence, supplied in `8703d04`;
+that fixture also exposed and fixed the real publication-to-review GC relation.
+Both final follow-up reviews report no remaining findings.
+
+Evidence: 104 loopback Firestore tests passed, including rollback; the keyless
+rollback case and ten cold-start stress cases passed separately. Repository, Ruff,
+Python, 90 web tests and typecheck passed. Production webpack build and HTTP tests
+passed. Default Turbopack build failed on environment process/port restrictions;
+App Hosting's actual default build remains unverified. Terraform 1.17.1 fmt and
+schema validation passed with locked Google/google-beta 7.46.2 providers; no live
+plan or apply ran. Admin controls passed synthetic desktop/mobile browser QA.
+
+Phase 5 remains gated by separate authorization under the hosted plan. Actual
+IAM, deployment, session revocation, billing delivery, CPU inference, provider
+compatibility/cost, browser playback and live rollback remain unverified. Human
+cast/script decisions, audio review and publication retain their explicit gates.

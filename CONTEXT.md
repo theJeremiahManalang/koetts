@@ -2,370 +2,93 @@
 
 ## Objective and authorization
 
-Implement the approved full GCP/Firebase hosted-product plan on `feat/hosted-service`.
-The branch starts from main commit `0bdacc5cd0092cf33d53afb4d12f6b64b5ba16bb`.
+Implement the full approved plan in docs/hosted-service-plan.md on
+feat/hosted-service, based on main 0bdacc5cd0092cf33d53afb4d12f6b64b5ba16bb.
 The user authorized implementation, substantial commits using caveman-commit,
-independent Standards/Spec code review per phase, and fixing findings before
-advancing. Ask the user when critical decisions are needed.
+independent Standards/Spec review per phase, fixes before advancing, and questions
+for critical decisions. This remains the active, incomplete goal.
 
-Deployment, paid generation/inference tests, human production approvals, and real
-publication remain separately gated. None occurred during this implementation.
-Keep saved local results, credentials, model caches, and legacy requests intact.
+Deployment, paid inference/provider tests, human cast/script/audio approvals and
+publication require separate authorization. None occurred. Preserve local results,
+samples, model caches, credentials and unrelated changes. No push was requested.
 
-The authoritative specification and pilot limits are in
-[the hosted plan](docs/hosted-service-plan.md). Runtime source establishes behavior;
-[alignment status](docs/alignment-status.md) records phase evidence.
+## Decisions
 
-## Current implementation
+Use existing project koetts-9bf7f, backend koetts, region us-east4, named Firestore
+koetts-default, and a clean hosted dataset. Do not migrate local data implicitly.
+Public Google signup; trusted admins approve production. Hosted creation requires
+approved shared work, five distinct work IDs/UTC month and 40 pages/work.
+Reader quotas are five pending and ten new/day UTC; duplicates are free.
+Infrastructure target USD10/month, desired ceiling USD20 (not guaranteed), pause
+at reported USD15 or earlier conservative reservations. Login/playback continue.
+Provider allowance is separate, at most USD80, never assumed available or renewed.
+CPU jobs first, global slot/stage, three application attempts, 30 minutes,
+platform retries zero. Uncertain paid outcomes hold capacity. CPU benchmark failure
+blocks launch; no automatic GPU escalation. All audio/range access authenticates.
 
-Phases 0–2 passed their scoped reviews. Cloud artifacts and revisions are optional
-worker adapters. Firestore operations coordinate stage/project slots, attempts,
-fences, dispatch intent, and execution reconciliation. Finite Cloud Run jobs restore
-accepted checkpoints into disposable scratch. Local SQLite and CLI behavior remain.
+## Current state
 
-Phase 3 final admission and bounded metadata-view work is in progress:
+Phases 0–3 passed scoped reviews and fixes. Phase 4 offline implementation and
+acceptance passed final review through 8703d04. Runtime source and manifests are
+authoritative; docs/alignment-status.md records scope evidence.
 
-- Next uses explicit cloud HTTP transport; local Python execution fails closed in
-  cloud/frontend-only mode. Individual uploads are bounded, then operations submit
-  compact JSON. Browser-supplied artifact identities never establish trusted refs.
-- The private API independently verifies service and Firebase identity, derives
-  actors, separates reader/admin actions, rejects stale project hashes, and preserves
-  idempotent intent recovery after accepted state changes.
-- Shared audio streams through same-origin authenticated range requests. Cloud mode
-  requires an explicit signing secret; no local signing-key fallback is selected.
-- Hosted request quotas use transactional metadata and a persistent daily ledger.
-  The monthly chapter driver now checks approved work and reserves capacity with
-  enqueue; final tests and review remain.
-- Shared reviews read immutable snapshots and check the exact project pointer in
-  the same Firestore metadata transaction. They do not acquire unrecoverable API
-  writer ownership. Actual project edits retain writer fencing and ownership.
-- Projectless OCR derives stable identity from its intent token. Exhausted duplicate
-  enqueue transactions can recover only an already-committed matching intent.
+Phase 4 commits: 34dc01c durable cost controls, 9cb6b7f billing notifications,
+b0578df private infrastructure, 12d8b01 settlement/GC and cold namespace fix,
+8cbd95f admin controls, 364c4a6 shared policy helpers, 8703d04 rollback acceptance
+and publication GC roots. Full review baseline fef5b8a. Standards found three
+maintainability issues, all fixed in 364c4a6. Spec required offline rollback proof,
+fixed in 8703d04. Both independent final follow-ups report no remaining findings.
+The review agents first failed from usage limits; retries completed successfully.
 
-Frontend-only deployment guards remain enabled. This is not a deployed hosted product.
+Important contracts: cloud_budget composes read-before-write reservation closures,
+failclosed configured caps, permanent settlement markers and explicit closeout.
+GC maintenance is non-expiring; promotion epochs prevent upload races. Roots cover
+accepted revision history, operation references, shared catalog and publication
+review checksums. Recovery requires confirmed terminal prior execution and replays
+uncertain deletion chains. Prior software cannot recover this protocol safely.
 
-## Resolved monthly admission decision
-
-On 30 October 2026 the user replied "1": new hosted projects require approved
-shared chapter work. The application must check the work and its recorded approval
-in the same transaction as monthly reservation and operation creation. The monthly
-allowance counts verified work IDs. Creation does not implicitly link the project.
-Local creation remains unchanged; standalone OCR creates no durable project.
-
-The driver and UI gating are being verified. Phase 3 review must confirm this
-remaining requirement before phase 4 implementation begins. The prior critical
-question is resolved; do not ask it again or keep treating it as a blocker.
-
-## Commits and review
-
-- `92083d9`: cloud persistence; phase 1 Standards/Spec review was clean.
-- `6cc4ebc`: distributed jobs; duplicate helper fixed in `06d4808`, then clean review.
-- `1db72bf`: hosted transport/intake checkpoint, reviewed against `06d4808`.
-- `fa1cfc3`: fixed unstable projectless OCR retry identity.
-- `912b532`: unified shared metadata dispatch and removed unused workspace helper.
-- `fd33acc`: replaced short API review writer claims with transactional revision guards.
-- `7133eab`: recovered matching committed intents after SDK transaction contention.
-- `064f9f4`: corrected the hosted workspace footer label.
-
-Phase 3 Standards review found no hard violations and two maintainability findings;
-both were fixed. Spec review found OCR idempotency and unwired monthly admission.
-OCR is fixed; the user has now resolved monthly identity policy. Driver acceptance
-and review remain. Independent
-rechecks found no new material issue in revision guards or contention recovery.
-Review does not establish live provider/platform behavior.
+The rollback test archives actual fef5b8a source and checks imported module paths.
+Old HTTP reads candidate snapshot/catalog/exact published bytes without changing
+complete hosted/shared Firestore trees or GCS generations. Enqueue/coordination
+are denied; shared permission is not universally read-only. Candidate then recovers
+interrupted GC. Provider keys are cleared. Real rollback must stop collectors and
+workers and resolve held barriers with compatible software before serving old API.
 
 ## Verification
 
-Use Node 22.22.3/npm 10.9.8 and uv 0.11.16/Python 3.11.
+Use Node22.22.3 from /home/ssuish/.nvm/versions/node/v22.22.3/bin, npm10.9.8,
+uv0.11.16/Python3.11.15. Default Node24 broke an existing Undici fixture; pinned
+Node22 passed. Cache/network/loopback restrictions may require escalation.
 
-- `npm run check` passed: 251 Python tests ran with 62 optional skips; 80 web tests
-  passed; repository checks, Ruff, typecheck, and production build passed. Log:
-  `/tmp/hosted-phase3-reviewed-check.log`.
-- `npm run test:firestore` passed 73 loopback/demo tests, including the normal-suite
-  emulator skips, guarded publication races, atomic admission, and interrupted
-  rendering. Log: `/tmp/hosted-phase3-guard-firestore.log`.
-- `npm run test:http` passed local production studio and frontend-only boundaries
-  after shared dispatch refactoring. Log: `/tmp/hosted-phase3-reviewed-http.log`.
-- The direct pinned-Node hosted OCR retry regression passed after review fixes.
-- One emulator run exhausted SDK retries under duplicate first-enqueue contention.
-  The matching-intent recovery fix has deterministic coverage; the subsequent full
-  emulator run passed. A separate stale-revision fixture was corrected to supply a
-  valid expected hash while retaining independent stale-rejection tests.
+- /tmp/hosted-phase4-reviewed-firestore.log: 104 tests passed, loopback/demo only.
+- /tmp/hosted-phase4-rollback-keyless.log: focused keyless rollback passed.
+- /tmp/hosted-phase4-contention-stress.log: ten cold-start stress cases passed.
+- Repository/Ruff/Python/90 web tests/typecheck passed after fixes.
+- /tmp/hosted-phase4-webpack-build.log: production webpack build passed.
+- /tmp/hosted-phase4-operations-accepted-http.log: production-webpack HTTP passed
+  studio and frontend-only paths. Command: npm run test:http -- --webpack.
+- Default npm run check reached build then Turbopack failed creating process/port
+  under environment restrictions. Do not claim complete default-check success or
+  verified App Hosting adapter/default bundler behavior.
+- Terraform1.17.1 fmt/validate passed with locked Google/google-beta7.46.2.
+  Binary /tmp/hosted-infra-terraform-1.17.1/terraform. No cloud plan/apply.
+- Admin UI synthetic desktop/mobile QA passed. Retained evidence:
+  /tmp/manga-phase4-quota-qa.Tf6oEa/artifacts/browser-qa.json and screenshots.
+  Fixture server stopped. This establishes no real Google session behavior.
 
-Browser plugin was unavailable. Cached Playwright/Chromium tested a disposable
-synthetic-identity/private-transport app with Next webpack dev fallback: two separate
-68-byte uploads, one 301-byte operation submission, and a controlled failure that
-retained selections. No app console/page errors, external requests, or mobile
-horizontal overflow were observed. Evidence: `/tmp/hosted-phase3-browser-evidence.json`,
-private API JSONL, server log, and desktop/selection/failure/mobile screenshots with
-the same prefix. The owned server and disposable source copy were removed.
-This does not verify real Google sign-in or the App Hosting production adapter.
+Cold binding diagnosis isolated Firestore read-lock upgrades: repeated cold races
+failed while prebinding passed. Atomic conditional create plus bounded idempotent
+retry fixed them. Temporary probe /tmp/hosted-contention-probe is outside repository
+and inactive unless explicitly injected. No production provider retries added.
 
-Container builds remain unverified because Docker is unavailable. No live GCS
-semantics, deployed job settings, paid-provider compatibility, or listening quality
-are claimed. Temporary evidence can disappear between environments; rerun checks
-when needed rather than treating missing logs or old process handles as live work.
+## Remaining work / next action
 
-## Next action
-
-Finish phase 3 approved-work driver acceptance, bounded metadata views, and review.
-Then implement phase 4 budget controls, reference-aware cleanup, narrow infrastructure,
-rollout/rollback preparation, and monitoring. Only after offline completion and review
-request concrete authorization for the separately gated live validation phase.
-The full goal remains active and incomplete; do not mark it complete.
-
-## Current verification work after policy resolution
-
-Approved-work backend and UI changes are uncommitted. The first full check exposed a
-hanging full-workspace React test fixture and a TypeScript nullability error. The
-fixture is now a bounded request-context harness, and eligible work state is captured
-before await. The owned obsolete test processes were verified and terminated; this
-was not a product runtime hang. Pinned isolated typecheck and focused tests passed.
-
-A repeated first-enqueue emulator contention failure exposed namespace initialization
-range-lock cycles. Binding initialization now uses a separate root-only transaction
-before domain mutation; read-only calls do not initialize and fail closed on orphaned
-records. Expanded race/orphan regressions require parent emulator acceptance.
-
-A worker is removing readonly cloud snapshot/enqueue overfetch through accepted
-manifest metadata. It owns workflow snapshot/fingerprint helpers, resolution.page_image
-existence injection, and CloudApplication snapshot/source-fingerprint methods. Another
-worker completed only CloudApplication upload/binding initialization. Preserve these
-concurrent edits. No phase 4 implementation, deployment, or paid call has begun.
-
-## Phase 3 policy implementation verification
-
-The approved-work driver is implemented. It validates the bound shared work and
-its explicit admin approval in the same Firestore transaction as chapter allowance
-and enqueue. Distinct work IDs count once per UTC month; no automatic project link
-is created. The UI requires verified approved/published context before uploading,
-and work identity participates in retry keys. Tests cover missing/pending/fake work,
-approval races, five-work capacity, same-work replacements, and idempotent retries.
-
-Namespace initialization now uses a root-only initialization transaction, avoiding
-first-mutation range-lock cycles. It rechecks concurrent valid root publication and
-rejects orphan reads. The initial added UI fixture hung; a bounded context harness
-replaced it. TypeScript work-state narrowing and two new metadata test fixtures were
-corrected; no product auth bypass or live provider call was used.
-
-Read-only cloud snapshots/source fingerprints now use accepted immutable manifest
-checksums rather than hydrate source/audio bytes. Actual asset fetch and worker
-restore still verify exact generation bytes. Export review hydrates only required
-export files. The interrupted worker's changes were inspected and verified by the
-parent after daemon restart.
-
-Final pinned acceptance: /tmp/hosted-phase3-accepted-final-check.log passed 263 Python
-tests (71 optional skips), 86 web tests, repository checks, Ruff, typecheck and build.
-/tmp/hosted-phase3-policy-accepted-firestore.log passed 82 loopback/demo tests.
-The daemon restart removed child handles; no old process was assumed live.
-Rendered approved-work UI QA is being rebuilt in a disposable fixture. Next: commit
-phase 3 policy and bounded-view changes, run independent Standards/Spec review and
-resolve findings before phase 4. No deployment or paid call is authorized yet.
-
-## Phase 3 closed; phase 4 in progress (2026-10-30)
-
-The earlier pending phase 3 statements above are superseded by this checkpoint.
-Approved-work admission and metadata-only views were committed as `79f3121`.
-Independent Standards review found one optional duplication smell; Spec review
-reported no findings. Artifact lookups were consolidated in `fef5b8a`, with a
-read-only follow-up confirming preserved local and metadata behavior. All 33
-workflow tests, Ruff and diff checks passed. The final HTTP verification passed
-local and frontend-only checks in `/tmp/hosted-phase3-policy-final-http.log`; its
-initial sandbox attempt could not write the pinned uv cache and was rerun with
-required environment access.
-
-Rendered UI QA passed missing, pending and approved work contexts; verified two
-bounded uploads followed by one enqueue containing the work ID; retained images
-on a controlled failure; and passed desktop/mobile overflow and browser error
-checks. Evidence: `/tmp/hosted-approved-work-browser-evidence.json`. This used
-synthetic auth/backend fixtures, not live Google or provider calls.
-
-Phase 4 starts at `fef5b8a`. Current uncommitted changes add a fail-closed durable
-USD-micro budget ledger and integrate it into hosted enqueue, transactional
-claims, extraction startup and every paid-call boundary. Provider allowance and
-measured stage caps require explicit developer configuration; no automatic USD80
-renewal occurs. Infrastructure reports use interval highwater marks and latch a
-pause. Conservative reservations survive retries and completion; explicit audited
-reconciliation cannot erase outstanding reservations or call debits. Production
-status/pause HTTP endpoints require both explicit service permissions and Firebase
-admin identity. Published playback and identity remain independent of this gate.
-
-The offline rollout record tool captures the candidate SHA/dirty state and explicit
-prior software rollback targets; it does not discover or invent cloud state.
-`docs/hosted-rollout.md` describes preparation and durable-data-preserving rollback.
-
-Verification: first new ledger emulator run failed three test-fixture cases using
-inactive transactions or reading a reservation before its deferred writer committed.
-Fixtures were corrected. Worker rerun passed all 88 emulator tests. Parent rerun is
-session 55183, log `/tmp/hosted-phase4-budget-firestore-fixed.log`. Normal acceptance
-is session 84434, log `/tmp/hosted-phase4-budget-check.log`. New runtime pause tests
-passed (15 runtime tests total); three HTTP production-control tests passed with
-normal environment access. The sandboxed HTTP test process stopped making progress;
-its exact PID 20389 was identified and terminated after the equivalent tests passed.
-
-Remaining phase 4 work: authenticated budget notification ingestion and operator
-configuration tooling, quota visibility in the product, reference-aware seven-day
-cleanup with promotion-race protection, narrow IAM/declarative infrastructure and
-secret configuration, rollback evidence, then full independent Standards/Spec
-review and all fixes. Phase 5 remains separately gated: no deployment, paid test,
-real production approvals or publication has been authorized or performed.
-The full goal remains active and incomplete.
-
-## Phase 4 budget slice acceptance
-
-Parent verified the corrected ledger suite: 90 emulator/demo tests passed in
-`/tmp/hosted-phase4-budget-final-firestore.log`, including transactional enqueue,
-paused claims, idempotent retries, request/playback availability, and rejection of
-missing-control reinitialization over durable reservations. Before the final
-orphan-ledger regression, normal `npm run check` passed 284 Python tests with
-77 optional skips, all 86 web tests, repository checks, Ruff, typecheck and build
-(`/tmp/hosted-phase4-budget-check.log`). Ruff and diff checks pass after the fix.
-Required HTTP acceptance is running as session 23432, log
-`/tmp/hosted-phase4-budget-http.log`; collect its terminal result before claiming it.
-The cost-controls documentation explicitly records unimplemented settlement and
-notification/operational work. This slice does not close phase 4.
-
-## Phase 4 slice review and billing ingestion follow-up
-
-Budget controls committed as `34dc01c`; rollout records as `b6ba4f4`.
-Independent review of `fef5b8a...34dc01c`: Standards found zero documented
-violations and one optional duplicated pause predicate; Spec found zero reportable
-findings and explicitly left the remaining phase 4 requirements open. The shared
-pause guard resolves the Standards finding. Final budget HTTP checks passed studio
-and frontend-only paths (`/tmp/hosted-phase4-budget-http.log`).
-
-Authenticated billing-report ingestion is implemented offline in `cloud_billing.py`
-and `/internal/billing-report`. It requires a dedicated service permission and
-validates the exact Pub/Sub subscription, billing account, budget/schema identity,
-USD20 budget, decimal costs, UTC-normalized interval and message idempotency. It
-never uses Firebase impersonation. Eleven focused validation/control tests pass.
-Official Cloud Billing notification documentation was consulted directly; live
-budget/topic/subscription creation and alert delivery remain unverified.
-
-Normal acceptance after notification changes is session 83587, log
-`/tmp/hosted-phase4-billing-check.log`. No live cloud mutation or paid call occurred.
-Remaining scope still includes settlement/operator tooling, product quota visibility,
-reference-aware cleanup with promotion-race safety, narrow IAM/infrastructure/secrets,
-rollback acceptance, and full phase 4 review before proceeding to gated phase 5.
-
-## Latest retained evidence
-
-Notification acceptance passed: `/tmp/hosted-phase4-billing-check.log` reports
-291 Python tests with 79 optional skips, 86 web tests, repository/Ruff checks,
-typecheck and production build. Billing-specific validation/control tests also
-passed independently (11). HTTP acceptance for the new notification endpoint is
-session 52303, `/tmp/hosted-phase4-billing-http.log`; its result is pending.
-
-The earlier approved-work browser worker reported successful rendered QA, but the
-reported `/tmp/hosted-approved-work-browser-evidence.json` is not present in this
-runtime. Preserve that distinction: the worker report is recorded, its temporary
-artifact is unavailable. Recreate retained browser evidence during the remaining
-product-visibility/rollout verification rather than treating the missing path as
-current proof. No UI source changed in this turn.
-
-Billing ingestion committed as `9cb6b7f`. Its required HTTP acceptance finished
-successfully (session 52303 exited 0): studio and frontend-only checks passed in
-`/tmp/hosted-phase4-billing-http.log`. Worktree is clean after committing this
-checkpoint. Next action is phase 4 settlement/operator tooling and safe artifact
-collection; keep phase 4 open and run its full two-axis review after all remaining
-implementation is concrete. No new user decision is currently blocking offline work.
-
-## Phase 4 operational implementation and verification (2026-10-30)
-
-Current implementation adds explicit audited budget settlement and developer CLI,
-monthly closeout without automatic provider renewal, and no-op acknowledgement of
-late reports for reconciled billing periods. Settlement verifies every submitted
-execution through Cloud Run, rechecks operation/attempt identity inside Firestore,
-and permanently closes the key before releasing unused provider reservations.
-Infrastructure reservations remain conservative until explicit billed reconciliation.
-The operator CLI validates locally, defaults to a JSON plan, requires --execute for
-ADC access, closes clients on failure and redacts cloud errors.
-
-Reference-aware GC now uses a non-expiring maintenance barrier and promotion epoch.
-It preserves all accepted revision history, shared catalog references, operation
-references and fresh staging. Only old unreferenced objects are deleted by exact
-generation/precondition. Interrupted deletes remain recorded; recovery requires
-confirmed collector termination and replays the complete deletion chain. Upload,
-enqueue and shared-catalog promotion reject stale epochs. Reads/playback stay open.
-The detailed protocol and rollback boundary are in docs/hosted-artifact-collection.md.
-
-Terraform now declares private namespace-scoped GCS, dedicated API/jobs/GC/operator
-identities, per-database Firestore IAM, narrow job invocation, secrets, paused
-Scheduler dispatch/GC and authenticated billing push. It does not manage the
-existing database or App Hosting backend. A separate named-database Firebase rules
-config targets only koetts-default. Official Terraform 1.17.1 was checksum-verified
-in /tmp after default sandbox DNS failed; escalated backend-disabled init and
-schema validation passed, with google/google-beta locked at 7.46.2. Explicit Pub/Sub
-service-agent creation uses the documented beta provider instead of assuming an
-email proves existence. No plan/apply or cloud writes occurred.
-
-The hosted admin UI now exposes chapter/request limits, conservative budget
-estimates, cleanup state and explicit reasoned pause/resume. Server and private API
-both require admin/service permission. Reader limit copy remains cloud-only.
-Browser QA used actual copied components/styles with synthetic identity/backend:
-/tmp/manga-phase4-quota-qa.Tf6oEa/artifacts/browser-qa.json and three screenshots.
-Desktop 1440x1000/mobile 390x844, refresh/pause, error and overflow checks passed.
-Owned fixture server stopped; port 4317 closed. This establishes no live Google auth.
-
-Verification and failures: all 103 loopback/demo tests passed in
-/tmp/hosted-phase4-operations-final-firestore.log. Earlier GC fixture failures were
-fixed (fake create-precondition behavior, invalid token/nonexistent file, incorrect
-fake-bucket key assertions). A recurring cold binding failure was isolated with
-`npm run test:firestore -- --suite contention --repeat 2`: four-way cold starts
-failed, while prebinding made them pass. Conditional create with bounded idempotent
-retry removed root read-lock upgrades and transient create aborts. The unchanged
-concurrency regressions then passed 10 stress cases in
-/tmp/hosted-phase4-contention-stress.log. Temporary probe is outside the repo.
-
-Normal npm run check passed repository/Ruff, 323 Python tests (92 optional skips),
-90 web tests and typecheck, then default Turbopack build failed creating a process/
-port under this environment. Supported production webpack build passed. Explicit
-production-webpack HTTP verification passed studio and frontend-only paths in
-/tmp/hosted-phase4-operations-accepted-http.log. Its initial new runner option also
-passed --webpack to next start; corrected so the flag applies only to production
-build or dev. Default bundler behavior in App Hosting remains a phase 5 live gate,
-not a claimed local pass. Ten infrastructure tests and Terraform fmt/validate pass.
-
-Next: commit substantial slices; run full phase 4 two-axis review against fef5b8a,
-fix every finding, then audit remaining phase 4/5 requirements. No deployment,
-paid inference/provider test, real human approval or publication is authorized yet.
-
-## Full phase 4 review
-
-Candidate commits: b0578df infrastructure, 12d8b01 operational settlement/GC,
-8cbd95f hosted admin controls. Independent review against fef5b8a found no
-Standards hard violations, three optional maintainability findings, and one Spec
-P2 acceptance gap. Standards fixes centralize GCS identity hashing, use one
-BillingPeriod value for CLI/report/closeout validation, and expose maintenance
-status through its owner. Twenty focused tests plus Ruff/diff checks pass.
-
-Spec requires failure-injected offline rollback evidence beyond record syntax and
-runbook prose. A bounded worker owns tests/integration/test_cloud_rollback.py and
-rollback runbook additions: actual prior source fef5b8a reads candidate durable
-state after interrupted-GC recovery, under read-only service permissions with
-production disabled. Parent will verify emulator acceptance and review the result
-before closing phase 4. No live validation has been authorized or performed.
-
-## Phase 4 review fixes verified
-
-Standards follow-up accepted all three fixes in 364c4a6 with no remaining issue.
-The Spec rollback test now archives and executes the real prior source fef5b8a
-against candidate-written emulator state and frozen exact-generation GCS bytes.
-It verifies identity/snapshots/catalog/audio, rejects enqueue/coordination through
-restricted service permissions, compares complete hosted/shared document trees
-(including budget/GC subcollections under missing ancestors), then recovers the
-interrupted deletion chain with the current candidate. Provider keys are cleared.
-The keyless focused acceptance passed in /tmp/hosted-phase4-rollback-keyless.log.
-
-This real publication fixture exposed a GC contract bug missed by synthetic root
-fixtures: publication rows link immutable audio reviews rather than containing
-checksums. The collector now resolves that domain relation and validates the
-review's work/checksums through the preserved catalog. No fake publication fields
-were added to hide the mismatch. Full emulator acceptance passed 104 tests in
-/tmp/hosted-phase4-reviewed-firestore.log. Normal repository/lint/Python/web/typecheck
-commands passed after helper fixes; explicit production-webpack HTTP/build evidence
-remains valid, and default Turbopack process-binding limitation stays separate.
-
-Next: commit rollback acceptance/GC fix, obtain both review follow-ups, then close
-phase 4 only if its offline requirements are evidenced. Phase 5 still requires
-separate deployment and tightly bounded live CPU/provider-test authorization.
+Commit phase 4 evidence and documentation routing after repository checks. Obtain
+separate phase 5 authorization required by docs/hosted-service-plan.md:122 before
+cloud deployment or paid tests. Read-only preflight can prepare concrete targets.
+Do not mark goal complete: no images deployed, real rollback targets captured,
+secret versions verified, or live IAM/storage/restart/session/playback/rollback/
+billing/CPU-quality/provider-cost acceptance proven. No automatic publication.
+Record actual revisions, commands, costs and acceptance evidence during authorized
+phase 5. Keep provider balance explicit and production/schedulers paused until
+acceptance. Ask for consequential new decisions; implementation approval persists.

@@ -2,9 +2,9 @@
 
 This runbook prepares evidence for a later hosted rollout. It does not authorize
 cloud changes, assert that resources exist, or claim that deployment or acceptance
-has succeeded. Phase 4 budget reservations, alerts, production pause controls,
-quota visibility, and reference-aware seven-day cleanup remain pending until
-their implementation and acceptance evidence are reviewed.
+has succeeded. Phase 4 budget reservations, alert configuration, production pause controls,
+quota visibility, and reference-aware seven-day cleanup passed offline review and
+acceptance. Deployed behavior and actual billing delivery remain unverified.
 
 ## Offline preparation
 
