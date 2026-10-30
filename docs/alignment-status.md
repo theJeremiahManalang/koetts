@@ -914,3 +914,16 @@ without downloading chapter images or takes. Export review reads only its requir
 export files; byte delivery and worker restore retain generation/checksum validation.
 A daemon restart interrupted a worker; the parent inspected and tested the saved
 changes. Final policy review and rendered UI QA remain before closing phase 3.
+
+### Hosted phase 3 gate and phase 4 preparation — 2026-10-30
+
+Approved-work admission and bounded metadata views are committed in `79f3121`.
+The final independent Spec review reported no findings. The Standards review's
+optional duplicated lookup finding was fixed in `fef5b8a`; follow-up review and
+33 workflow tests confirmed local/metadata parity. Final HTTP acceptance passed
+local and frontend-only paths. Rendered approved-work creation QA passed with
+synthetic identities and backend fixtures; this establishes no live cloud claim.
+
+Phase 4 budget, operational visibility, cleanup and rollout preparation are in
+progress. Live deployment, CPU inference, provider cost and rollback acceptance
+remain unverified and separately authorized under phase 5.

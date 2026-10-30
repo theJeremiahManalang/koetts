@@ -161,3 +161,52 @@ The daemon restart removed child handles; no old process was assumed live.
 Rendered approved-work UI QA is being rebuilt in a disposable fixture. Next: commit
 phase 3 policy and bounded-view changes, run independent Standards/Spec review and
 resolve findings before phase 4. No deployment or paid call is authorized yet.
+
+## Phase 3 closed; phase 4 in progress (2026-10-30)
+
+The earlier pending phase 3 statements above are superseded by this checkpoint.
+Approved-work admission and metadata-only views were committed as `79f3121`.
+Independent Standards review found one optional duplication smell; Spec review
+reported no findings. Artifact lookups were consolidated in `fef5b8a`, with a
+read-only follow-up confirming preserved local and metadata behavior. All 33
+workflow tests, Ruff and diff checks passed. The final HTTP verification passed
+local and frontend-only checks in `/tmp/hosted-phase3-policy-final-http.log`; its
+initial sandbox attempt could not write the pinned uv cache and was rerun with
+required environment access.
+
+Rendered UI QA passed missing, pending and approved work contexts; verified two
+bounded uploads followed by one enqueue containing the work ID; retained images
+on a controlled failure; and passed desktop/mobile overflow and browser error
+checks. Evidence: `/tmp/hosted-approved-work-browser-evidence.json`. This used
+synthetic auth/backend fixtures, not live Google or provider calls.
+
+Phase 4 starts at `fef5b8a`. Current uncommitted changes add a fail-closed durable
+USD-micro budget ledger and integrate it into hosted enqueue, transactional
+claims, extraction startup and every paid-call boundary. Provider allowance and
+measured stage caps require explicit developer configuration; no automatic USD80
+renewal occurs. Infrastructure reports use interval highwater marks and latch a
+pause. Conservative reservations survive retries and completion; explicit audited
+reconciliation cannot erase outstanding reservations or call debits. Production
+status/pause HTTP endpoints require both explicit service permissions and Firebase
+admin identity. Published playback and identity remain independent of this gate.
+
+The offline rollout record tool captures the candidate SHA/dirty state and explicit
+prior software rollback targets; it does not discover or invent cloud state.
+`docs/hosted-rollout.md` describes preparation and durable-data-preserving rollback.
+
+Verification: first new ledger emulator run failed three test-fixture cases using
+inactive transactions or reading a reservation before its deferred writer committed.
+Fixtures were corrected. Worker rerun passed all 88 emulator tests. Parent rerun is
+session 55183, log `/tmp/hosted-phase4-budget-firestore-fixed.log`. Normal acceptance
+is session 84434, log `/tmp/hosted-phase4-budget-check.log`. New runtime pause tests
+passed (15 runtime tests total); three HTTP production-control tests passed with
+normal environment access. The sandboxed HTTP test process stopped making progress;
+its exact PID 20389 was identified and terminated after the equivalent tests passed.
+
+Remaining phase 4 work: authenticated budget notification ingestion and operator
+configuration tooling, quota visibility in the product, reference-aware seven-day
+cleanup with promotion-race protection, narrow IAM/declarative infrastructure and
+secret configuration, rollback evidence, then full independent Standards/Spec
+review and all fixes. Phase 5 remains separately gated: no deployment, paid test,
+real production approvals or publication has been authorized or performed.
+The full goal remains active and incomplete.
