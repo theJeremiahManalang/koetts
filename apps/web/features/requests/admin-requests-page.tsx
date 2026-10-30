@@ -9,6 +9,7 @@ import { getFirebaseAuth } from "../identity/firebase-client";
 import { AdminNav } from "../identity/admin-nav";
 import { AccountNav } from "../identity/account-nav";
 import { RequestAction } from "./request-action";
+import { ProductionControls } from "./production-controls";
 
 type Candidate = { id: string; revision: string; export_id: string };
 type Review = Candidate & { candidate_id: string };
@@ -26,13 +27,13 @@ async function jsonRequest(url: string, options?: RequestInit) {
   return response.json();
 }
 
-export default function AdminRequestsPage() {
+export default function AdminRequestsPage({ productionControlsEnabled = false }: { productionControlsEnabled?: boolean }) {
   const { user, isAdmin, authorizationReady } = useAuth();
   if (!user || !isAdmin) return <main><h1>Administrator access required</h1><Link href="/browse">Return to the library</Link></main>;
-  return <RequireSignIn><AdminWork uid={user.uid} authorizationReady={authorizationReady} /></RequireSignIn>;
+  return <RequireSignIn><AdminWork uid={user.uid} authorizationReady={authorizationReady} productionControlsEnabled={productionControlsEnabled} /></RequireSignIn>;
 }
 
-function AdminWork({ uid, authorizationReady }: { uid: string; authorizationReady: boolean }) {
+function AdminWork({ uid, authorizationReady, productionControlsEnabled }: { uid: string; authorizationReady: boolean; productionControlsEnabled: boolean }) {
   const authorization = useRef({ uid, ready: authorizationReady });
   authorization.current = { uid, ready: authorizationReady };
   const [work, setWork] = useState<Work[]>([]);
@@ -94,6 +95,7 @@ function AdminWork({ uid, authorizationReady }: { uid: string; authorizationRead
     <header className="admin-header"><div><p className="browse-eyebrow">Admin</p><h1>Audiobook requests</h1><p>Approve chapter work, attach a studio project, and review its export before publication.</p></div><AdminNav active="requests" /><AccountNav /></header>
     {message && <p role="status" className="notice">{message}</p>}
     {error && <p role="alert" className="notice error">{error}</p>}
+    {productionControlsEnabled && <div className="admin-request-list"><ProductionControls /></div>}
     {loading ? <p role="status">Loading requests…</p> : work.length === 0 ? <section className="empty-requests"><h2>No requests yet</h2><p>Reader requests will appear here.</p></section> :
       <section className="admin-request-list">{work.map(item => {
         const project = selectedProjects[item.id] ?? item.link?.project_id ?? "";

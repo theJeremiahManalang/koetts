@@ -25,6 +25,11 @@ export function hostedMode(): boolean {
   throw new PrivateApiError(503, "invalid_execution_mode", "Private service is unavailable.");
 }
 
+/** Cloud production controls are unavailable to local and frontend-only deployments. */
+export function isCloudExecution(): boolean {
+  return process.env.MANGA_EXECUTION_MODE === "cloud" && process.env.MANGA_FRONTEND_ONLY !== "1";
+}
+
 function apiOrigin(): URL {
   const value = process.env.S3_API_URL;
   if (!value) throw new PrivateApiError(503, "private_api_unconfigured", "Private service is unavailable.");
