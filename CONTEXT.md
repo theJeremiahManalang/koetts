@@ -262,3 +262,10 @@ runtime. Preserve that distinction: the worker report is recorded, its temporary
 artifact is unavailable. Recreate retained browser evidence during the remaining
 product-visibility/rollout verification rather than treating the missing path as
 current proof. No UI source changed in this turn.
+
+Billing ingestion committed as `9cb6b7f`. Its required HTTP acceptance finished
+successfully (session 52303 exited 0): studio and frontend-only checks passed in
+`/tmp/hosted-phase4-billing-http.log`. Worktree is clean after committing this
+checkpoint. Next action is phase 4 settlement/operator tooling and safe artifact
+collection; keep phase 4 open and run its full two-axis review after all remaining
+implementation is concrete. No new user decision is currently blocking offline work.
