@@ -78,6 +78,12 @@ class CloudMetadataViewTests(unittest.TestCase):
                                      bucket.name, "pilot/metadata")
             app = CloudApplication(settings, firestore_client=self.client, storage_client=storage,
                                    cache_root=Path(directory) / "scratch")
+            app.budget.configure("fixture-developer", "synthetic metadata caps",
+                                 provider_allowance_micro=0, stages={
+                                     stage: {"infrastructure_micro": 1000, "provider_micro": 0,
+                                             "provider_call_micro": 0, "max_provider_calls": 0}
+                                     for stage in ("magi", "pipeline")
+                                 })
 
             fixture = PipelineTests()
             fixture.setUp()

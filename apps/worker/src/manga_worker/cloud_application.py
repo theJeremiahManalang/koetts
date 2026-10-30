@@ -20,6 +20,7 @@ from manga_tts.storage import digest, read_json
 
 from .cloud import CloudSettings, cloud_stores
 from .cloud_admission import CloudChapterAdmission
+from .cloud_budget import CloudBudgetLedger
 from .cloud_operations import FirestoreOperationStore
 from .workflow import WORKFLOW_ACTIONS, operation_pipeline_config
 
@@ -44,8 +45,12 @@ class CloudApplication:
         self.root.mkdir(parents=True, exist_ok=True)
         self.stores = cloud_stores(settings, self.root / "artifacts", firestore_client=firestore_client,
                                    storage_client=storage_client)
-        self.operations = FirestoreOperationStore(
+        self.budget = CloudBudgetLedger(
             self.stores.revisions.client, settings.dataset, self.stores.artifacts.artifact_store_id
+        )
+        self.operations = FirestoreOperationStore(
+            self.stores.revisions.client, settings.dataset, self.stores.artifacts.artifact_store_id,
+            budget=self.budget,
         )
         self.shared_requests = SharedRequests(
             self.root / "shared-unused.sqlite3", metadata=self.stores.shared_metadata,

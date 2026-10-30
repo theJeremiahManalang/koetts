@@ -40,8 +40,15 @@ class CloudApplicationTests(unittest.TestCase):
         settings = CloudSettings("demo-hosted-application", "application-tests", "app-" + uuid.uuid4().hex,
                                  bucket.name, "pilot/app")
         self.settings = settings
-        return CloudApplication(settings, firestore_client=self.client, storage_client=storage,
-                                cache_root=Path(directory) / "scratch")
+        app = CloudApplication(settings, firestore_client=self.client, storage_client=storage,
+                               cache_root=Path(directory) / "scratch")
+        app.budget.configure("fixture-developer", "synthetic acceptance caps",
+                             provider_allowance_micro=80_000_000, stages={
+                                 stage: {"infrastructure_micro": 1000, "provider_micro": 1000,
+                                         "provider_call_micro": 100, "max_provider_calls": 10}
+                                 for stage in ("magi", "pipeline")
+                             })
+        return app
 
     def _approved_work(self, app, actor, *, title=None, chapter="1"):
         request = app.shared({"action": "submit", "title": title or uuid.uuid4().hex,
@@ -115,6 +122,7 @@ class CloudApplicationTests(unittest.TestCase):
                                       "expected_publication": None}, admin)
             self.assertEqual(publication["id"], app.shared({"action": "published", "work_id": request["work_id"]}, actor)["publication_id"])
             self.assertEqual(app.stores.revisions._project(project_id).get().to_dict(), ownership)
+            app.budget.set_paused("fixture-admin", "verify published playback during pause", paused=True)
             audio = app.published_path(request["work_id"], publication["id"])
             self.assertGreater(audio.stat().st_size, 0)
             storage = Mock()
@@ -301,6 +309,31 @@ class CloudApplicationTests(unittest.TestCase):
             with self.assertRaises(OperationConflict) as idempotency:
                 app.enqueue_operation(changed, "rename-key")
             self.assertEqual(idempotency.exception.code, "idempotency_conflict")
+
+    def test_pause_blocks_new_enqueue_and_claim_but_keeps_duplicate_intent_and_requests(self):
+        from manga_worker.cloud_budget import CloudBudgetExceeded
+
+        with tempfile.TemporaryDirectory() as directory:
+            app = self._application(directory)
+            actor = {"kind": "firebase", "uid": "creator", "project_id": self.settings.project}
+            work = self._approved_work(app, actor)
+            token = self._image_upload(app, directory, actor)
+            payload = {"action": "create", "mode": "images", "project": uuid.uuid4().hex,
+                       "upload_token": token, "actor": actor, "work_id": work}
+            queued = app.enqueue_operation(payload, "budget-intent")
+            reserved = app.budget.status()["infrastructure_reserved_micro"]
+            app.budget.set_paused("fixture-admin", "pause acceptance", paused=True)
+            self.assertEqual(app.enqueue_operation(payload, "budget-intent").operation_id, queued.operation_id)
+            self.assertIsNone(app.operations.claim(queued.operation_id))
+            self.assertEqual(app.operations.get(queued.operation_id).attempt_count, 0)
+            with self.assertRaises(CloudBudgetExceeded):
+                app.enqueue_operation({**payload, "project": uuid.uuid4().hex}, "blocked-new-intent")
+            self.assertEqual(app.budget.status()["infrastructure_reserved_micro"], reserved)
+            with self.assertRaises(FileNotFoundError):
+                app.operations.get_by_key("blocked-new-intent")
+            request = app.shared({"action": "submit", "title": uuid.uuid4().hex,
+                                  "chapter": "2", "notes": "still available"}, actor)
+            self.assertEqual(request["status"], "pending")
 
     def test_create_requires_real_approved_work_and_rechecks_current_status(self):
         with tempfile.TemporaryDirectory() as directory:

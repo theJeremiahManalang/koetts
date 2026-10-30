@@ -9,6 +9,7 @@ from pathlib import Path
 from manga_tts.storage import read_json
 
 from .cloud import CloudSettings, cloud_stores
+from .cloud_budget import CloudBudgetLedger
 from .cloud_jobs import CloudJobDispatcher, CloudRunJobs
 from .cloud_operations import FirestoreOperationStore
 
@@ -50,7 +51,8 @@ def coordinator_from_environment(*, expected_project: str):
         raise ValueError("Cloud storage project must match the authenticated API project")
     client = firestore.Client(project=settings.project, database=settings.database)
     stores = cloud_stores(settings, Path(tempfile.gettempdir()) / "manga-cloud-coordinator", firestore_client=client)
-    operations = FirestoreOperationStore(client, settings.dataset, stores.artifacts.artifact_store_id)
+    budget = CloudBudgetLedger(client, settings.dataset, stores.artifacts.artifact_store_id)
+    operations = FirestoreOperationStore(client, settings.dataset, stores.artifacts.artifact_store_id, budget=budget)
     jobs = CloudRunJobs(settings.project, os.environ.get("MANGA_CLOUD_REGION", "us-east4"), {
         "magi": os.environ.get("MANGA_MAGI_JOB", ""),
         "pipeline": os.environ.get("MANGA_PIPELINE_JOB", ""),

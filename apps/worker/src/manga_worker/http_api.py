@@ -17,6 +17,7 @@ from manga_worker.http_auth import BoundaryConfig, CredentialBoundary
 from manga_tts.schemas import WorkflowError
 from manga_tts.operations import OperationConflict
 from manga_tts.shared_requests import IntakeQuotaExceeded
+from manga_worker.cloud_budget import CloudBudgetExceeded
 
 PRIVATE_HEADERS = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
 MAX_OPERATION_BYTES = 5 * 1024 * 1024
@@ -152,6 +153,12 @@ def create_app(
     async def intake_limit(request, exc):
         return JSONResponse(status_code=429, content={"error": {"code": exc.code, "message": str(exc)}})
 
+    @app.exception_handler(CloudBudgetExceeded)
+    async def production_paused(request, exc):
+        return JSONResponse(status_code=429, content={"error": {
+            "code": "production_paused", "message": "Hosted production is paused. Contact an administrator.",
+        }})
+
     @app.exception_handler(ValueError)
     async def invalid_request(request, exc):
         return JSONResponse(status_code=400, content={"error": "Invalid workflow request"})
@@ -183,6 +190,22 @@ def create_app(
 
             coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
         return coordinator_instance.tick()
+
+    @app.get("/production/status")
+    def production_status(request: Request):
+        boundary.authorize(request, "production-status")
+        return cloud_application().budget.status()
+
+    @app.post("/production/pause")
+    async def production_pause(request: Request):
+        actor = await run_in_threadpool(boundary.authorize, request, "production-control")
+        payload = await _json_request(request, limit=4096)
+        if set(payload) != {"paused", "reason"} or not isinstance(payload["paused"], bool):
+            raise HTTPException(400, "Expected paused and reason")
+        operator = json.dumps([actor["project_id"], actor["uid"]], separators=(",", ":"))
+        await run_in_threadpool(cloud_application().budget.set_paused, operator, payload["reason"],
+                                paused=payload["paused"])
+        return cloud_application().budget.status()
 
     @app.get("/projects")
     def list_projects(request: Request):

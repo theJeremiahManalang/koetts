@@ -18,6 +18,7 @@ from manga_tts.persistence import ArtifactRef
 from manga_tts.storage import digest, read_json
 
 from .cloud import CloudSettings, cloud_stores
+from .cloud_budget import CloudBudgetExceeded
 from .workflow import operation_pipeline_config, perform, verify_operation_sources
 
 
@@ -39,6 +40,7 @@ class CloudRuntime:
         extractor: Callable[[Path], Any] | None = None,
         source_verifier: Callable[..., None] = verify_operation_sources,
         stop_process: Callable[[], None] | None = None,
+        budget=None,
     ):
         self.store = store
         self.persistence = persistence
@@ -49,6 +51,7 @@ class CloudRuntime:
         self.extractor = extractor or self._extract_text
         self.source_verifier = source_verifier
         self.stop_process = stop_process or self._terminate
+        self.budget = budget
 
     @staticmethod
     def _extract_text(image: Path):
@@ -189,6 +192,8 @@ class CloudRuntime:
         writer_release_failed = False
         failure: tuple[str, str, bool] | None = None
         try:
+            if self.budget is not None:
+                self.budget.check_dispatch(operation.idempotency_key)
             self._materialize_uploads(operation, request, attempt_root)
             if ocr:
                 self.source_verifier(operation, request, root=attempt_root)
@@ -217,9 +222,17 @@ class CloudRuntime:
             request["project_revision_id"] = revision.revision_id if revision is not None else None
             self.source_verifier(operation, request, root=attempt_root)
 
+            provider_sequence = 0
+
             def before_provider() -> None:
+                nonlocal provider_sequence
                 if fence_lost.is_set():
                     raise OperationConflict("stale_fence", "Worker fence is no longer current.")
+                if self.budget is not None:
+                    self.budget.authorize_provider(
+                        operation.idempotency_key, f"{operation.operation_id}:{claim.fence}:{provider_sequence}",
+                    )
+                provider_sequence += 1
                 current = self.persistence.current(operation.project_id)
                 checkpoint = dict(self.store.get(operation.operation_id).checkpoint or {})
                 checkpoint["provider_base_revision_id"] = current.revision_id if current else None
@@ -292,6 +305,8 @@ class CloudRuntime:
             failure = (exc.detail.message, exc.detail.code, exc.detail.retryable)
         except OperationConflict as exc:
             failure = (str(exc), exc.code, False)
+        except CloudBudgetExceeded:
+            failure = ("Hosted production is paused or its reservation is exhausted.", "production_paused", False)
         except (ValueError, FileNotFoundError) as exc:
             failure = (str(exc), "invalid_operation", False)
         except Exception:  # Provider and SDK text may include credentials or source content.
@@ -356,9 +371,12 @@ def main() -> int:
     )
     from .cloud_operations import FirestoreOperationStore
 
-    store = FirestoreOperationStore(firestore_client, settings.dataset, stores.artifacts.artifact_store_id)
+    from .cloud_budget import CloudBudgetLedger
+
+    budget = CloudBudgetLedger(firestore_client, settings.dataset, stores.artifacts.artifact_store_id)
+    store = FirestoreOperationStore(firestore_client, settings.dataset, stores.artifacts.artifact_store_id, budget=budget)
     root = Path(os.environ.get("MANGA_DATA_ROOT", "/tmp/manga-cloud-runtime"))
-    runtime = CloudRuntime(store, stores.persistence, stores.artifacts, root)
+    runtime = CloudRuntime(store, stores.persistence, stores.artifacts, root, budget=budget)
     runtime.run(OperationClaim(operation_id, int(fence_text)), execution_name)
     return 0
 

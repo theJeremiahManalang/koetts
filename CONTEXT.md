@@ -210,3 +210,17 @@ secret configuration, rollback evidence, then full independent Standards/Spec
 review and all fixes. Phase 5 remains separately gated: no deployment, paid test,
 real production approvals or publication has been authorized or performed.
 The full goal remains active and incomplete.
+
+## Phase 4 budget slice acceptance
+
+Parent verified the corrected ledger suite: 90 emulator/demo tests passed in
+`/tmp/hosted-phase4-budget-final-firestore.log`, including transactional enqueue,
+paused claims, idempotent retries, request/playback availability, and rejection of
+missing-control reinitialization over durable reservations. Before the final
+orphan-ledger regression, normal `npm run check` passed 284 Python tests with
+77 optional skips, all 86 web tests, repository checks, Ruff, typecheck and build
+(`/tmp/hosted-phase4-budget-check.log`). Ruff and diff checks pass after the fix.
+Required HTTP acceptance is running as session 23432, log
+`/tmp/hosted-phase4-budget-http.log`; collect its terminal result before claiming it.
+The cost-controls documentation explicitly records unimplemented settlement and
+notification/operational work. This slice does not close phase 4.

@@ -58,9 +58,11 @@ def _valid_time(value, optional=False):
 class FirestoreOperationStore(_FirestoreHostedStore):
     """Hosted operation store. Firestore owns dispatch intent; Cloud Run owns execution."""
 
-    def __init__(self, client, dataset: str, artifact_store_id: str, policy: OperationPolicy | None = None):
+    def __init__(self, client, dataset: str, artifact_store_id: str, policy: OperationPolicy | None = None,
+                 *, budget=None):
         super().__init__(client, dataset, artifact_store_id)
         self.policy = policy or OperationPolicy()
+        self.budget = budget
 
     @property
     def _operations(self):
@@ -385,8 +387,11 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 return op, bound
             # Admission shares this commit. Existing intent retries return above
             # without consuming capacity again.
+            budget_writer = self.budget.prepare_reservation(idempotency_key, stage)(tx) if self.budget else None
             if admission is not None:
                 admission(tx)
+            if budget_writer is not None:
+                budget_writer()
             tx.create(ref, doc)
             tx.create(key_ref, {"operation_id": operation_id, "idempotency_key": idempotency_key})
             return Operation(
@@ -511,6 +516,15 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             op = self._operation(snap)
             if op.status != "queued":
                 return None, bound
+            if self.budget is not None:
+                from .cloud_budget import CloudBudgetExceeded
+
+                try:
+                    self.budget.check_dispatch_in_transaction(tx, op.idempotency_key)
+                except CloudBudgetExceeded:
+                    # Paused work keeps its queued intent and reservation. Reads,
+                    # playback, and reconciliation do not depend on new claims.
+                    return None, bound
             if op.attempt_count > self.policy.max_attempts:
                 raise ValueError("Hosted operation exceeded its configured attempt limit")
             if op.attempt_count >= self.policy.max_attempts:

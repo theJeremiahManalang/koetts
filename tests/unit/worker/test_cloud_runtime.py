@@ -8,6 +8,7 @@ import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 from tests.unit.engine import test_audio_pipeline as fixtures
 from manga_tts import schemas
@@ -228,6 +229,37 @@ class CloudRuntimeTests(unittest.TestCase):
 
         self.assertEqual(called, [])
         self.assertIsNone(self.persistence.writer)
+
+    def test_pause_rejects_ocr_before_materialization_or_extraction(self):
+        from manga_worker.cloud_budget import CloudBudgetExceeded
+
+        runtime, verified = self._ocr_runtime()
+        runtime.budget = Mock()
+        runtime.budget.check_dispatch.side_effect = CloudBudgetExceeded("paused")
+        runtime.extractor = Mock()
+        self.assertTrue(runtime.run(OperationClaim(OPERATION_ID, 7), "magi-execution"))
+        self.assertEqual(verified, [])
+        runtime.extractor.assert_not_called()
+        self.assertIsNone(self.persistence.writer)
+        self.assertEqual(self.store.failures[0][1], "production_paused")
+
+    def test_provider_budget_denial_precedes_paid_boundary(self):
+        from manga_worker.cloud_budget import CloudBudgetExceeded
+
+        self.runtime.budget = Mock()
+        self.runtime.budget.authorize_provider.side_effect = CloudBudgetExceeded("exhausted")
+        invoked = []
+
+        def perform(router, request, progress, *, before_provider, **kwargs):
+            before_provider()
+            invoked.append("paid call")
+            return {}
+
+        self.runtime.perform_operation = perform
+        self.runtime.run(OperationClaim(OPERATION_ID, 7), "execution-one")
+        self.assertEqual(invoked, [])
+        self.assertNotIn("provider_pending", self.store.order)
+        self.assertEqual(self.store.failures[0][1], "production_paused")
 
     def _ocr_runtime(self, texts=None):
         payload = {
