@@ -22,12 +22,13 @@ SUITES = {
             "tests.integration.test_cloud_operations", "tests.integration.test_cloud_execution",
             "tests.integration.test_cloud_request_quotas", "tests.integration.test_cloud_application",
             "tests.integration.test_cloud_admission", "tests.integration.test_cloud_budget",
-            "tests.integration.test_cloud_gc", "tests.integration.test_cloud_metadata_views",
+            "tests.integration.test_cloud_gc", "tests.integration.test_cloud_rollback", "tests.integration.test_cloud_metadata_views",
             "tests.unit.engine.test_shared_requests", "tests.unit.worker.test_shared_service"],
     "contention": [
         "tests.integration.test_shared_firestore.FirestoreSharedTests.test_concurrent_duplicate_requests_retain_original_notes_and_reader_isolation",
         "tests.integration.test_cloud_operations.FirestoreOperationStoreTests.test_same_key_contention_and_changed_input_conflict",
     ],
+    "rollback": ["tests.integration.test_cloud_rollback"],
 }
 
 

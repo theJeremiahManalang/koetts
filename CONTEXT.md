@@ -345,3 +345,27 @@ rollback runbook additions: actual prior source fef5b8a reads candidate durable
 state after interrupted-GC recovery, under read-only service permissions with
 production disabled. Parent will verify emulator acceptance and review the result
 before closing phase 4. No live validation has been authorized or performed.
+
+## Phase 4 review fixes verified
+
+Standards follow-up accepted all three fixes in 364c4a6 with no remaining issue.
+The Spec rollback test now archives and executes the real prior source fef5b8a
+against candidate-written emulator state and frozen exact-generation GCS bytes.
+It verifies identity/snapshots/catalog/audio, rejects enqueue/coordination through
+restricted service permissions, compares complete hosted/shared document trees
+(including budget/GC subcollections under missing ancestors), then recovers the
+interrupted deletion chain with the current candidate. Provider keys are cleared.
+The keyless focused acceptance passed in /tmp/hosted-phase4-rollback-keyless.log.
+
+This real publication fixture exposed a GC contract bug missed by synthetic root
+fixtures: publication rows link immutable audio reviews rather than containing
+checksums. The collector now resolves that domain relation and validates the
+review's work/checksums through the preserved catalog. No fake publication fields
+were added to hide the mismatch. Full emulator acceptance passed 104 tests in
+/tmp/hosted-phase4-reviewed-firestore.log. Normal repository/lint/Python/web/typecheck
+commands passed after helper fixes; explicit production-webpack HTTP/build evidence
+remains valid, and default Turbopack process-binding limitation stays separate.
+
+Next: commit rollback acceptance/GC fix, obtain both review follow-ups, then close
+phase 4 only if its offline requirements are evidenced. Phase 5 still requires
+separate deployment and tightly bounded live CPU/provider-test authorization.

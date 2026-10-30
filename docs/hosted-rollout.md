@@ -86,3 +86,29 @@ software is serving (or a new resource is contained), login and published
 playback remain available, durable state remains present and readable, and
 task-owned access changes are reconciled. A successful command alone does not
 establish rollback acceptance.
+
+### Offline prior-reader acceptance
+
+Run `uv run python -m unittest tests.integration.test_cloud_rollback -v` with
+`FIRESTORE_EMULATOR_HOST` pointing to a loopback emulator. This test archives the
+fixed prior reader source at `fef5b8add2e22dd98e45283aa7ddbd600a5f3609` without
+checking it out over the candidate tree. It seeds candidate project/export and
+approved shared review/publication records, a durable operation checkpoint and
+budget reservation/debit, pauses the ledger, then injects an uncertain
+exact-generation GC delete. The prior HTTP API must read the project snapshot,
+catalog and exact published bytes while its service permission map denies
+enqueue and coordination. Full hosted/shared Firestore document trees, the held
+maintenance barrier, GC run log, and published object generation/bytes must stay
+unchanged. The candidate reader must then recover the original deletion chain.
+
+This is offline compatibility evidence only. It uses loopback Firestore, a
+frozen fake GCS bucket, and injected service/user verifiers; it does not validate
+Firebase identity, Next.js session handling, deployed IAM, Cloud Run execution
+status, or live storage behavior. A prior reader can serve snapshots and
+published audio but does not understand the candidate GC promotion epoch,
+maintenance recovery records, or budget ledger. It cannot safely recover GC,
+resume production, or change provider controls. For a real rollback, pause
+production dispatch and GC scheduling, confirm workers and collector executions
+are stopped, and resolve any held GC barrier with a compatible candidate
+revision before serving the prior API. Keep production paused until a compatible
+revision with the required GC and provider controls is restored and verified.

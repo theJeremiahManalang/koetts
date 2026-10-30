@@ -47,6 +47,13 @@ npm run test:http          # disposable studio + frontend-only production checks
 uv run python tools/verify_fresh_checkout.py
 ```
 
+If the environment blocks Turbopack's worker process/port binding, verify the
+supported production webpack fallback explicitly with
+`npm run build --workspace @manga/web -- --webpack` and
+`npm run test:http -- --webpack`. Record the default build failure separately;
+these checks do not establish App Hosting's default bundler or monorepo adapter
+behavior. The HTTP runner's default remains the normal production build.
+
 Python tests are grouped under `tests/unit/{engine,vision,worker}` and `tests/integration`. Run selected cases with `uv run python -m unittest tests.unit.worker.test_paths -v`. Cross-process fixture helpers live under `tests/helpers`.
 
 Optional external-project compatibility uses `MANGA_TTS_SAMPLE_PROJECT`; standalone HTTP integration uses `MANGA_WEB_TEST_URL`. The disposable HTTP runner supplies its own temporary server and fake identity adapter. It copies source and Node dependencies, creates a frozen uv environment, clears provider keys, and preserves repository results. Loopback and child processes must be permitted. Its `--dev` option checks development transport rather than production compilation.

@@ -261,12 +261,25 @@ class ReferenceAwareCollector:
                     or not isinstance(state.get("sequence"), int) or isinstance(state.get("sequence"), bool)
                     or state["sequence"] < 0):
                 raise ValueError("Shared artifact identity or schema does not match collector")
-        for table in ("export_candidates", "audio_reviews", "publications"):
+        for table in ("export_candidates", "audio_reviews"):
             for snapshot in shared.collection(table).stream():
                 checksums = snapshot.to_dict().get("checksums")
                 if (not binding.exists or not isinstance(checksums, dict)
                         or any(value not in catalog for value in checksums.values())):
                     raise ValueError("Shared artifact references are incomplete")
+        # Publications point to immutable audio reviews; checksums live on the
+        # review, not the publication row. Resolve the actual domain relation.
+        for snapshot in shared.collection("publications").stream():
+            publication = snapshot.to_dict()
+            review_id = publication.get("review_id")
+            if not binding.exists or not isinstance(review_id, str) or not review_id or "/" in review_id:
+                raise ValueError("Published audio review reference is incomplete")
+            review = shared.collection("audio_reviews").document(review_id).get()
+            record = review.to_dict() if review.exists else None
+            checksums = record.get("checksums") if record else None
+            if (not record or record.get("work_id") != publication.get("work_id")
+                    or not isinstance(checksums, dict) or any(value not in catalog for value in checksums.values())):
+                raise ValueError("Published audio review artifacts are incomplete")
         retired = []
         for snapshot in root.collection("uploads").stream():
             value = snapshot.to_dict()
