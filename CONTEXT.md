@@ -106,3 +106,15 @@ Terraform's API default collides with that existing service. Ask whether to use 
 new candidate API (recommended) or adopt existing resources under reviewed import;
 do not apply unchanged. Local Docker is an unavailable WSL Desktop shim. Remote
 builds also require deployment/test cost authorization. No cloud state changed.
+
+
+## Authorization blocker audit
+
+The phase 5 authorization condition persists across three consecutive goal turns.
+The first completed offline reviews and evidence; the second completed useful
+read-only preflight; the third revalidated a clean tree, the explicit plan gate,
+and the unanswered authorization request. No live process is pending. Further
+implementation acceptance requires deployment and bounded paid tests. The goal
+remains incomplete and is blocked pending user approval, incremental spending cap,
+and the existing-API collision decision. Recommended choice: separate candidate
+API, preserving the existing service. Automation continuation is not approval.
