@@ -1,6 +1,7 @@
 """Run shared metadata acceptance against a disposable, loopback Firestore emulator."""
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 from pathlib import Path
@@ -15,6 +16,19 @@ import urllib.request
 VERSION = "1.19.8"
 CHECKSUM = "9d43599ed6151199e8d604dc87fac51218e49e5f3a48519b1ae560bbe5e3382d"
 FILENAME = f"cloud-firestore-emulator-v{VERSION}.jar"
+
+SUITES = {
+    "all": ["tests.integration.test_shared_firestore", "tests.integration.test_cloud_persistence",
+            "tests.integration.test_cloud_operations", "tests.integration.test_cloud_execution",
+            "tests.integration.test_cloud_request_quotas", "tests.integration.test_cloud_application",
+            "tests.integration.test_cloud_admission", "tests.integration.test_cloud_budget",
+            "tests.integration.test_cloud_gc", "tests.integration.test_cloud_metadata_views",
+            "tests.unit.engine.test_shared_requests", "tests.unit.worker.test_shared_service"],
+    "contention": [
+        "tests.integration.test_shared_firestore.FirestoreSharedTests.test_concurrent_duplicate_requests_retain_original_notes_and_reader_isolation",
+        "tests.integration.test_cloud_operations.FirestoreOperationStoreTests.test_same_key_contention_and_changed_input_conflict",
+    ],
+}
 
 
 def emulator_jar(root):
@@ -47,7 +61,11 @@ def emulator_jar(root):
     return jar
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", choices=SUITES, default="all")
+    parser.add_argument("--repeat", type=int, choices=range(1, 11), default=1)
+    args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     if not shutil.which("java"):
         raise ValueError("Java 11 or newer is required for the pinned Firestore emulator")
@@ -73,15 +91,7 @@ def main():
                         raise RuntimeError("Emulator did not become ready") from None
                     time.sleep(.1)
             env = {**os.environ, "FIRESTORE_EMULATOR_HOST": f"127.0.0.1:{port}", "MANGA_SHARED_BACKEND": "sqlite"}
-            subprocess.run([sys.executable, "-m", "unittest", "tests.integration.test_shared_firestore",
-                            "tests.integration.test_cloud_persistence",
-                            "tests.integration.test_cloud_operations",
-                            "tests.integration.test_cloud_execution",
-                            "tests.integration.test_cloud_request_quotas", "tests.integration.test_cloud_application",
-                            "tests.integration.test_cloud_admission",
-                            "tests.integration.test_cloud_budget",
-                            "tests.integration.test_cloud_metadata_views",
-                            "tests.unit.engine.test_shared_requests", "tests.unit.worker.test_shared_service", "-v"],
+            subprocess.run([sys.executable, "-m", "unittest", *(SUITES[args.suite] * args.repeat), "-v"],
                            cwd=root, env=env, check=True, timeout=180)
             print("Firestore emulator contracts and SQLite parity passed; no live project was used.")
         finally:

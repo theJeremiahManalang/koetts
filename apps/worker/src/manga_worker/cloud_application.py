@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -67,6 +68,19 @@ class CloudApplication:
     def identifier(value):
         from .workflow import identifier
         return identifier(value)
+
+    def production_status(self):
+        def read(transaction):
+            bound = self.stores.revisions._binding(transaction)
+            state = self.stores.revisions._maintenance_state(transaction) if bound else None
+            return state, bound
+
+        maintenance = self.stores.revisions._run(read)
+        return {"budget": self.budget.status(), "chapter_quota": self.admission.status(),
+                "reader_limits": {"pending": self.shared_requests.intake_policy.max_pending,
+                                  "new_per_utc_day": self.shared_requests.intake_policy.max_new_per_utc_day},
+                "artifact_collection": {"active": maintenance is not None and maintenance["owner"] is not None,
+                                        "epoch": maintenance["epoch"] if maintenance else 0}}
 
     @staticmethod
     def _actor(actor: dict, project: str) -> dict:
@@ -175,6 +189,7 @@ class CloudApplication:
                 raise ValueError("Upload cannot be empty")
             if name.endswith(".png"):
                 self._validate_image(staged)
+            epoch = self.stores.revisions.artifact_epoch()
             ref = self.stores.artifacts.put_file(staged)
         doc = self.uploads.document(token)
         from google.cloud import firestore
@@ -186,6 +201,7 @@ class CloudApplication:
             bound = self.stores.revisions._binding(tx)
             if not bound:
                 raise ValueError("Hosted dataset namespace binding is missing")
+            self.stores.revisions._assert_artifact_epoch(tx, epoch)
             snap = doc.get(transaction=tx)
             prior = snap.to_dict() if snap.exists else {"owner_uid": actor["uid"], "project_id": actor["project_id"], "files": {}}
             if prior.get("owner_uid") != actor["uid"] or prior.get("project_id") != actor["project_id"]:
@@ -198,7 +214,8 @@ class CloudApplication:
             if existing is None and len(files) >= _MAX_UPLOAD_FILES:
                 raise ValueError("An upload token cannot contain more than 42 files")
             files[name] = encoded
-            tx.set(doc, {"owner_uid": actor["uid"], "project_id": actor["project_id"], "files": files})
+            tx.set(doc, {"owner_uid": actor["uid"], "project_id": actor["project_id"], "files": files,
+                         "updated_at": time.time()})
         commit(self.client.transaction())
         return {"name": name, "sha256": ref.sha256, "size": total}
 
@@ -392,6 +409,7 @@ class CloudApplication:
             raise ValueError("Unknown workflow action")
         project = self.identifier(request.get("project"))
         actor = self._actor(payload.get("actor"), self.settings.project)
+        artifact_epoch = self.stores.revisions.artifact_epoch()
         refs, hashes, token = self._verified_uploads(request, actor)
         archive_page_count = self._validate_archive_pages(action, request, refs)
         request.update({"actor": actor, "upload_token": token, "cloud_uploads": refs, "source_hashes": hashes})
@@ -449,7 +467,7 @@ class CloudApplication:
         return self.operations.enqueue(idempotency_key=key, payload=request, project_id=project, stage=stage,
                                        revision=request.get("revision"), source_fingerprint=source_fingerprint,
                                        configuration_fingerprint=digest(configuration), request_fingerprint=request_fingerprint,
-                                       admission=admission)
+                                       admission=admission, artifact_epoch=artifact_epoch)
 
     @staticmethod
     def _require_revision(expected: str | None, current: str) -> None:

@@ -38,6 +38,16 @@ class CloudChapterAdmissionTests(unittest.TestCase):
     def _month_record(self, month="2026-10"):
         return (self.store.root.collection("production_months").document(month).get().to_dict())
 
+    def test_quota_status_is_read_only_and_uses_current_utc_month(self):
+        self.assertEqual(self.store.status(), {"utc_month": "2026-10", "used": 0, "limit": 5,
+                                              "remaining": 5, "pages_per_chapter": 40})
+        self.assertFalse(self.store.root.get().exists)
+        self.reserve(1)
+        self.assertEqual(self.store.status()["used"], 1)
+        self.now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        self.assertEqual(self.store.status()["remaining"], 5)
+        self.assertIsNone(self._month_record("2026-11"))
+
     def test_admission_and_enqueue_commit_together_and_duplicate_does_not_charge(self):
         from manga_worker.cloud_operations import FirestoreOperationStore
 

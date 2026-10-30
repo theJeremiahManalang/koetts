@@ -77,10 +77,56 @@ cross the provider-pending boundary.
 
 Reservations are not automatically refunded at completion, after a crash, or on
 calendar rollover. Provider debits are maximum-cost accounting entries rather
-than a claim about the provider's final bill. Explicit audited reconciliation
-cannot lower reserved totals below the durable reservations or erase recorded
-provider debits. Settlement and operational reconciliation procedures still need
-phase 4 implementation and acceptance before sustained monthly operation.
+than a claim about the provider's final bill. Terminal operation settlement is an
+explicit developer action. It reads the operation and all attempt identities,
+queries Cloud Run for every submitted execution, and then re-reads the same
+operation/attempt snapshot inside the Firestore transaction. The operation must
+be `complete` or `failed`, have no pending provider outcome, and own no project or
+stage slot. Every submitted attempt needs a unique execution name whose Cloud Run
+state is `succeeded`, `failed`, or `cancelled`; active, missing, or unknown
+executions block settlement. A queued operation, an ambiguous submission, or an
+expired lease is not settlement evidence.
+
+Settlement writes an immutable marker under a SHA-256 operation-key document ID.
+It retains the original reservation, provider-call debits, and operation history.
+Only unused provider reservation is released. The marker permanently closes the
+operation key: enqueue callbacks, dispatch checks, and provider authorization
+reject it even if an idempotent submission returns its original operation.
+Operation completion never releases infrastructure reserve. Infrastructure
+reserve remains conservative until a human reviews billed costs and performs an
+explicit monthly reconciliation for a named `YYYY-MM` billing period.
+Reconciliation requires an actor, reason, and evidence reference, can reset the
+reported monthly amount and release only settled infrastructure reserves, and
+must retain every unsettled reservation and provider debit. The closed month is
+recorded permanently. Later delayed reports for it are validated and acknowledged
+as ignored, without ledger writes or impact on a newer month's total. A corrupt
+closeout record still fails closed. Provider used totals must continue to equal
+the durable debit ledger; reconciliation cannot refund them or renew the allowance.
+
+## Developer operator CLI
+
+Use `python -m manga_worker.cloud_operator` with explicit `CloudSettings`
+environment values (`FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`,
+`MANGA_CLOUD_DATASET`, `MANGA_ARTIFACT_BUCKET`, and
+`MANGA_ARTIFACT_NAMESPACE`). Region and both job names must also be explicit for
+settlement. `status` and `inspect --operation-key KEY` are read-only. `configure`
+loads JSON stage caps from `--stage-caps PATH` and requires
+`--provider-allowance-micro`; `pause`, `resume`, `settle`, and `reconcile` expose
+the corresponding ledger operations. Commands print a JSON plan by default.
+Only `--execute` constructs the Firestore or Cloud Run client. Every mutating
+command then requires `--actor`, `--reason`, and `--evidence`; evidence is an
+operator supplied ticket, billing export, invoice, or execution review reference.
+The CLI does not run Cloud Run jobs, change IAM, alter Billing budgets, or deploy
+services.
+
+Use a dedicated human operator identity and custom IAM role. Grant Firestore
+entity `get`, `list`, `create`, and `update` only as needed for ledger reads and
+audited writes, plus `run.executions.get` for settlement checks. Do not grant
+Firestore delete, Cloud Run job run/update, or Storage object access. Firestore
+entity permissions are database scoped rather than collection scoped, so a
+separate operator database/project is needed for stronger data isolation. This
+role is guidance; no live IAM configuration or authorization is established by
+the local implementation or emulator tests.
 
 Missing or corrupt controls fail closed. Existing reservation, report or audit
 records cannot be adopted by reinitializing a missing control document. Status

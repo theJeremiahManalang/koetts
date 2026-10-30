@@ -73,6 +73,19 @@ class CloudChapterAdmission(_FirestoreHostedStore):
     def _admissions(self):
         return self.root.collection("production_admissions")
 
+    def status(self) -> dict:
+        """Inspect the UTC monthly allowance without creating admission records."""
+        month = self._month(self.clock())
+
+        def read(transaction):
+            bound = self._binding(transaction)
+            snapshot = self._months.document(month).get(transaction=transaction)
+            return self._month_chapters(snapshot, month), bound
+
+        chapters = self._run(read)
+        return {"utc_month": month, "used": len(chapters), "limit": _MAX_CHAPTERS_PER_MONTH,
+                "remaining": _MAX_CHAPTERS_PER_MONTH - len(chapters), "pages_per_chapter": _MAX_PAGES_PER_CHAPTER}
+
     @staticmethod
     def _month_chapters(snapshot, month: str) -> list[str]:
         if not snapshot.exists:

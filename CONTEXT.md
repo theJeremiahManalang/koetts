@@ -269,3 +269,63 @@ successfully (session 52303 exited 0): studio and frontend-only checks passed in
 checkpoint. Next action is phase 4 settlement/operator tooling and safe artifact
 collection; keep phase 4 open and run its full two-axis review after all remaining
 implementation is concrete. No new user decision is currently blocking offline work.
+
+## Phase 4 operational implementation and verification (2026-10-30)
+
+Current implementation adds explicit audited budget settlement and developer CLI,
+monthly closeout without automatic provider renewal, and no-op acknowledgement of
+late reports for reconciled billing periods. Settlement verifies every submitted
+execution through Cloud Run, rechecks operation/attempt identity inside Firestore,
+and permanently closes the key before releasing unused provider reservations.
+Infrastructure reservations remain conservative until explicit billed reconciliation.
+The operator CLI validates locally, defaults to a JSON plan, requires --execute for
+ADC access, closes clients on failure and redacts cloud errors.
+
+Reference-aware GC now uses a non-expiring maintenance barrier and promotion epoch.
+It preserves all accepted revision history, shared catalog references, operation
+references and fresh staging. Only old unreferenced objects are deleted by exact
+generation/precondition. Interrupted deletes remain recorded; recovery requires
+confirmed collector termination and replays the complete deletion chain. Upload,
+enqueue and shared-catalog promotion reject stale epochs. Reads/playback stay open.
+The detailed protocol and rollback boundary are in docs/hosted-artifact-collection.md.
+
+Terraform now declares private namespace-scoped GCS, dedicated API/jobs/GC/operator
+identities, per-database Firestore IAM, narrow job invocation, secrets, paused
+Scheduler dispatch/GC and authenticated billing push. It does not manage the
+existing database or App Hosting backend. A separate named-database Firebase rules
+config targets only koetts-default. Official Terraform 1.17.1 was checksum-verified
+in /tmp after default sandbox DNS failed; escalated backend-disabled init and
+schema validation passed, with google/google-beta locked at 7.46.2. Explicit Pub/Sub
+service-agent creation uses the documented beta provider instead of assuming an
+email proves existence. No plan/apply or cloud writes occurred.
+
+The hosted admin UI now exposes chapter/request limits, conservative budget
+estimates, cleanup state and explicit reasoned pause/resume. Server and private API
+both require admin/service permission. Reader limit copy remains cloud-only.
+Browser QA used actual copied components/styles with synthetic identity/backend:
+/tmp/manga-phase4-quota-qa.Tf6oEa/artifacts/browser-qa.json and three screenshots.
+Desktop 1440x1000/mobile 390x844, refresh/pause, error and overflow checks passed.
+Owned fixture server stopped; port 4317 closed. This establishes no live Google auth.
+
+Verification and failures: all 103 loopback/demo tests passed in
+/tmp/hosted-phase4-operations-final-firestore.log. Earlier GC fixture failures were
+fixed (fake create-precondition behavior, invalid token/nonexistent file, incorrect
+fake-bucket key assertions). A recurring cold binding failure was isolated with
+`npm run test:firestore -- --suite contention --repeat 2`: four-way cold starts
+failed, while prebinding made them pass. Conditional create with bounded idempotent
+retry removed root read-lock upgrades and transient create aborts. The unchanged
+concurrency regressions then passed 10 stress cases in
+/tmp/hosted-phase4-contention-stress.log. Temporary probe is outside the repo.
+
+Normal npm run check passed repository/Ruff, 323 Python tests (92 optional skips),
+90 web tests and typecheck, then default Turbopack build failed creating a process/
+port under this environment. Supported production webpack build passed. Explicit
+production-webpack HTTP verification passed studio and frontend-only paths in
+/tmp/hosted-phase4-operations-accepted-http.log. Its initial new runner option also
+passed --webpack to next start; corrected so the flag applies only to production
+build or dev. Default bundler behavior in App Hosting remains a phase 5 live gate,
+not a claimed local pass. Ten infrastructure tests and Terraform fmt/validate pass.
+
+Next: commit substantial slices; run full phase 4 two-axis review against fef5b8a,
+fix every finding, then audit remaining phase 4/5 requirements. No deployment,
+paid inference/provider test, real human approval or publication is authorized yet.

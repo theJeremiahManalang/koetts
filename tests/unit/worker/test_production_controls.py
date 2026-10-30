@@ -14,6 +14,7 @@ class ProductionControlTests(unittest.IsolatedAsyncioTestCase):
     def app(self, permissions=None):
         self.hosted = Mock()
         self.hosted.budget.status.return_value = {"paused": True}
+        self.hosted.production_status.return_value = {"budget": {"paused": True}}
         return create_app(
             BoundaryConfig("demo-controls", "https://api", {
                 "service": frozenset(permissions if permissions is not None else
@@ -57,7 +58,7 @@ class ProductionControlTests(unittest.IsolatedAsyncioTestCase):
                     headers["X-KoeTTS-User-Token"] = credential
                 response = await client.get("/production/status", headers=headers)
                 self.assertEqual(response.status_code, expected)
-            self.hosted.budget.status.assert_called_once_with()
+            self.hosted.production_status.assert_called_once_with()
 
     async def test_pause_records_verified_actor_and_identity_remains_available(self):
         headers = {"Authorization": "Bearer service", "X-KoeTTS-User-Token": "admin"}

@@ -19,6 +19,20 @@ _CHECKSUM = re.compile(r"[a-f0-9]{64}\Z")
 _GENERATION = re.compile(r"[1-9][0-9]*\Z")
 
 
+def _create_namespace(document, value):
+    """Retry only an idempotent create-if-absent namespace publication."""
+    from google.api_core.exceptions import Aborted, AlreadyExists, DeadlineExceeded, ServiceUnavailable
+    from google.api_core.retry import Retry, if_exception_type
+
+    try:
+        document.create(value, retry=Retry(
+            predicate=if_exception_type(Aborted, DeadlineExceeded, ServiceUnavailable),
+            initial=0.05, maximum=1, multiplier=2, timeout=10,
+        ))
+    except AlreadyExists:
+        pass  # The caller must validate the winning namespace before using it.
+
+
 def _document_id(value: str, label: str) -> str:
     if (not isinstance(value, str) or not value or value in {".", ".."}
             or "/" in value or len(value.encode("utf-8")) > 1500):
@@ -95,18 +109,55 @@ class _FirestoreHostedStore:
     def _has_orphan_records(self) -> bool:
         for collection in ("projects", "artifact_references", "operations", "operation_idempotency_keys",
                            "operation_stage_slots", "operation_project_slots", "uploads",
-                           "production_months", "production_admissions", "cloud_budget_v1"):
+                           "production_months", "production_admissions", "cloud_budget_v1", "maintenance", "gc_runs"):
             if list(self.root.collection(collection).limit(1).stream()):
                 return True
         return False
 
+    @property
+    def _artifact_maintenance(self):
+        return self.root.collection("maintenance").document("artifacts")
+
+    def _maintenance_state(self, transaction):
+        snapshot = self._artifact_maintenance.get(transaction=transaction)
+        if not snapshot.exists:
+            return {"schema_version": SCHEMA_VERSION, "epoch": 0, "owner": None, "execution_name": None}
+        state = snapshot.to_dict()
+        if (not isinstance(state, dict) or set(state) != {"schema_version", "epoch", "owner", "execution_name"}
+                or state.get("schema_version") != SCHEMA_VERSION or isinstance(state.get("schema_version"), bool)
+                or not isinstance(state.get("epoch"), int) or isinstance(state.get("epoch"), bool) or state["epoch"] < 1
+                or (state.get("owner") is None) != (state.get("execution_name") is None)
+                or state.get("owner") is not None and
+                (not isinstance(state["owner"], str) or not state["owner"]
+                 or not isinstance(state["execution_name"], str) or not state["execution_name"])):
+            raise ValueError("Corrupt artifact maintenance barrier")
+        return state
+
+    def _assert_artifact_epoch(self, transaction, expected_epoch=None):
+        from manga_tts.operations import OperationConflict
+
+        state = self._maintenance_state(transaction)
+        if state["owner"] is not None:
+            raise OperationConflict("artifact_maintenance", "Artifact cleanup is running. Retry later.")
+        if expected_epoch is not None and state["epoch"] != expected_epoch:
+            raise OperationConflict("artifact_epoch_changed", "Artifact storage changed. Retry the upload or operation.")
+        return state["epoch"]
+
+    def artifact_epoch(self):
+        """Capture an upload/promotion epoch before external artifact I/O."""
+        self.ensure_binding()
+
+        def read(transaction):
+            bound = self._binding(transaction)
+            return self._assert_artifact_epoch(transaction), bound
+
+        return self._run(read)
+
     def ensure_binding(self) -> None:
         """Bind an empty dataset before a domain transaction writes any records."""
-        from google.cloud import firestore
-
-        # Check orphan namespaces before opening the single-document binding
-        # transaction. Keeping collection range reads out of competing root
-        # creation transactions avoids emulator/server lock cycles. All hosted
+        # Check orphan namespaces before conditional binding creation.
+        # Keeping collection range reads out of competing root
+        # creation requests avoids emulator/server lock cycles. All hosted
         # writers initialize first, so no supported writer can add children in
         # this interval without first creating the same root binding.
         snapshot = self.root.get()
@@ -123,18 +174,13 @@ class _FirestoreHostedStore:
                 return
             raise ValueError("Hosted dataset has orphaned records without a namespace binding")
 
-        @firestore.transactional
-        def initialize(transaction):
-            snapshot = self.root.get(transaction=transaction)
-            if snapshot.exists:
-                self._validate_binding(snapshot)
-                return
-            transaction.create(self.root, {
-                "schema_version": SCHEMA_VERSION,
-                "artifact_store_id": self.artifact_store_id,
-            })
-
-        initialize(self.client.transaction())
+        # A conditional create needs no read-lock upgrade. Transient lock
+        # contention retries cannot overwrite a winning namespace identity.
+        _create_namespace(self.root, {
+            "schema_version": SCHEMA_VERSION,
+            "artifact_store_id": self.artifact_store_id,
+        })
+        self._validate_binding(self.root.get())
 
     def _run(self, operation, *, bind_if_missing: bool = False):
         from google.cloud import firestore
@@ -149,6 +195,8 @@ class _FirestoreHostedStore:
             # a namespace that changed between initialization and the write.
             if bind_if_missing and not self._binding(transaction):
                 raise ValueError("Hosted dataset namespace binding is missing")
+            if bind_if_missing:
+                self._assert_artifact_epoch(transaction)
             result, binding_exists = operation(transaction)
             if not binding_exists and self._contains_data(result):
                 raise ValueError("Hosted dataset has records without a namespace binding")
@@ -370,12 +418,13 @@ class FirestoreArtifactReferences(_FirestoreHostedStore):
             raise result
         return result
 
-    def put(self, artifact: ArtifactRef) -> None:
+    def put(self, artifact: ArtifactRef, *, expected_epoch=None) -> None:
         _validate_ref(artifact)
         reference = self._reference(artifact.sha256)
 
         def operation(transaction):
             bound = self._binding(transaction)
+            self._assert_artifact_epoch(transaction, expected_epoch)
             snapshot = reference.get(transaction=transaction)
             if snapshot.exists:
                 existing = self._artifact_from_document(snapshot.to_dict(), artifact.sha256, self.artifact_store_id)

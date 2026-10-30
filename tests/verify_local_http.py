@@ -1,7 +1,7 @@
 """Run S0 HTTP checks in a disposable runtime, preserving repository results.
 
 Use the audio environment's interpreter. Default mode builds and starts production;
---dev skips the build, and --webpack selects an explicit diagnostic dev fallback.
+--dev skips the build; --webpack explicitly verifies the webpack fallback.
 """
 import argparse
 import os
@@ -59,8 +59,8 @@ def main():
     parser.add_argument("--dev", action="store_true")
     parser.add_argument("--webpack", action="store_true")
     args = parser.parse_args()
-    if args.webpack and not args.dev:
-        parser.error("--webpack requires --dev; production verification uses npm run build")
+    if args.webpack:
+        print("Explicit webpack fallback selected; this does not verify App Hosting's default bundler.")
     repo = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="manga-s0-http-") as directory:
         runtime = Path(directory)
@@ -99,7 +99,8 @@ export function getAdminAuth() {
             env["MANGA_FRONTEND_ONLY"] = "1" if frontend_only else "0"
             label = "frontend-only" if frontend_only else "studio"
             if not args.dev:
-                build = subprocess.Popen(["npm", "run", "build"], cwd=runtime / "apps/web", env=env,
+                build_command = ["npm", "run", "build", *(["--", "--webpack"] if args.webpack else [])]
+                build = subprocess.Popen(build_command, cwd=runtime / "apps/web", env=env,
                                          start_new_session=True)
                 try:
                     code = build.wait(timeout=180)
@@ -114,7 +115,7 @@ export function getAdminAuth() {
             server_env = {**env}
             server_env.pop("MANGA_APP_ORIGIN", None)
             command = ["npm", "run", "dev" if args.dev else "start", "--", "--port", str(port)]
-            if args.webpack:
+            if args.webpack and args.dev:
                 command.append("--webpack")
             with (runtime / (label + ".log")).open("w+") as log:
                 server = subprocess.Popen(command, cwd=runtime / "apps/web", env=server_env,

@@ -19,7 +19,11 @@ class CloudBudgetLedgerTests(unittest.TestCase):
         self.client = firestore.Client(project="demo-cloud-budget", database="budget-tests")
         self.addCleanup(self.client.close)
         self.dataset = "budget-" + uuid.uuid4().hex
-        self.store = CloudBudgetLedger(self.client, self.dataset, "gcs-v1:" + uuid.uuid4().hex * 2)
+        self.artifact_store_id = "gcs-v1:" + uuid.uuid4().hex + uuid.uuid4().hex
+        self.store = CloudBudgetLedger(self.client, self.dataset, self.artifact_store_id)
+        from manga_worker.cloud_operations import FirestoreOperationStore
+        self.operations = FirestoreOperationStore(self.client, self.dataset, self.artifact_store_id,
+                                                  budget=self.store)
         self.stage_caps = {
             "magi": {"infrastructure_micro": 5_000_000, "provider_micro": 2_000_000,
                      "provider_call_micro": 500_000, "max_provider_calls": 4},
@@ -136,12 +140,114 @@ class CloudBudgetLedgerTests(unittest.TestCase):
         self.configure()
         self.reserve("reconcile-op")
         with self.assertRaises(CloudBudgetExceeded):
-            self.store.reconcile("operator", "unsafe release", infrastructure_reported_micro=0,
+            self.store.reconcile("operator", "unsafe release", evidence="invoice:unreviewed",
+                                 billing_period="2026-10", infrastructure_reported_micro=0,
                                  infrastructure_reserved_micro=0, provider_reserved_micro=0,
                                  provider_used_micro=0)
-        self.store.reconcile("operator", "invoice closeout", infrastructure_reported_micro=0,
+        self.store.reconcile("operator", "invoice closeout", billing_period="2026-10",
+                             infrastructure_reported_micro=0,
+                             evidence="billing-export:2026-10",
                              infrastructure_reserved_micro=5_000_000, provider_reserved_micro=2_000_000,
                              provider_used_micro=0)
         self.assertEqual(self.store.status()["infrastructure_reserved_micro"], 5_000_000)
+        reported_before = self.store.status()["infrastructure_reported_micro"]
+        ignored = self.store.observe_report("2026-10-01", 500, "late-october-report")
+        self.assertEqual(ignored, {"ignored": True, "reason": "reconciled_billing_period", "paused": False})
+        self.assertEqual(self.store.status()["infrastructure_reported_micro"], reported_before)
+        self.store.observe_report("2026-11-01", 500, "november-report")
         events = list(self.store._events.stream())
         self.assertTrue(any(event.to_dict().get("action") == "reconcile" for event in events))
+
+    def test_settlement_checks_run_execution_and_closes_operation_key_forever(self):
+        self.configure()
+        operation = self.operations.enqueue(
+            idempotency_key="settle-me", payload={"action": "extract"}, project_id="settle-project",
+            stage="magi", revision="rev", source_fingerprint="source",
+            configuration_fingerprint="config")
+        claim = self.operations.claim(operation.operation_id, now=100)
+        self.operations.record_execution(claim, "projects/demo/locations/test/jobs/magi/executions/one")
+        self.operations.register_execution(claim, "projects/demo/locations/test/jobs/magi/executions/one")
+        self.operations.complete(claim, {"ok": True})
+        statuses = []
+
+        def status(name):
+            statuses.append(name)
+            return "succeeded"
+
+        settlement = self.store.settle("operator", "terminal closeout", "settle-me",
+                                       evidence="execution-check:one", operation_store=self.operations,
+                                       execution_status=status)
+        self.assertEqual(statuses, ["projects/demo/locations/test/jobs/magi/executions/one"])
+        self.assertEqual(settlement["provider_released_micro"], 2_000_000)
+        self.assertEqual(self.store.status()["provider_reserved_micro"], 0)
+        self.assertEqual(self.store.status()["infrastructure_reserved_micro"], 5_000_000)
+        self.assertEqual(self.store.status()["provider_used_micro"], 0)
+        self.assertEqual(self.store.inspect("settle-me")["settlement"], settlement)
+        with self.assertRaises(CloudBudgetExceeded):
+            self.store.settle("operator", "duplicate closeout", "settle-me", evidence="execution-check:one",
+                              operation_store=self.operations, execution_status=status)
+        with self.assertRaises(CloudBudgetExceeded):
+            self.store.authorize_provider("settle-me", "late-provider-call")
+        with self.assertRaises(CloudBudgetExceeded):
+            self._attempt_reservation("settle-me", "magi")
+
+    def test_settlement_rejects_queued_or_active_or_unknown_execution(self):
+        self.configure()
+        queued = self.operations.enqueue(
+            idempotency_key="queued", payload={"action": "extract"}, project_id="queued-project",
+            stage="magi", revision="rev", source_fingerprint="source",
+            configuration_fingerprint="config")
+        with self.assertRaises(CloudBudgetExceeded):
+            self.store.settle("operator", "queue cleanup", "queued", evidence="ticket:1",
+                              operation_store=self.operations, execution_status=lambda _: "succeeded")
+        active = self.operations.enqueue(
+            idempotency_key="active", payload={"action": "extract"}, project_id="active-project",
+            stage="pipeline", revision="rev", source_fingerprint="source",
+            configuration_fingerprint="config")
+        claim = self.operations.claim(active.operation_id, now=100)
+        self.operations.record_execution(claim, "projects/demo/locations/test/jobs/pipeline/executions/live")
+        self.operations.register_execution(claim, "projects/demo/locations/test/jobs/pipeline/executions/live")
+        self.operations.mark_provider_call_pending(claim)
+        with self.assertRaises(CloudBudgetExceeded):
+            self.store.settle("operator", "uncertain cleanup", "active", evidence="ticket:2",
+                              operation_store=self.operations, execution_status=lambda _: "active")
+
+    def test_settlement_races_provider_authorization_without_losing_debits(self):
+        self.configure()
+        operation = self.operations.enqueue(
+            idempotency_key="settle-race", payload={"action": "extract"}, project_id="race-project",
+            stage="magi", revision="rev", source_fingerprint="source",
+            configuration_fingerprint="config")
+        claim = self.operations.claim(operation.operation_id, now=100)
+        execution = "projects/demo/locations/test/jobs/magi/executions/race"
+        self.operations.record_execution(claim, execution)
+        self.operations.register_execution(claim, execution)
+        self.operations.complete(claim, {"ok": True})
+
+        def authorize():
+            try:
+                return ("authorized", self.store.authorize_provider("settle-race", "race-call"))
+            except CloudBudgetExceeded:
+                return ("closed", None)
+
+        def settle():
+            try:
+                self.store.settle("operator", "race closeout", "settle-race", evidence="execution-check:race",
+                                  operation_store=self.operations,
+                                  execution_status=lambda _: "succeeded")
+                return "settled"
+            except CloudBudgetExceeded:
+                # Authorization may commit first, forcing a fresh terminal snapshot.
+                return "retry"
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda fn: fn(), (authorize, settle)))
+        if "retry" in results:
+            self.store.settle("operator", "race closeout retry", "settle-race", evidence="execution-check:race",
+                              operation_store=self.operations,
+                              execution_status=lambda _: "succeeded")
+        status = self.store.status()
+        self.assertEqual(status["provider_reserved_micro"], 0)
+        self.assertIn(status["provider_used_micro"], {0, 500_000})
+        self.assertLessEqual(status["provider_reserved_micro"] + status["provider_used_micro"],
+                             status["provider_allowance_micro"])

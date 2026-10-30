@@ -195,7 +195,7 @@ def create_app(
     @app.get("/production/status")
     def production_status(request: Request):
         boundary.authorize(request, "production-status")
-        return cloud_application().budget.status()
+        return cloud_application().production_status()
 
     @app.post("/internal/billing-report")
     async def billing_report(request: Request):
@@ -221,7 +221,7 @@ def create_app(
         operator = json.dumps([actor["project_id"], actor["uid"]], separators=(",", ":"))
         await run_in_threadpool(cloud_application().budget.set_paused, operator, payload["reason"],
                                 paused=payload["paused"])
-        return cloud_application().budget.status()
+        return cloud_application().production_status()
 
     @app.get("/projects")
     def list_projects(request: Request):

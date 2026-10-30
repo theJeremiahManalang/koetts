@@ -188,10 +188,15 @@ class GCSSharedArtifacts:
             return None
 
     def store(self, source: Path) -> str:
+        epoch_reader = getattr(self.references, "artifact_epoch", None)
+        epoch = epoch_reader() if callable(epoch_reader) else None
         artifact = self.artifacts.put_file(Path(source))
         stored = self._reference(artifact.sha256)
         if stored is None:
-            self.references.put(artifact)
+            if epoch is None:
+                self.references.put(artifact)
+            else:
+                self.references.put(artifact, expected_epoch=epoch)
             stored = self._reference(artifact.sha256)
         if stored != artifact:
             raise ValueError("Durable artifact reference conflicts with stored content")

@@ -312,6 +312,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
         configuration_fingerprint: str,
         request_fingerprint: str | None = None,
         admission=None,
+        artifact_epoch=None,
     ) -> Operation:
         if (
             not isinstance(idempotency_key, str)
@@ -387,6 +388,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 return op, bound
             # Admission shares this commit. Existing intent retries return above
             # without consuming capacity again.
+            self._assert_artifact_epoch(tx, artifact_epoch)
             budget_writer = self.budget.prepare_reservation(idempotency_key, stage)(tx) if self.budget else None
             if admission is not None:
                 admission(tx)
@@ -626,6 +628,51 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             return self._attempt(snap, op, claim), bound
 
         return self._run(operation)
+
+    def settlement_snapshot(self, operation_key: str, *, transaction=None) -> dict:
+        """Read immutable execution identities and current settlement eligibility.
+
+        A caller must verify submitted executions with Cloud Run, then compare
+        this snapshot again inside its settlement transaction. No writes occur.
+        """
+        if not isinstance(operation_key, str) or not operation_key:
+            raise ValueError("Operation key is required")
+        key_ref = self.root.collection("operation_idempotency_keys").document(
+            hashlib.sha256(operation_key.encode()).hexdigest()
+        )
+
+        def read(tx):
+            bound = self._binding(tx)
+            key = self._idempotency_record(key_ref.get(transaction=tx), operation_key)
+            op = self._get_tx(tx, key["operation_id"])
+            if op.idempotency_key != operation_key:
+                raise ValueError("Operation key does not match its operation")
+            attempts = []
+            for fence in range(1, op.fence + 1):
+                claim = OperationClaim(op.operation_id, fence)
+                snapshot = self._operation_ref(op.operation_id).collection("attempts").document(str(fence)).get(transaction=tx)
+                # Historical attempts retain their own terminal state; validate
+                # their schema without applying the latest operation's status.
+                historical = replace(op, fence=fence, attempt_count=fence, status="failed")
+                attempt = self._attempt(snapshot, historical, claim)
+                attempts.append({"fence": fence, "state": attempt["state"],
+                                 "execution_name": attempt["execution_name"],
+                                 "submitted": (attempt["dispatch_state"] not in {"pending", "not_submitted"}
+                                               or attempt["execution_name"] is not None or attempt["worker_registered"])})
+            slots = [self._project_ref(op.project_id).get(transaction=tx)]
+            slots.extend(self._slot_ref(op.stage, number).get(transaction=tx)
+                         for number in range(1, self.policy.stage_capacities[op.stage] + 1))
+            active = any(slot.exists and slot.to_dict().get("operation_id") == op.operation_id for slot in slots)
+            return {"operation_id": op.operation_id, "fence": op.fence, "stage": op.stage,
+                    "status": op.status, "provider_outcome_pending": op.provider_outcome_pending,
+                    "attempts": attempts, "active_slot": active}, bound
+
+        if transaction is not None:
+            result, bound = read(transaction)
+            if not bound:
+                raise ValueError("Hosted operation has no namespace binding")
+            return result
+        return self._run(read)
 
     def register_execution(self, claim: OperationClaim, execution_name: str) -> Operation:
         if not isinstance(execution_name, str) or not execution_name.strip():
