@@ -68,6 +68,12 @@ class CloudBudgetExceeded(RuntimeError):
     """A durable cloud budget, pause, or reservation check rejected work."""
 
 
+def _require_production_open(state):
+    if (state["paused"] or state["infrastructure_reported_micro"]
+            + state["infrastructure_reserved_micro"] >= _INFRA_PAUSE):
+        raise CloudBudgetExceeded("Hosted cloud work is paused")
+
+
 class CloudBudgetLedger(_FirestoreHostedStore):
     """Separate Firestore control namespace for conservative cost accounting."""
 
@@ -279,8 +285,7 @@ class CloudBudgetLedger(_FirestoreHostedStore):
         reservation = self._reservation_value(ref.get(transaction=transaction), key)
         if state is None or reservation is None:
             raise CloudBudgetExceeded("Hosted cloud operation has no durable reservation")
-        if state["paused"] or state["infrastructure_reported_micro"] + state["infrastructure_reserved_micro"] >= _INFRA_PAUSE:
-            raise CloudBudgetExceeded("Hosted cloud work is paused")
+        _require_production_open(state)
         return True
 
     def check_dispatch(self, operation_key: str) -> None:
@@ -314,9 +319,7 @@ class CloudBudgetLedger(_FirestoreHostedStore):
                     raise CloudBudgetExceeded("Provider call ID already used")
                 _money(value.get("amount_micro"), "provider call debit")
                 return value["amount_micro"], bound
-            if (state["paused"] or state["infrastructure_reported_micro"]
-                    + state["infrastructure_reserved_micro"] >= _INFRA_PAUSE):
-                raise CloudBudgetExceeded("Hosted cloud work is paused")
+            _require_production_open(state)
             amount = reservation["provider_call_micro"]
             if (reservation["provider_calls_used"] >= reservation["max_provider_calls"]
                     or amount > reservation["provider_remaining_micro"]

@@ -224,3 +224,26 @@ Required HTTP acceptance is running as session 23432, log
 `/tmp/hosted-phase4-budget-http.log`; collect its terminal result before claiming it.
 The cost-controls documentation explicitly records unimplemented settlement and
 notification/operational work. This slice does not close phase 4.
+
+## Phase 4 slice review and billing ingestion follow-up
+
+Budget controls committed as `34dc01c`; rollout records as `b6ba4f4`.
+Independent review of `fef5b8a...34dc01c`: Standards found zero documented
+violations and one optional duplicated pause predicate; Spec found zero reportable
+findings and explicitly left the remaining phase 4 requirements open. The shared
+pause guard resolves the Standards finding. Final budget HTTP checks passed studio
+and frontend-only paths (`/tmp/hosted-phase4-budget-http.log`).
+
+Authenticated billing-report ingestion is implemented offline in `cloud_billing.py`
+and `/internal/billing-report`. It requires a dedicated service permission and
+validates the exact Pub/Sub subscription, billing account, budget/schema identity,
+USD20 budget, decimal costs, UTC-normalized interval and message idempotency. It
+never uses Firebase impersonation. Eleven focused validation/control tests pass.
+Official Cloud Billing notification documentation was consulted directly; live
+budget/topic/subscription creation and alert delivery remain unverified.
+
+Normal acceptance after notification changes is session 83587, log
+`/tmp/hosted-phase4-billing-check.log`. No live cloud mutation or paid call occurred.
+Remaining scope still includes settlement/operator tooling, product quota visibility,
+reference-aware cleanup with promotion-race safety, narrow IAM/infrastructure/secrets,
+rollback acceptance, and full phase 4 review before proceeding to gated phase 5.
