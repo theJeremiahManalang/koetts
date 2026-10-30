@@ -244,6 +244,25 @@ def _source_file_hash(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
+def _manifest_checksums(manifest):
+    return None if manifest is None else {
+        relative: entry.artifact.sha256 for relative, entry in manifest.entries.items()
+    }
+
+
+def _artifact_checksum(path: Path, root: Path, checksums: dict[str, str] | None) -> str | None:
+    if checksums is None:
+        return _source_file_hash(path)
+    try:
+        return checksums.get(path.relative_to(root).as_posix())
+    except ValueError:
+        return None
+
+
+def _artifact_exists(path: Path, root: Path, checksums: dict[str, str] | None) -> bool:
+    return path.is_file() if checksums is None else _artifact_checksum(path, root, checksums) is not None
+
+
 def operation_source_fingerprint(request: dict[str, Any], *, root: Path | None = None,
                                  source_checksums: dict[str, str] | None = None,
                                  project_data: dict[str, Any] | None = None) -> str:
@@ -252,13 +271,7 @@ def operation_source_fingerprint(request: dict[str, Any], *, root: Path | None =
     metadata_only = source_checksums is not None
 
     def checksum(path: Path) -> str | None:
-        if metadata_only:
-            try:
-                relative = path.relative_to(root).as_posix()
-            except ValueError:
-                return None
-            return source_checksums.get(relative)
-        return _source_file_hash(path)
+        return _artifact_checksum(path, root, source_checksums)
 
     def exists(path: Path) -> bool:
         return checksum(path) is not None
@@ -590,18 +603,10 @@ def source_signature(data):
 
 
 def workflow_status(data, root, manifest=None):
-    checksums = None if manifest is None else {
-        path: entry.artifact.sha256 for path, entry in manifest.entries.items()
-    }
+    checksums = _manifest_checksums(manifest)
 
     def file_checksum(path: Path) -> str | None:
-        if checksums is not None:
-            try:
-                relative = path.relative_to(root).as_posix()
-            except ValueError:
-                return None
-            return checksums.get(relative)
-        return _source_file_hash(path)
+        return _artifact_checksum(path, root, checksums)
 
     ready = []
     for scene in data["scenes"]:
@@ -628,17 +633,10 @@ def workflow_status(data, root, manifest=None):
 
 def snapshot(router, manifest=None):
     data = schemas.dump(router.project)
-    checksums = None if manifest is None else {
-        path: entry.artifact.sha256 for path, entry in manifest.entries.items()
-    }
+    checksums = _manifest_checksums(manifest)
 
     def exists(path: Path) -> bool:
-        if checksums is None:
-            return path.is_file()
-        try:
-            return path.relative_to(router.root).as_posix() in checksums
-        except ValueError:
-            return False
+        return _artifact_exists(path, router.root, checksums)
 
     pages = []
     for page in data["chapter"]["pages"]:
