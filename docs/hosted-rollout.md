@@ -112,3 +112,31 @@ production dispatch and GC scheduling, confirm workers and collector executions
 are stopped, and resolve any held GC barrier with a compatible candidate
 revision before serving the prior API. Keep production paused until a compatible
 revision with the required GC and provider controls is restored and verified.
+
+
+### Read-only preflight — 2026-10-30
+
+Cloud Run list/describe queries against `koetts-9bf7f`, `us-east4` returned:
+
+- App Hosting service `koetts` serves 100% traffic from
+  `koetts-build-2026-10-21-002`; older tagged revisions also exist.
+- Private API `koetts-s3-api` already exists and serves revision
+  `koetts-s3-api-00001-gl5`. Its resolved image is
+  `us-east4-docker.pkg.dev/koetts-9bf7f/firebaseapphosting-images/koetts-s3-api@sha256:bd5cf2fac59d9733ee408d847eb80b6795ab9c40b7840534b06163d336a43cc2`.
+- The regional Cloud Run jobs list is empty.
+
+These observations are timestamped preparation, not immutable rollout targets;
+refresh them before deployment. In particular, the infrastructure default
+`api_service_name = "koetts-s3-api"` collides with an existing service. Do not
+apply the offline configuration unchanged or assume the API is absent. Before
+rollout, explicitly choose either a separately named candidate API or reviewed
+adoption of the existing service and its configuration/IAM into managed state.
+The existing API must remain available until that choice and rollback are approved.
+
+The Docker command resolves to a Windows Docker Desktop shim but cannot contact
+an engine from this WSL distribution. Local container builds are therefore not
+currently available. An authorized build must use a working local engine or an
+explicitly approved remote build path with its costs included in the test cap.
+No builds, deployments, paid inference, IAM changes, or secret reads occurred in
+this preflight. Ordinary CLI credential/log-cache access required sandbox
+escalation; the read-only cloud queries succeeded.

@@ -92,3 +92,17 @@ billing/CPU-quality/provider-cost acceptance proven. No automatic publication.
 Record actual revisions, commands, costs and acceptance evidence during authorized
 phase 5. Keep provider balance explicit and production/schedulers paused until
 acceptance. Ask for consequential new decisions; implementation approval persists.
+
+
+## Read-only preflight continuation
+
+Previous goal turn made progress: phase 4 reviews closed and evidence committed
+as 1cc6e42. Separate phase 5 approval and incremental spending cap were requested;
+no answer has arrived. This continuation did not interpret automation as approval.
+Read-only gcloud queries now establish existing web revision
+koetts-build-2026-10-21-002 (100%), existing API revision koetts-s3-api-00001-gl5
+and its immutable image (recorded in docs/hosted-rollout.md), and no regional jobs.
+Terraform's API default collides with that existing service. Ask whether to use a
+new candidate API (recommended) or adopt existing resources under reviewed import;
+do not apply unchanged. Local Docker is an unavailable WSL Desktop shim. Remote
+builds also require deployment/test cost authorization. No cloud state changed.
