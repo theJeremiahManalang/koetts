@@ -329,3 +329,19 @@ not a claimed local pass. Ten infrastructure tests and Terraform fmt/validate pa
 Next: commit substantial slices; run full phase 4 two-axis review against fef5b8a,
 fix every finding, then audit remaining phase 4/5 requirements. No deployment,
 paid inference/provider test, real human approval or publication is authorized yet.
+
+## Full phase 4 review
+
+Candidate commits: b0578df infrastructure, 12d8b01 operational settlement/GC,
+8cbd95f hosted admin controls. Independent review against fef5b8a found no
+Standards hard violations, three optional maintainability findings, and one Spec
+P2 acceptance gap. Standards fixes centralize GCS identity hashing, use one
+BillingPeriod value for CLI/report/closeout validation, and expose maintenance
+status through its owner. Twenty focused tests plus Ruff/diff checks pass.
+
+Spec requires failure-injected offline rollback evidence beyond record syntax and
+runbook prose. A bounded worker owns tests/integration/test_cloud_rollback.py and
+rollback runbook additions: actual prior source fef5b8a reads candidate durable
+state after interrupted-GC recovery, under read-only service permissions with
+production disabled. Parent will verify emulator acceptance and review the result
+before closing phase 4. No live validation has been authorized or performed.

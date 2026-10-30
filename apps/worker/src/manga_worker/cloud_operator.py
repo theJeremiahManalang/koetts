@@ -6,14 +6,14 @@ configuration validation and only when ``--execute`` is present.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
 from pathlib import Path
 
 from .cloud import CloudSettings
-from .cloud_budget import CloudBudgetLedger, _key, _money, _operator, _stage_config
+from .cloud_artifacts import artifact_store_identity
+from .cloud_budget import BillingPeriod, CloudBudgetLedger, _key, _money, _operator, _stage_config
 
 
 def _parser():
@@ -66,8 +66,7 @@ def _validate(args):
     elif args.command == "inspect":
         _key(args.operation_key, "operation key")
     elif args.command == "reconcile":
-        if (not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", args.billing_period)):
-            raise ValueError("Billing period must use YYYY-MM format")
+        args.billing_period = BillingPeriod(args.billing_period).value
         for field in ("infrastructure_reported_micro", "infrastructure_reserved_micro",
                       "provider_reserved_micro", "provider_used_micro"):
             _money(getattr(args, field), field)
@@ -86,15 +85,11 @@ def _validate(args):
     return args
 
 
-def _artifact_store_id(settings):
-    return "gcs-v1:" + hashlib.sha256((settings.bucket + "\0" + settings.namespace).encode()).hexdigest()
-
-
 def _connect(settings):
     """Create Firestore client only after all local validation and explicit execution."""
     from google.cloud import firestore
     client = firestore.Client(project=settings.project, database=settings.database)
-    return client, CloudBudgetLedger(client, settings.dataset, _artifact_store_id(settings))
+    return client, CloudBudgetLedger(client, settings.dataset, artifact_store_identity(settings.bucket, settings.namespace))
 
 
 def _plan(args):
@@ -126,7 +121,7 @@ def _execute(args):
         elif args.command == "settle":
             from .cloud_jobs import CloudRunJobs
             from .cloud_operations import FirestoreOperationStore
-            operations = FirestoreOperationStore(client, settings.dataset, _artifact_store_id(settings))
+            operations = FirestoreOperationStore(client, settings.dataset, artifact_store_identity(settings.bucket, settings.namespace))
             jobs = CloudRunJobs(settings.project, args.region, args.job_names)
             result = ledger.settle(args.actor, args.reason, args.operation_key, evidence=args.evidence,
                                    operation_store=operations, execution_status=jobs.status)

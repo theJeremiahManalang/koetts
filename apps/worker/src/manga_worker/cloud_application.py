@@ -70,17 +70,10 @@ class CloudApplication:
         return identifier(value)
 
     def production_status(self):
-        def read(transaction):
-            bound = self.stores.revisions._binding(transaction)
-            state = self.stores.revisions._maintenance_state(transaction) if bound else None
-            return state, bound
-
-        maintenance = self.stores.revisions._run(read)
         return {"budget": self.budget.status(), "chapter_quota": self.admission.status(),
                 "reader_limits": {"pending": self.shared_requests.intake_policy.max_pending,
                                   "new_per_utc_day": self.shared_requests.intake_policy.max_new_per_utc_day},
-                "artifact_collection": {"active": maintenance is not None and maintenance["owner"] is not None,
-                                        "epoch": maintenance["epoch"] if maintenance else 0}}
+                "artifact_collection": self.stores.revisions.artifact_maintenance_status()}
 
     @staticmethod
     def _actor(actor: dict, project: str) -> dict:

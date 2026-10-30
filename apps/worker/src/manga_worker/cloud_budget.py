@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
 
 from .cloud_revisions import SCHEMA_VERSION, _FirestoreHostedStore
 
@@ -17,6 +19,31 @@ _PROVIDER_ALLOWANCE_MAX = 80 * _MICROS_PER_USD
 _INFRA_PAUSE = 15 * _MICROS_PER_USD
 _ALERTS = (10 * _MICROS_PER_USD, _INFRA_PAUSE, 20 * _MICROS_PER_USD)
 _STAGES = {"magi", "pipeline"}
+
+
+@dataclass(frozen=True)
+class BillingPeriod:
+    """One validated UTC billing month used by reports and explicit closeout."""
+
+    value: str
+
+    def __post_init__(self):
+        if not isinstance(self.value, str) or not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", self.value):
+            raise ValueError("Billing period must use YYYY-MM format")
+        date.fromisoformat(self.value + "-01")
+
+    @classmethod
+    def from_interval(cls, value):
+        if not isinstance(value, str) or not re.match(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:$|T)", value):
+            raise ValueError("Infrastructure report requires an ISO date or aware timestamp")
+        if len(value) == 10:
+            start = date.fromisoformat(value)
+        else:
+            instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if instant.tzinfo is None or instant.utcoffset() is None:
+                raise ValueError("Infrastructure report requires an aware timestamp")
+            start = instant.astimezone(timezone.utc).date()
+        return cls(f"{start.year:04d}-{start.month:02d}")
 
 
 def _money(value, label: str, *, maximum: int | None = None) -> int:
@@ -518,11 +545,7 @@ class CloudBudgetLedger(_FirestoreHostedStore):
         interval_start = _key(interval_start, "report interval", document_id=True)
         event_id = _key(event_id, "report event ID")
         amount = _money(reported_micro, "reported infrastructure cost")
-        month = interval_start[:7]
-        if (len(interval_start) < 10 or interval_start[4:5] != "-" or interval_start[7:8] != "-"
-                or not interval_start[:4].isdigit() or not interval_start[5:7].isdigit()
-                or not 1 <= int(interval_start[5:7]) <= 12):
-            raise ValueError("Infrastructure report interval must begin with an ISO date")
+        month = BillingPeriod.from_interval(interval_start).value
         interval_ref = self._intervals.document(interval_start)
         closed_month_ref = self._closed_infra_months.document(month)
         event_ref = self._events.document(hashlib.sha256(("report\0" + event_id).encode()).hexdigest())
@@ -601,10 +624,7 @@ class CloudBudgetLedger(_FirestoreHostedStore):
         """
         actor, reason = _operator(actor, reason)
         evidence = _key(evidence, "billing reconciliation evidence")
-        if (not isinstance(billing_period, str) or len(billing_period) != 7
-                or not billing_period[:4].isdigit() or billing_period[4:5] != "-"
-                or not billing_period[5:7].isdigit() or not 1 <= int(billing_period[5:7]) <= 12):
-            raise ValueError("Billing period must use YYYY-MM format")
+        billing_period = BillingPeriod(billing_period).value
         values = {"infrastructure_reported_micro": _money(infrastructure_reported_micro, "reported infrastructure cost"),
                   "infrastructure_reserved_micro": _money(infrastructure_reserved_micro, "infrastructure reservations"),
                   "provider_reserved_micro": _money(provider_reserved_micro, "provider reservations"),

@@ -27,6 +27,14 @@ def _namespace(value: str) -> str:
     return value
 
 
+def artifact_store_identity(bucket_name: str, namespace: str) -> str:
+    """Compute stable cloud identity without initializing a storage client."""
+    if not isinstance(bucket_name, str) or not bucket_name:
+        raise ValueError("A named GCS bucket is required")
+    _namespace(namespace)
+    return "gcs-v1:" + hashlib.sha256((bucket_name + "\0" + namespace).encode()).hexdigest()
+
+
 def _validate_ref(ref: ArtifactRef) -> None:
     if not isinstance(ref, ArtifactRef) or not _GENERATION.fullmatch(ref.generation) or not _CHECKSUM.fullmatch(ref.sha256):
         raise ValueError("Invalid artifact reference")
@@ -56,8 +64,7 @@ class GCSArtifactStore:
 
     @property
     def artifact_store_id(self) -> str:
-        identity = hashlib.sha256((self.bucket_name + "\0" + self.namespace).encode()).hexdigest()
-        return "gcs-v1:" + identity
+        return artifact_store_identity(self.bucket_name, self.namespace)
 
     def _object_name(self, checksum: str) -> str:
         if not _CHECKSUM.fullmatch(checksum):

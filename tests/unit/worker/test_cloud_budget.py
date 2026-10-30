@@ -1,9 +1,20 @@
 import unittest
 
-from manga_worker.cloud_budget import _key, _money, _operator, _stage_config
+from manga_worker.cloud_budget import BillingPeriod, _key, _money, _operator, _stage_config
 
 
 class CloudBudgetValidationTests(unittest.TestCase):
+    def test_billing_period_is_shared_by_closeout_and_utc_report_normalization(self):
+        self.assertEqual(BillingPeriod("2026-10").value, "2026-10")
+        self.assertEqual(BillingPeriod.from_interval("2026-10-01").value, "2026-10")
+        self.assertEqual(BillingPeriod.from_interval("2026-11-01T00:00:00+08:00").value, "2026-10")
+        for value in ("2026-1", "2026-13", "0000-01", True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                BillingPeriod(value)
+        for value in ("2026-02-30", "2026-W01-1", "2026-10-01T00:00:00", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                BillingPeriod.from_interval(value)
+
     def test_money_accepts_only_nonnegative_integer_micros(self):
         self.assertEqual(_money(12, "amount"), 12)
         for value in (True, -1, 1.0, float("nan"), float("inf"), "10"):

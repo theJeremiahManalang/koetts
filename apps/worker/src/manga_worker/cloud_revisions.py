@@ -153,6 +153,16 @@ class _FirestoreHostedStore:
 
         return self._run(read)
 
+    def artifact_maintenance_status(self):
+        """Expose collection availability without creating namespace records."""
+        def read(transaction):
+            bound = self._binding(transaction)
+            return self._maintenance_state(transaction) if bound else None, bound
+
+        state = self._run(read)
+        return {"active": state is not None and state["owner"] is not None,
+                "epoch": state["epoch"] if state else 0}
+
     def ensure_binding(self) -> None:
         """Bind an empty dataset before a domain transaction writes any records."""
         # Check orphan namespaces before conditional binding creation.
