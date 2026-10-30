@@ -88,7 +88,8 @@ async def _json_request(request: Request, limit=MAX_OPERATION_BYTES):
 
 
 def create_app(
-    config=None, *, service_verifier=None, user_verifier=None, workflow=None, coordinator=None, hosted=None
+    config=None, *, service_verifier=None, user_verifier=None, workflow=None, coordinator=None, hosted=None,
+    billing_config=None,
 ):
     config = config or BoundaryConfig.from_environment()
     boundary = CredentialBoundary(config, service_verifier, user_verifier)
@@ -195,6 +196,21 @@ def create_app(
     def production_status(request: Request):
         boundary.authorize(request, "production-status")
         return cloud_application().budget.status()
+
+    @app.post("/internal/billing-report")
+    async def billing_report(request: Request):
+        boundary.authorize(request, "budget-report", user=False)
+        if config.mode != "cloud":
+            raise HTTPException(503, "Hosted billing reports unavailable")
+        from .cloud_billing import BillingNotificationConfig, parse_billing_notification
+
+        notification_config = billing_config or BillingNotificationConfig.from_environment()
+        if not notification_config.subscription.startswith(f"projects/{config.project_id}/subscriptions/"):
+            raise HTTPException(503, "Hosted billing subscription configuration mismatch")
+        envelope = await _json_request(request, limit=32_000)
+        interval, cost, event_id = parse_billing_notification(envelope, notification_config)
+        await run_in_threadpool(cloud_application().budget.observe_report, interval, cost, event_id)
+        return {"accepted": True}
 
     @app.post("/production/pause")
     async def production_pause(request: Request):

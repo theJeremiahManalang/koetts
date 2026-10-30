@@ -247,3 +247,18 @@ Normal acceptance after notification changes is session 83587, log
 Remaining scope still includes settlement/operator tooling, product quota visibility,
 reference-aware cleanup with promotion-race safety, narrow IAM/infrastructure/secrets,
 rollback acceptance, and full phase 4 review before proceeding to gated phase 5.
+
+## Latest retained evidence
+
+Notification acceptance passed: `/tmp/hosted-phase4-billing-check.log` reports
+291 Python tests with 79 optional skips, 86 web tests, repository/Ruff checks,
+typecheck and production build. Billing-specific validation/control tests also
+passed independently (11). HTTP acceptance for the new notification endpoint is
+session 52303, `/tmp/hosted-phase4-billing-http.log`; its result is pending.
+
+The earlier approved-work browser worker reported successful rendered QA, but the
+reported `/tmp/hosted-approved-work-browser-evidence.json` is not present in this
+runtime. Preserve that distinction: the worker report is recorded, its temporary
+artifact is unavailable. Recreate retained browser evidence during the remaining
+product-visibility/rollout verification rather than treating the missing path as
+current proof. No UI source changed in this turn.

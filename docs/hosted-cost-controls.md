@@ -40,7 +40,8 @@ reservations would reach USD 15, or when the separate provider allowance cannot
 cover the reservation. Infrastructure reports accumulate interval highwater marks;
 duplicate or lower out-of-order reports cannot reduce costs or clear a pause.
 USD 10, 15 and 20 thresholds are exposed as alert configuration. Delivery of actual
-Cloud Billing notifications is a separate phase 4 integration requirement.
+Cloud Billing notifications requires separately provisioned budget alerts and a
+Pub/Sub push subscription; no live delivery is established by offline tests.
 
 `GET /production/status` requires the private service's `production-status`
 permission and a verified Firebase administrator. `POST /production/pause`
@@ -49,6 +50,23 @@ body is `{ "paused": true, "reason": "operator explanation" }`; the actor is
 derived from verified claims. Resume uses `paused: false` and a new reason.
 Resume does not bypass exhausted reservation limits. Budget configuration and
 provider allowance changes remain developer operations, not browser-admin APIs.
+
+`POST /internal/billing-report` accepts authenticated Pub/Sub push envelopes. The
+push identity needs only the private service's `budget-report` permission; this
+path does not impersonate a Firebase user. Configure the exact expected
+`MANGA_BILLING_ACCOUNT_ID`, `MANGA_BILLING_BUDGET_ID`, and
+`MANGA_BILLING_SUBSCRIPTION`. The subscription must belong to the API project.
+Provision its OIDC token with the canonical private service audience and preserve
+the standard Authorization header for the independent credential verifier.
+
+The envelope must match the configured subscription, billing account, budget and
+schema version `1.0`. Its decoded report must use USD and the USD 20 pilot budget.
+Cost amounts are parsed as decimals and rounded upward to micro-units; credits
+cannot lower accepted highwater costs. RFC3339 interval offsets are normalized to
+UTC. Pub/Sub message identity provides idempotency. Invalid identities, malformed
+payloads, duplicate JSON fields and non-finite amounts are rejected before ledger
+ingestion. These fields follow the official [Cloud Billing notification format](https://docs.cloud.google.com/billing/docs/how-to/budgets-programmatic-notifications);
+payload checks supplement the verified OIDC identity and never replace it.
 
 Production pause does not gate identity, reader requests, published catalog, or
 private published-audio retrieval. HTTP budget denials return a sanitized 429

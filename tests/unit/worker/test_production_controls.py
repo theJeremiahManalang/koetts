@@ -6,6 +6,8 @@ import httpx
 
 from manga_worker.http_api import create_app
 from manga_worker.http_auth import BoundaryConfig
+from manga_worker.cloud_billing import BillingNotificationConfig
+from tests.unit.worker import test_cloud_billing as billing_fixtures
 
 
 class ProductionControlTests(unittest.IsolatedAsyncioTestCase):
@@ -23,8 +25,29 @@ class ProductionControlTests(unittest.IsolatedAsyncioTestCase):
             user_verifier=lambda token, session: {
                 "sub": "verified-user", "iss": "https://securetoken.google.com/demo-controls",
                 "aud": "demo-controls", "admin": token == "admin",
-            }, hosted=self.hosted,
+            }, hosted=self.hosted, billing_config=BillingNotificationConfig(
+                "ABC123-DEF456-ABC789", "pilot-budget", "projects/demo-controls/subscriptions/hosted-budget",
+            ),
         )
+
+    async def test_billing_push_requires_dedicated_service_permission_and_no_user_impersonation(self):
+        fixture = billing_fixtures.BillingNotificationTests()
+        fixture.setUp()
+        payload = fixture.envelope()
+        headers = {"Authorization": "Bearer service"}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app()), base_url="http://test") as client:
+            self.assertEqual((await client.post("/internal/billing-report", headers=headers,
+                                               json=payload)).status_code, 403)
+            self.hosted.budget.observe_report.assert_not_called()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app({"budget-report"})), base_url="http://test") as client:
+            self.assertEqual((await client.post("/internal/billing-report", headers=headers,
+                                               json=payload)).status_code, 200)
+            args = self.hosted.budget.observe_report.call_args.args
+            self.assertEqual(args[:2], ("2026-10-01T07:00:00Z", 15_000_001))
+            payload["subscription"] = "projects/another/subscriptions/hosted-budget"
+            self.assertEqual((await client.post("/internal/billing-report", headers=headers,
+                                               json=payload)).status_code, 400)
+            self.hosted.budget.observe_report.assert_called_once()
 
     async def test_status_denies_missing_user_and_reader_before_backend(self):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app()), base_url="http://test") as client:
