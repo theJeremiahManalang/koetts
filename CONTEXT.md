@@ -205,3 +205,9 @@ central; Firestore nam5; private service/user identity, exact-generation artifac
 provider-only pipeline key, reference-aware GC, no implicit deployment claims.
 Added documentation links. Preserve unrelated untracked infra/hosted/graph.png.
 No cloud changes, paid calls or inference.
+
+Visualization committed b45f0b9. All three Mermaid blocks parse with Mermaid
+11.12.2 using temporary /tmp/koetts-mermaid-validation dependencies; no project
+dependencies changed. Repository and whitespace checks pass. Independent
+Standards/Spec reviews against 3ef8b6a report no findings. Rendering screenshots
+were not produced. Unrelated untracked infra/hosted/graph.png remains untouched.
