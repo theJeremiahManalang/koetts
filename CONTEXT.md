@@ -187,3 +187,9 @@ recorded as expected end state in the hosted plan and rollout runbook. Existing
 Firestore stays nam5. No App Hosting config/public URL, cloud resources or live
 traffic changed. Free-tier review updated: storage/processing colocated, initial
 frontend-to-API traffic crosses regions. Deployment/cost approval remains pending.
+
+Regional placement committed 2a82167. Ten infrastructure tests plus repository and
+whitespace checks pass. Both review axes found one stale sentence describing the
+delta as bucket-only; corrected to include API/jobs/Scheduler and storage. No
+Terraform apply or live migration. Schema validation was not rerun because the
+prior temporary Terraform binary is absent; this delta only changes defaults.

@@ -56,8 +56,8 @@ network charges until migration. Eligible placement alone does not guarantee
 free delivery.
 [Cloud Storage pricing](https://cloud.google.com/storage/pricing).
 
-This changes only new bucket configuration. No existing bucket was relocated or
-created. The earlier `us-east4` storage exclusion is resolved for the default new
+This changes configuration for new backend resources: API/jobs, Scheduler and
+artifact storage. No existing service or bucket was relocated or created. The earlier `us-east4` storage exclusion is resolved for the default new
 artifact bucket, while compute, operation, storage-volume and transfer limits
 still need measured usage evidence.
 
