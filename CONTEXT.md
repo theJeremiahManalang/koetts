@@ -247,3 +247,31 @@ never ADC proof. Hosted calls retain one durable retry authority and SDK attempt
 All test runners that previously cleared provider keys now also clear project to
 keep accidental ADC inference disabled. Prior research TTS uncertainty resolved
 from current3.8 docs (generate_content unary completeWAV); no live claims.
+
+
+## GCP Gemini migration acceptance
+
+Implemented d9eb6f1 and review fixes821c02e against baselineccbb728. Independent
+Spec found pipeline execution environment accidentally removed and stale audio
+API-key guidance; Standards found duplicated WAV policy and same stale guidance.
+All fixed and both follow-ups report no remaining findings. Executionidentity
+uses compute region while inference uses us. SharedWAVpolicy retains validated
+24kHz/mono/16bit and truncated/empty checks. SDK2.33 actualHTTPwiretests use
+syntheticcredentials+MockTransport andverifyexacttext/style/voices/auth; noADC
+network or live modelcall. Project/location blankinputs rejectearly.
+
+Checks: repository/Ruff/Python/web90/typecheck final command bundle exit0. Initial
+normalcheck logged330Pythonpass93optional skips before two additionalSDKtests
+and blank-config test; those additions pass in final acceptance. Firestore
+104tests pass /tmp/gcp-gemini-firestore.log. ProductionwebpackHTTP studio+
+frontend-only pass /tmp/gcp-gemini-http.log. DefaultTurbopack fails process/port
+Operationnotpermitted (/tmp/gcp-gemini-check.log), notclaimedpass. Terraform
+fmt/schema validate passes escalated; worker sandboxplugin handshake failure
+resolved withoutcodechanges. ThreeupdatedMermaiddiagrams parse.
+
+Billing limitation now explicit in hosted-cost-controls: Gemini charges sameGCP
+project, providerledger allowance notDeveloperAPIcredit. ProjectfilteredUSD20
+budget includesmodelspend; conservativepausecanoccurbeforeproviderallowanceused.
+Separateinfrastructure-onlybillingattribution requireslivepreflight/decision,
+notunverifiedsubtraction. No cloudapply/deploy/paidcall/userapproval/publication.
+Migrationimplementationcompleteoffline; phase5liveauthorization/capstillpending.

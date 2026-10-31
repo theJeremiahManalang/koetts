@@ -136,3 +136,16 @@ or initialize inference/provider clients. Never delete a ledger to reset a budge
 Billing reports are delayed. Login, playback, storage, builds, existing executions
 and other services can continue accruing charges while production is paused.
 The USD 10 target and desired USD 20 ceiling remain operating goals, not guarantees.
+
+
+## GCP service-identity billing attribution
+
+Gemini now uses the pipeline service identity and bills the configured GCP model
+project. The separate provider ledger is an application allowance, not transferred
+Developer API credit or a separate billing account. The current Terraform budget
+filters the entire project, so reported spend can include Gemini model charges
+alongside infrastructure. This is conservative: production can pause before the
+provider ledger allowance is exhausted. It does not establish separate
+infrastructure-only USD 20 billing enforcement. Before live activation, review
+actual service/SKU attribution and decide whether separate service-filtered
+budgets are needed; do not subtract estimated model charges from accepted reports.
