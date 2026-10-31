@@ -58,13 +58,13 @@ Python tests are grouped under `tests/unit/{engine,vision,worker}` and `tests/in
 
 Optional external-project compatibility uses `MANGA_TTS_SAMPLE_PROJECT`; standalone HTTP integration uses `MANGA_WEB_TEST_URL`. The disposable HTTP runner supplies its own temporary server and fake identity adapter. It copies source and Node dependencies, creates a frozen uv environment, clears provider keys, and preserves repository results. Loopback and child processes must be permitted. Its `--dev` option checks development transport rather than production compilation.
 
-Use [contribution guidance](../CONTRIBUTING.md) for review and dependency changes. [Architecture](architecture.md) defines ownership; [audio workflow](AUDIO_WORKFLOW.md) defines review and recovery. Static import checks enforce package direction and route/feature separation.
+Use [contribution guidance](../CONTRIBUTING.md) for review and dependency changes. [Architecture](../docs/ARCHITECTURE.md) defines ownership; [audio workflow](AUDIO_WORKFLOW.md) defines review and recovery. Static import checks enforce package direction and route/feature separation.
 
 ## Troubleshooting
 
 For runtime-engine errors, select the pinned Node version before reinstalling dependencies. For missing Python modules, run `uv sync --frozen`; installing Node dependencies does not install Python packages. For workspace conflicts, reload saved state and follow workflow recovery rather than bypassing fingerprints or locks. For build port restrictions, rerun in an environment permitting local build processes with a fresh generated cache.
 
-[App Hosting](APP_HOSTING.md) covers frontend-only hosting. [Private API deployment](S3_DEPLOYMENT.md) covers its separate service image. Build/configuration updates do not authorize deployment.
+[App Hosting](APP_HOSTING.md) covers frontend-only hosting. [Private API deployment](../docs/archive/S3_DEPLOYMENT.md) covers its separate service image. Build/configuration updates do not authorize deployment.
 
 ## Migration from the flat checkout
 
@@ -198,7 +198,7 @@ those skips are not Firestore acceptance evidence.
 
 ## Cloud persistence adapters
 
-The hosted pilot specification is [the hosted service plan](hosted-service-plan.md).
+The hosted pilot specification is [the hosted service plan](../docs/plans/hosted-service-plan.md).
 Cloud persistence adapters are optional worker dependencies:
 
 ```bash

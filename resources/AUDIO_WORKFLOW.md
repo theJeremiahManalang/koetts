@@ -1,14 +1,14 @@
 # Manga panels to reviewed audio
 
 The Python CLI and local Next.js studio share a per-project single-writer engine.
-Start with [developer setup](development.md). Firebase identity protects studio access;
+Start with [developer setup](DEVELOPMENT.md). Firebase identity protects studio access;
 local SQLite and filesystem workers coordinate production on one host. Hosted API,
 jobs and storage have implementation and target configuration, but phase-5 live
 workflow and paid-provider validation have not run.
 
 ## Environment
 
-Follow [developer setup](development.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us` with ADC for planning and synthesis; hosted execution uses the pipeline service identity. The engine uses Google Gen AI SDK 2.33+ in enterprise mode, `generate_content`, and the configured `gemini-3.8-flash` / `gemini-3.8-flash-tts` models. Offline fixtures verify request mapping and unary WAV output handling; no live provider call has established project access, quality, or cost. `provider_configured` means only that a project ID is configured.
+Follow [developer setup](DEVELOPMENT.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us` with ADC for planning and synthesis; hosted execution uses the pipeline service identity. The engine uses Google Gen AI SDK 2.33+ in enterprise mode, `generate_content`, and the configured `gemini-3.8-flash` / `gemini-3.8-flash-tts` models. Offline fixtures verify request mapping and unary WAV output handling; no live provider call has established project access, quality, or cost. `provider_configured` means only that a project ID is configured.
 
 The web studio persists operations in `results/web/operations.sqlite3` before
 returning an operation ID. This local SQLite scheduler allows one MAGI operation and

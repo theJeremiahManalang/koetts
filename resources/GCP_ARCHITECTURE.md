@@ -1,4 +1,4 @@
-# Phase 5 hosted infrastructure
+# GCP architecture — phase 5 hosted infrastructure
 
 This is the intended deployment topology, not evidence that phase 5 is deployed.
 It reflects the latest placement decisions: new API, jobs, Scheduler and artifact
@@ -168,6 +168,6 @@ provide the finer boundaries. The frontend identity, production workers,
 coordinator caller, billing push caller, collector caller, collector and operator
 have distinct permissions; the diagram groups these identities into their workloads.
 
-See [infrastructure configuration](hosted-infrastructure.md),
-[hosted plan](hosted-service-plan.md), [rollout and migration](hosted-rollout.md),
-[cost controls](hosted-cost-controls.md), and [free-tier assessment](hosted-free-tier-review.md).
+See [infrastructure configuration](../docs/resources/hosted-infrastructure.md),
+[hosted plan](../docs/plans/hosted-service-plan.md), [rollout and migration](../docs/resources/hosted-rollout.md),
+[cost controls](../docs/resources/hosted-cost-controls.md), and [free-tier assessment](../docs/research/hosted-free-tier-review.md).

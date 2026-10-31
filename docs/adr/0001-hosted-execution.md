@@ -29,7 +29,7 @@ before streaming private storage objects.
 Start with scale-to-zero CPU jobs and a measured pilot budget. A failed CPU benchmark
 blocks full hosted launch and triggers a separate compute/budget decision; it never
 silently enables GPU resources. The detailed pilot limits and acceptance gates live
-in [`hosted-service-plan.md`](../hosted-service-plan.md).
+in [`hosted-service-plan.md`](../plans/hosted-service-plan.md).
 
 ## Consequences
 

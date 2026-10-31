@@ -1,8 +1,12 @@
-# Active task: documentation consolidation
+# Active task: documentation directory organization
 
 ## Objective and approval
 
-The user requested: “Update my docs to the current context and organize it.”
+The user requested root `resources/` for developer project guides and the GCP
+architecture diagram, and `docs/` with adr/agents/archive/plans/resources/research
+plus uppercase essential harness documents and README.md. This supersedes the
+interrupted request for a root research directory. No root research directory
+was created.
 This is an authorized follow-up to hosted implementation and the approved GCP
 Gemini migration. Update documentation and navigation without changing runtime,
 cloud resources, costs or approval requirements. Preserve historical evidence.
@@ -60,9 +64,9 @@ auth/frontend/audio/research updates within separate file ownership.
 
 The previous long alignment log is preserved in
 `docs/archive/alignment-status-through-2026-10-31.md`; the active
-`docs/alignment-status.md` now summarizes current acceptance and remaining gates.
+`docs/STATUS.md` now summarizes current acceptance and remaining gates.
 The S3 runbook remains at its original path for stable pointers, clearly marked
-historical. Current production rollout belongs to `docs/hosted-rollout.md`.
+historical. Current production rollout belongs to `docs/resources/hosted-rollout.md`.
 Only the AGENTS.md hosting pointer changes: frontend setup routes to App Hosting,
 and new cloud resources/cutover routes to the current infrastructure/rollout guides.
 No skill, approval policy or runtime configuration changes.
@@ -115,3 +119,32 @@ recording project-wide billing aggregation as an unresolved implementation gap.
 No new spending policy or authorization was inferred from cleanup. The archived
 alignment record was mechanically compared with its prior content: all original
 text remains, with only the wrapper and normalized relative links changed.
+
+
+## Requested directory layout
+
+Moved developer setup, audio workflow, models, Firebase auth, App Hosting and GCP
+Mermaid diagrams into root resources/, with its own README. Moved operational
+references into docs/resources/, implementation plans into docs/plans/, research
+notes into docs/research/, and the historical S3 runbook into docs/archive/.
+Kept ADRs, agent instructions and historical archives in their existing folders.
+Renamed essential docs-root contracts to ARCHITECTURE.md, TARGET_DESIGN.md and
+STATUS.md. All old files have one canonical destination; no duplicate compatibility
+copies or runtime changes were added. Rebased Markdown links and scoped AGENTS
+pointers throughout the repository, including links inside archived evidence;
+historical prose/source paths remain historical where appropriate.
+
+Navigation walkthroughs: substantial new work still reaches the unchanged approval
+guide; quick questions can start in root resources or docs indexes; approved
+follow-ups retain authorization; material scope changes retain the same gate;
+explicit bypass remains in the unchanged approval guide. Hosting, engine, vision
+and web pointers now resolve to their moved canonical documents. These are text
+walkthroughs, not model evaluations. Reading-cost measurement uses whitespace
+words; document relocation changes path spelling rather than domain-rule content.
+Final before/after counts and review outcomes will be recorded after validation.
+
+Validation before review: 20 source/destination moves verified with no
+old active file left; 203 local Markdown targets resolve. Repository checker
+and its unit regression pass; three Mermaid diagrams parse. AGENTS.md remains
+286 whitespace words before/after; docs/README.md grows from 381 to 452 words
+for explicit directory routing. No token estimate or model evaluation is claimed.

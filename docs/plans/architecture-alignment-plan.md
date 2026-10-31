@@ -1,10 +1,10 @@
 # Architecture alignment implementation plan
 
-Updated 19 October 2026. Read [current architecture](architecture.md) and [the accepted target](target-design.md) first. This plan applies to the existing app in [the supplied baseline](archive/current-app-baseline.md), not a new web application.
+Updated 19 October 2026. Read [current architecture](../ARCHITECTURE.md) and [the accepted target](../TARGET_DESIGN.md) first. This plan applies to the existing app in [the supplied baseline](../archive/current-app-baseline.md), not a new web application.
 
 The S0–S5 scopes below are the original architecture sequence. Current hosted
 implementation and live acceptance use the phases in the [hosted plan](hosted-service-plan.md).
-Use [current status](alignment-status.md) to distinguish completed offline work
+Use [current status](../STATUS.md) to distinguish completed offline work
 from outstanding deployment gates.
 
 ## Scope selection
@@ -23,7 +23,7 @@ Execute one selected scope per implementation assignment. Stop at that scope's a
 Recommended order: S0, S1, S2, S3, S4, S5. S1–S4 can develop locally with injected identities/providers. Keep hosted processing disabled until S3 access controls and S5 service integration are verified. No scope is complete merely because scaffolding exists.
 
 Before implementing a dependent contract, resolve its open decision in
-[target-design.md](target-design.md). Local fakes can support independent work,
+[target-design.md](../TARGET_DESIGN.md). Local fakes can support independent work,
 but cannot establish unresolved production policy.
 
 ## S0 — Stabilize and verify the existing app
@@ -37,7 +37,7 @@ Acceptance:
 - A documented local startup and explicit Python interpreter selection work in the available environment.
 - Tests/typecheck/build have exact outcomes and commands; missing dependencies, skips and environment blocks are separately recorded. An environment-blocked build remains unverified.
 - Existing working-tree edits are preserved, and obsolete duplicate UI/tests are mapped by reachability before any cleanup.
-- Record results and blockers in `docs/alignment-status.md` in the target repository.
+- Record results and blockers in `docs/STATUS.md` in the target repository.
 
 Excluded: persistence migration, UI redesign, cloud deployment and feature additions.
 
@@ -64,7 +64,7 @@ Likely boundaries: `apps/web/lib/workflow.ts`, workflow route, `apps/worker/src/
 
 Separate the current local subprocess executor from a durable execution adapter. Keep local execution available. API enqueue returns an operation ID only after persistence. Define operation states and legal transitions, pinned revision/source/configuration, dedupe key, attempt count, fence, lease, external execution identity, progress and checkpoint/output pointers.
 
-Use transactional global slots for MAGI and pipeline stages. Workers accept operation ID/fence and resolve trusted parameters server-side. Adapt existing extraction/planning/render/export rather than rewriting them. Planning persists an unapplied proposal; rendering preflights approvals; export synthesizes nothing. Add reconciliation for dispatch crashes, stale leases, unfinished jobs and uncertain outcomes. Resolve the S2 policy decisions in `target-design.md` before implementing production scheduling; enforce the accepted retry ceiling under one authority.
+Use transactional global slots for MAGI and pipeline stages. Workers accept operation ID/fence and resolve trusted parameters server-side. Adapt existing extraction/planning/render/export rather than rewriting them. Planning persists an unapplied proposal; rendering preflights approvals; export synthesizes nothing. Add reconciliation for dispatch crashes, stale leases, unfinished jobs and uncertain outcomes. Resolve the S2 policy decisions in `../TARGET_DESIGN.md` before implementing production scheduling; enforce the accepted retry ceiling under one authority.
 
 Acceptance:
 
@@ -113,7 +113,7 @@ Excluded: translation, word alignment, shared manga-wide cast and unrelated visu
 
 ## S5 — Real cloud integration and deployment evidence
 
-Resolve S5 inputs listed in `target-design.md` and verify current official platform documentation before infrastructure implementation. Add real Firestore/GCS adapters, Cloud Run API/worker containers, execution workflow, event ingestion and scheduled reconciliation. Bind configuration to the existing Next app root and actual Firebase backend; verify backend identity against configuration and deployed state.
+Resolve S5 inputs listed in `../TARGET_DESIGN.md` and verify current official platform documentation before infrastructure implementation. Add real Firestore/GCS adapters, Cloud Run API/worker containers, execution workflow, event ingestion and scheduled reconciliation. Bind configuration to the existing Next app root and actual Firebase backend; verify backend identity against configuration and deployed state.
 
 Package the existing MAGI runtime and measure representative input before sizing. Validate archive/object identities and preserve required review evidence before exact-generation ingest deletion. Implement reference-aware retention under the resolved retention policy. Establish actual origins/CORS, URL refresh/seeking and secret injection. Keep deployment/paid-generation execution distinct from local preparation and obtain any missing execution authorization before those steps.
 
@@ -127,4 +127,4 @@ Acceptance:
 
 ## Required scope completion report
 
-Update `docs/alignment-status.md` with scope ID, completed acceptance checks, changed boundaries/files, decisions, exact verification results, environment/external blockers and next eligible scope. Record failure/skip details. If a prerequisite fails, complete independent work within the selected scope and report the blocked acceptance criteria. Do not mark blocked criteria passed or broaden the assignment to compensate.
+Update `docs/STATUS.md` with scope ID, completed acceptance checks, changed boundaries/files, decisions, exact verification results, environment/external blockers and next eligible scope. Record failure/skip details. If a prerequisite fails, complete independent work within the selected scope and report the blocked acceptance criteria. Do not mark blocked criteria passed or broaden the assignment to compensate.

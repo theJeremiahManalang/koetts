@@ -6,7 +6,7 @@ read-only cloud observations are recorded in [rollout preparation](hosted-rollou
 This configuration does not create or manage the existing project `koetts-9bf7f`,
 App Hosting backend `koetts`, or named Firestore database `koetts-default`.
 
-See the [phase 5 Mermaid diagrams](hosted-infrastructure-diagram.md) for regional
+See the [phase 5 Mermaid diagrams](../../resources/GCP_ARCHITECTURE.md) for regional
 placement, application/data paths, cost controls and staged frontend migration.
 
 ## Boundaries and inputs
@@ -146,9 +146,9 @@ does not prove that a newly enabled project's service agent exists. This is the
 only beta resource used; see the provider's [service identity documentation](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/project_service_identity).
 
 Inspect the existing Firestore Security Rules before changing them. The checked-in
-[`infra/hosted/firestore.rules`](../infra/hosted/firestore.rules) is deny-all browser
+[`infra/hosted/firestore.rules`](../../infra/hosted/firestore.rules) is deny-all browser
 rules text, but this Terraform configuration does not deploy Firestore rules. The
-separate [`firebase.rules.json`](../infra/hosted/firebase.rules.json) configuration
+separate [`firebase.rules.json`](../../infra/hosted/firebase.rules.json) configuration
 targets only `koetts-default`, without Auth, App Hosting or another database. If
 preflight finds the named database permits browser access, deploy these rules only
 to that database through the separately authorized Firebase procedure, using the
@@ -211,5 +211,5 @@ API remain in place until an authorized, verified cutover. The Terraform
 configuration is not restricted to no-cost usage: the new artifact bucket defaults
 to eligible `us-central1`, but execution and storage volumes have no cumulative
 free-tier cap. The project-filtered USD 20 budget includes Gemini model spend and
-other project charges. See the dated [free-tier review](hosted-free-tier-review.md)
-and [official-source notes](hosted-free-tier-sources.md) before estimating costs.
+other project charges. See the dated [free-tier review](../research/hosted-free-tier-review.md)
+and [official-source notes](../research/hosted-free-tier-sources.md) before estimating costs.

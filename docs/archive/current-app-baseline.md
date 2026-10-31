@@ -171,7 +171,7 @@ Sources: [backend integration tests](../../tests/unit/engine/test_audio_pipeline
 - **Documentation intent/history:** The workflow guide broadly matches code. The historical walkthrough describes the superseded OCR UI. Research alternatives remain unintegrated.
 - **Concrete drift:** `firebase.json` specifies backend ID `koetts`; the hosting guide names `my-web-app`. The web guide describes immediate crop-character saving, while the active UI uses batch drafts. Historical successful validation records do not establish success in the current environment.
 
-Sources: [firebase.json](../../firebase.json), [hosting guide](../../docs/APP_HOSTING.md), [web guide](../../apps/web/README.md), [workflow guide](../../docs/AUDIO_WORKFLOW.md), [historical walkthrough](../archive/CODE_WALKTHROUGH.md), [research notes](TEXT_EXTRACTION_RESEARCH.md), and [validation history](VALIDATION.md).
+Sources: [firebase.json](../../firebase.json), [hosting guide](../../resources/APP_HOSTING.md), [web guide](../../apps/web/README.md), [workflow guide](../../resources/AUDIO_WORKFLOW.md), [historical walkthrough](CODE_WALKTHROUGH.md), [research notes](TEXT_EXTRACTION_RESEARCH.md), and [validation history](VALIDATION.md).
 
 ## Context for architecture review
 

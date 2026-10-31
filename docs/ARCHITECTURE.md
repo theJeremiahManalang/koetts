@@ -24,7 +24,7 @@ then route production work through `PipelineRouter` in `packages/engine/src/mang
 uses the same engine.
 The engine owns validated applied state, approval validity, takes, and export.
 `packages/vision/` owns model identity, image helpers, and the lazy MAGI adapter. MAGI extraction preserves evidence; Gemini planning and synthesis are provider
-adapters. See the [audio workflow](AUDIO_WORKFLOW.md) for domain semantics.
+adapters. See the [audio workflow](../resources/AUDIO_WORKFLOW.md) for domain semantics.
 
 Persistence defaults to local files under `results/web/`: projects contain
 state/assets/takes; sibling directories contain the SQLite operation database,
@@ -107,7 +107,7 @@ The local studio remains loopback bound with origin checks, in addition to user
 authentication. Full hosted processing remains gated by live S5 acceptance; its storage and
 transport adapters are implemented and tested offline.
 
-See [target-design.md](target-design.md) for the accepted migration destination.
+See [target-design.md](TARGET_DESIGN.md) for the accepted migration destination.
 See [the historical baseline](archive/current-app-baseline.md) for deeper inspection notes;
 its recorded checks are not current pass claims.
 
@@ -134,7 +134,7 @@ artifacts using a clean cloud dataset. The cloud dataset binds to a stable bucke
 and namespace identity; it does not use local identity files. Firestore stores exact
 artifact generations behind the shared checksum contract. Local materializations
 are disposable caches. This storage selection does not enable hosted routes or
-replace local operation scheduling. See the [hosted plan](hosted-service-plan.md).
+replace local operation scheduling. See the [hosted plan](plans/hosted-service-plan.md).
 
 ## Hosted transport and operational controls
 
@@ -174,7 +174,7 @@ uses durable maintenance ownership and promotion epochs, follows immutable revis
 and shared-review references, and deletes only eligible unreferenced generations.
 Login and published playback remain outside the production-pause gate.
 
-See [cost controls](hosted-cost-controls.md), [artifact collection](hosted-artifact-collection.md),
-[current acceptance](alignment-status.md) and [infrastructure diagrams](hosted-infrastructure-diagram.md).
-ADK and managed Agent Runtime remain [research options](gemini-agent-gcp-research.md),
+See [cost controls](resources/hosted-cost-controls.md), [artifact collection](resources/hosted-artifact-collection.md),
+[current acceptance](STATUS.md) and [infrastructure diagrams](../resources/GCP_ARCHITECTURE.md).
+ADK and managed Agent Runtime remain [research options](research/gemini-agent-gcp-research.md),
 not installed execution dependencies.

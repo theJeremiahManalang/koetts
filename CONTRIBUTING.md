@@ -1,6 +1,6 @@
 # Contributing
 
-Follow [developer setup](docs/development.md), then work on a focused branch. Read the affected domain guide before changing a boundary. Reuse existing tests and fixtures; add regression coverage for changed contracts.
+Follow [developer setup](resources/DEVELOPMENT.md), then work on a focused branch. Read the affected domain guide before changing a boundary. Reuse existing tests and fixtures; add regression coverage for changed contracts.
 
 ## Boundaries and dependency changes
 

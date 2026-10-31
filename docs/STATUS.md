@@ -58,8 +58,8 @@ rollback targets. Resolve model-versus-infrastructure billing attribution: the
 current project-filtered USD 20 budget includes Gemini model charges, while the
 provider ledger remains a separate application allowance.
 
-Use the [hosted plan](hosted-service-plan.md) for acceptance requirements,
-[infrastructure](hosted-infrastructure.md) for inputs,
-[Mermaid diagrams](hosted-infrastructure-diagram.md) for topology, and
-[rollout](hosted-rollout.md) for cutover and recovery. Existing deployment
+Use the [hosted plan](plans/hosted-service-plan.md) for acceptance requirements,
+[infrastructure](resources/hosted-infrastructure.md) for inputs,
+[Mermaid diagrams](../resources/GCP_ARCHITECTURE.md) for topology, and
+[rollout](resources/hosted-rollout.md) for cutover and recovery. Existing deployment
 observations are dated snapshots, not fresh assertions of current cloud state.

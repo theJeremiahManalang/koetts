@@ -77,7 +77,7 @@ application provider ledger is a separate admission control, while production
 pause responds to reported project spend plus retained reservations. Pause does
 not stop playback, builds, storage, existing executions or every cloud service.
 Alert-only budgets are not automatic spending ceilings. See the [cost-controls
-record](hosted-cost-controls.md) for the provider-ledger and billing relationship
+record](../resources/hosted-cost-controls.md) for the provider-ledger and billing relationship
 and [budget documentation](https://docs.cloud.google.com/billing/docs/how-to/budgets).
 
 Before making a free-tier claim, confirm the selected bucket location,

@@ -89,7 +89,7 @@ Firestore is not required to initialize or host the website.
 
 The existing admin-only private-API diagnostic still targets the historical
 verification service until cutover. It does not enable hosted generation or move
-local projects into container filesystems. See [the historical S3 runbook](S3_DEPLOYMENT.md).
+local projects into container filesystems. See [the historical S3 runbook](../docs/archive/S3_DEPLOYMENT.md).
 
 ## Deploy later
 

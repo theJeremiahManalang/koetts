@@ -1,6 +1,6 @@
 # Vision model setup
 
-`packages/vision` owns model identity, image loading, lazy inference, and artifact generation. The reviewed checkpoint and existing model dependency versions are preserved. See [developer setup](development.md) for the lightweight environment.
+`packages/vision` owns model identity, image loading, lazy inference, and artifact generation. The reviewed checkpoint and existing model dependency versions are preserved. See [developer setup](DEVELOPMENT.md) for the lightweight environment.
 
 ## Select an accelerator
 

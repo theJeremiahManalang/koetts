@@ -12,6 +12,6 @@ This package owns reviewed state, planning/synthesis, takes, export, local revis
 - Restore validates in staging before publishing to an empty workspace. Export replaces fixed filenames without claiming transactional publication.
 - Local files and SQLite coordinate one host. Preserve the distinction from distributed durability and reader publication.
 
-Read `../../docs/AUDIO_WORKFLOW.md` for domain semantics/recovery and `../../docs/architecture.md` for seams. Commands/models live in `src/manga_tts/schemas.py`; router owns validated commits. Storage and operation tests bind their recovery contracts.
+Read `../../resources/AUDIO_WORKFLOW.md` for domain semantics/recovery and `../../docs/ARCHITECTURE.md` for seams. Commands/models live in `src/manga_tts/schemas.py`; router owns validated commits. Storage and operation tests bind their recovery contracts.
 
 Run affected engine tests; shared schema/router/storage changes require the full Python suite. Use injected renderers and synthetic predictions. Run worker integration checks when changing application contracts. Report optional skips and separate live-provider limitations.

@@ -1,8 +1,8 @@
 # Accepted project target
 
 Confirmed with the user on 19 October 2026. This document records product and
-architecture decisions. Implemented behavior is described in [architecture.md](architecture.md).
-Scope boundaries and acceptance criteria live in [the implementation plan](architecture-alignment-plan.md).
+architecture decisions. Implemented behavior is described in [architecture.md](ARCHITECTURE.md).
+Scope boundaries and acceptance criteria live in [the implementation plan](plans/architecture-alignment-plan.md).
 
 ## First shared release
 
@@ -146,7 +146,7 @@ SQLite; old queued/running jobs are not imported or automatically restarted.
 ### Resolved for S5 planning — hosted pilot constraints
 
 The authoritative hosted pilot policies, limits, execution timings, and phase gates
-are in [`hosted-service-plan.md`](hosted-service-plan.md). They resolve production
+are in [`plans/hosted-service-plan.md`](plans/hosted-service-plan.md). They resolve production
 stage capacity, dispatcher, retries/reconciliation, retention, project/region, budget
 posture, and clean-dataset policy. Local S2 limits remain separate from hosted policy.
 

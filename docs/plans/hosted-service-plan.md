@@ -3,8 +3,8 @@
 This plan defines the full GCP/Firebase hosted pilot. It is a specification, not
 evidence of cloud integration, live model compatibility, deployment, or acceptance.
 The accepted product and persistence invariants remain in
-[`target-design.md`](target-design.md); implementation evidence belongs in
-[`alignment-status.md`](alignment-status.md).
+[`../TARGET_DESIGN.md`](../TARGET_DESIGN.md); implementation evidence belongs in
+[`../STATUS.md`](../STATUS.md).
 
 Each substantial phase has a fixed review point: commit its implementation, review
 the commit against phase start with independent Standards and Spec axes, fix all
@@ -74,7 +74,7 @@ allowance is exhausted. This implementation does not yet establish independent
 infrastructure-only billing attribution. Resolve service/SKU attribution and any
 budget-filter changes during authorized preflight, or obtain an explicit change
 to the operating policy. Documentation cleanup does not approve a new total-project
-spending target. See [cost controls](hosted-cost-controls.md).
+spending target. See [cost controls](../resources/hosted-cost-controls.md).
 
 ## Phases and acceptance
 

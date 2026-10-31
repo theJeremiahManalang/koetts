@@ -104,7 +104,7 @@ from Firebase users; history does not replace approval-validity checks.
 API configured by `S3_API_URL`. It verifies both the calling service and the user
 without exposing identity or accessing projects. That URL currently targets the
 historical `koetts-s3-api` verification service in `us-east4`; it remains the
-verification target until the `koetts-api` cutover. See [the historical S3 runbook](S3_DEPLOYMENT.md)
+verification target until the `koetts-api` cutover. See [the historical S3 runbook](../docs/archive/S3_DEPLOYMENT.md)
 for the existing verification procedure and rollback.
 
 The existing local-only origin checks and MANGA_FRONTEND_ONLY processing switch

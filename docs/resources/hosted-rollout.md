@@ -146,7 +146,7 @@ escalation; the read-only cloud queries succeeded.
 
 ### Current target and migration gates — 2026-10-31
 
-The current target is defined in the [hosted plan](hosted-service-plan.md) and
+The current target is defined in the [hosted plan](../plans/hosted-service-plan.md) and
 [infrastructure configuration](hosted-infrastructure.md): new `koetts-api`, CPU
 jobs, Scheduler and artifact storage in `us-central1`; existing `koetts` frontend
 in `us-east4` initially; existing `koetts-default` Firestore database in `nam5`.

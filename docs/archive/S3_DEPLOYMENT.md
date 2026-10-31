@@ -3,14 +3,14 @@
 This runbook records the earlier verification-only API rollout. Its service names,
 regions and sample commands are historical, not the current hosted production
 deployment procedure. For `koetts-api`, regional placement, ADC inference and
-retirement of the verification service, use the [hosted rollout](hosted-rollout.md)
-and [infrastructure configuration](hosted-infrastructure.md). Refresh all live
+retirement of the verification service, use the [hosted rollout](../resources/hosted-rollout.md)
+and [infrastructure configuration](../resources/hosted-infrastructure.md). Refresh all live
 observations before acting.
 
 The original procedure below prepares the authorized authentication rollout in `koetts-9bf7f`
 (project number `907898221016`), region `us-east4`. It is a deployment plan,
 not evidence that deployment or live acceptance has succeeded. Record actual
-revisions, commands and acceptance results in `alignment-status.md`.
+revisions, commands and acceptance results in `../STATUS.md`.
 
 ## Baseline and intended changes
 

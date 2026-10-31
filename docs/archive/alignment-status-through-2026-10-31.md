@@ -1,12 +1,12 @@
 # Archived alignment evidence through 31 October 2026
 
 This preserves the previous chronological record. Superseded status and configuration
-claims describe their original checkpoints. Use [current status](../alignment-status.md)
+claims describe their original checkpoints. Use [current status](../STATUS.md)
 for the latest implementation and live-validation boundary.
 
 # Architecture alignment acceptance evidence
 
-Historical acceptance commands/source paths below identify the checkout at evaluation time. The current monorepo source map is [architecture](../architecture.md); current tooling and checks are in [developer setup](../development.md).
+Historical acceptance commands/source paths below identify the checkout at evaluation time. The current monorepo source map is [architecture](../ARCHITECTURE.md); current tooling and checks are in [developer setup](../../resources/DEVELOPMENT.md).
 
 
 ## S0 — Complete, 19 October 2026
@@ -493,7 +493,7 @@ host returns 403; canonical-origin POST without user token returns 401.
 Native Chromium also confirms session DELETE200 on login and Browse, enabled
 Google button, no visible session error, three demo stories and zero runtime errors.
 No Google sign-in was attempted by the agent.
-The previous frontend revision remains the rollback target. See [S3 deployment](../S3_DEPLOYMENT.md) for rollout,
+The previous frontend revision remains the rollback target. See [S3 deployment](S3_DEPLOYMENT.md) for rollout,
 cost limits and rollback. The user successfully signed in after the correction and
 reported the diagnostic's `Administrator access required.` response. Inspection
 confirmed a reader account now exists alongside the unchanged existing admin;
