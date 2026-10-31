@@ -1,277 +1,93 @@
-# Hosted service implementation
+# Active task: documentation consolidation
 
-## Objective and authorization
+## Objective and approval
 
-Implement the full approved plan in docs/hosted-service-plan.md on
-feat/hosted-service, based on main 0bdacc5cd0092cf33d53afb4d12f6b64b5ba16bb.
-The user authorized implementation, substantial commits using caveman-commit,
-independent Standards/Spec review per phase, fixes before advancing, and questions
-for critical decisions. This remains the active, incomplete goal.
+The user requested: “Update my docs to the current context and organize it.”
+This is an authorized follow-up to hosted implementation and the approved GCP
+Gemini migration. Update documentation and navigation without changing runtime,
+cloud resources, costs or approval requirements. Preserve historical evidence.
 
-Deployment, paid inference/provider tests, human cast/script/audio approvals and
-publication require separate authorization. None occurred. Preserve local results,
-samples, model caches, credentials and unrelated changes. No push was requested.
+The broader hosted-service goal remains incomplete on `feat/hosted-service`, based
+on main `0bdacc5cd0092cf33d53afb4d12f6b64b5ba16bb`. Implementation, substantial
+commits and independent Standards/Spec review were authorized. Deployment, paid
+model/CPU tests, human cast/script/audio approvals and real publication retain
+separate gates. No phase 5 deployment or paid inference occurred in this task.
 
-## Decisions
+## Current authoritative context
 
-Use existing project koetts-9bf7f and named Firestore koetts-default (nam5), with
-a clean hosted dataset. Latest target: new API/jobs/Scheduler and storage in
-us-central1. Existing frontend koetts stays us-east4 initially; expected later
-frontend migration to us-central1 needs verified regional cutover. Do not migrate local data implicitly.
-Public Google signup; trusted admins approve production. Hosted creation requires
-approved shared work, five distinct work IDs/UTC month and 40 pages/work.
-Reader quotas are five pending and ten new/day UTC; duplicates are free.
-Infrastructure target USD10/month, desired ceiling USD20 (not guaranteed), pause
-at reported USD15 or earlier conservative reservations. Login/playback continue.
-Provider allowance is separate, at most USD80, never assumed available or renewed.
-CPU jobs first, global slot/stage, three application attempts, 30 minutes,
-platform retries zero. Uncertain paid outcomes hold capacity. CPU benchmark failure
-blocks launch; no automatic GPU escalation. All audio/range access authenticates.
+- Existing project: `koetts-9bf7f`; named Firestore: `koetts-default`, `nam5`.
+- New API: `koetts-api`. New API/jobs/Scheduler/artifact storage target
+  `us-central1`. Existing frontend `koetts` remains `us-east4` initially; its later
+  migration to `us-central1` is part of the expected end state.
+- Existing `koetts-s3-api` is the earlier verification service. Its replacement
+  and retirement require verified caller cutover. Historical live observations
+  are recorded in the rollout guide and need refreshing before execution.
+- Gemini SDK is locked to 2.33.0. Planning and synthesis use ADC and explicit
+  `GOOGLE_CLOUD_PROJECT`, with `GOOGLE_CLOUD_LOCATION=us`. Only the pipeline identity
+  has inference permission. No API-key fallback or provider-key secret injection.
+- Reviewed text/style/voice requests map to Gemini 3.8 `generate_content`; unary
+  output is validated complete mono 24 kHz 16-bit PCM WAV. No live model-quality,
+  account-access or cost claim follows from offline wire fixtures.
+- Quotas, approvals, exact-generation artifacts, operation fences, durable provider
+  uncertainty and budget reservations remain authoritative. ADK is research only.
+- The infrastructure target is USD 10/month with a desired USD 20 ceiling, not a
+  guarantee. Project-filtered budget reporting includes GCP model spend; the
+  separate provider ledger is an application allowance, not transferred API credit.
+  Production pause preserves login and published playback.
 
-## Current state
+## Implementation and verification before this cleanup
 
-Phases 0–3 passed scoped reviews and fixes. Phase 4 offline implementation and
-acceptance passed final review through 8703d04. Runtime source and manifests are
-authoritative; docs/alignment-status.md records scope evidence.
+Hosted phases 0–4 passed offline reviews. Phase 4 final fixes include `364c4a6`
+and `8703d04`. Gemini migration `d9eb6f1`, review fixes `821c02e`, and evidence
+`40182c8` passed both review follow-ups. Those fixes restored pipeline execution
+identity, shared WAV validation and replaced stale API-key guidance.
 
-Phase 4 commits: 34dc01c durable cost controls, 9cb6b7f billing notifications,
-b0578df private infrastructure, 12d8b01 settlement/GC and cold namespace fix,
-8cbd95f admin controls, 364c4a6 shared policy helpers, 8703d04 rollback acceptance
-and publication GC roots. Full review baseline fef5b8a. Standards found three
-maintainability issues, all fixed in 364c4a6. Spec required offline rollback proof,
-fixed in 8703d04. Both independent final follow-ups report no remaining findings.
-The review agents first failed from usage limits; retries completed successfully.
+Recorded migration checks: repository/Ruff/Python suite, 90 web tests and typecheck
+passed; 104 loopback Firestore tests and production-webpack HTTP studio/frontend-only
+checks passed; Terraform fmt/schema validation passed; Mermaid blocks parsed.
+Default Turbopack failed under process/port restrictions, so the complete default
+`npm run check` is not claimed green. Optional/live tests are distinct from passes.
+Temporary evidence paths: `/tmp/gcp-gemini-check.log`,
+`/tmp/gcp-gemini-firestore.log`, `/tmp/gcp-gemini-http.log`. They may not survive
+runtime replacement. Pinned tooling: Node 22.22.3, npm 10.9.8, uv 0.11.16,
+Python 3.11.15. No heavy inference dependencies or model downloads are required.
 
-Important contracts: cloud_budget composes read-before-write reservation closures,
-failclosed configured caps, permanent settlement markers and explicit closeout.
-GC maintenance is non-expiring; promotion epochs prevent upload races. Roots cover
-accepted revision history, operation references, shared catalog and publication
-review checksums. Recovery requires confirmed terminal prior execution and replays
-uncertain deletion chains. Prior software cannot recover this protocol safely.
+## Documentation work in progress
 
-The rollback test archives actual fef5b8a source and checks imported module paths.
-Old HTTP reads candidate snapshot/catalog/exact published bytes without changing
-complete hosted/shared Firestore trees or GCS generations. Enqueue/coordination
-are denied; shared permission is not universally read-only. Candidate then recovers
-interrupted GC. Provider keys are cleared. Real rollback must stop collectors and
-workers and resolve held barriers with compatible software before serving old API.
+Root owns README/navigation, architecture, status/archive and this handoff.
+A bounded worker owns hosted operational/plan/free-tier documents and diagrams;
+another owns developer/auth/frontend/audio and agent-research documents.
+Workers preserve each other's edits. No further delegation is allowed for them.
 
-## Verification
+The previous long alignment log is preserved in
+`docs/archive/alignment-status-through-2026-10-31.md`; the active
+`docs/alignment-status.md` now summarizes current acceptance and remaining gates.
+The S3 runbook remains at its original path for stable pointers, clearly marked
+historical. Current production rollout belongs to `docs/hosted-rollout.md`.
+Only the AGENTS.md hosting pointer changes: frontend setup routes to App Hosting,
+and new cloud resources/cutover routes to the current infrastructure/rollout guides.
+No skill, approval policy or runtime configuration changes.
 
-Use Node22.22.3 from /home/ssuish/.nvm/versions/node/v22.22.3/bin, npm10.9.8,
-uv0.11.16/Python3.11.15. Default Node24 broke an existing Undici fixture; pinned
-Node22 passed. Cache/network/loopback restrictions may require escalation.
+## Completion and next action
 
-- /tmp/hosted-phase4-reviewed-firestore.log: 104 tests passed, loopback/demo only.
-- /tmp/hosted-phase4-rollback-keyless.log: focused keyless rollback passed.
-- /tmp/hosted-phase4-contention-stress.log: ten cold-start stress cases passed.
-- Repository/Ruff/Python/90 web tests/typecheck passed after fixes.
-- /tmp/hosted-phase4-webpack-build.log: production webpack build passed.
-- /tmp/hosted-phase4-operations-accepted-http.log: production-webpack HTTP passed
-  studio and frontend-only paths. Command: npm run test:http -- --webpack.
-- Default npm run check reached build then Turbopack failed creating process/port
-  under environment restrictions. Do not claim complete default-check success or
-  verified App Hosting adapter/default bundler behavior.
-- Terraform1.17.1 fmt/validate passed with locked Google/google-beta7.46.2.
-  Binary /tmp/hosted-infra-terraform-1.17.1/terraform. No cloud plan/apply.
-- Admin UI synthetic desktop/mobile QA passed. Retained evidence:
-  /tmp/manga-phase4-quota-qa.Tf6oEa/artifacts/browser-qa.json and screenshots.
-  Fixture server stopped. This establishes no real Google session behavior.
+Collect both documentation workers, audit cross-file consistency, run repository
+and Markdown/Mermaid checks, commit the consolidation, then obtain independent
+Standards/Spec review and fix findings. Record exact results here before handoff.
+Do not claim that documentation cleanup refreshes live cloud state or reruns
+previous acceptance suites. Next implementation gate remains bounded phase 5
+cloud/test authorization with incremental infrastructure/build and model spending
+allowances, plus real rollout targets, IAM/model access and billing attribution.
 
-Cold binding diagnosis isolated Firestore read-lock upgrades: repeated cold races
-failed while prebinding passed. Atomic conditional create plus bounded idempotent
-retry fixed them. Temporary probe /tmp/hosted-contention-probe is outside repository
-and inactive unless explicitly injected. No production provider retries added.
+## Documentation validation
 
-## Remaining work / next action
+Repository checks passed during consolidation. A local-target scan checked 165
+Markdown links with no missing targets; all three Mermaid diagrams parsed with
+the temporary Mermaid 11.12.2 validator. These are documentation checks, not fresh
+application acceptance or live cloud verification.
 
-Commit phase 4 evidence and documentation routing after repository checks. Obtain
-separate phase 5 authorization required by docs/hosted-service-plan.md:122 before
-cloud deployment or paid tests. Read-only preflight can prepare concrete targets.
-Do not mark goal complete: no images deployed, real rollback targets captured,
-secret versions verified, or live IAM/storage/restart/session/playback/rollback/
-billing/CPU-quality/provider-cost acceptance proven. No automatic publication.
-Record actual revisions, commands, costs and acceptance evidence during authorized
-phase 5. Keep provider balance explicit and production/schedulers paused until
-acceptance. Ask for consequential new decisions; implementation approval persists.
-
-
-## Read-only preflight continuation
-
-Previous goal turn made progress: phase 4 reviews closed and evidence committed
-as 1cc6e42. Separate phase 5 approval and incremental spending cap were requested;
-no answer has arrived. This continuation did not interpret automation as approval.
-Read-only gcloud queries now establish existing web revision
-koetts-build-2026-10-21-002 (100%), existing API revision koetts-s3-api-00001-gl5
-and its immutable image (recorded in docs/hosted-rollout.md), and no regional jobs.
-Terraform's API default collides with that existing service. Ask whether to use a
-new candidate API (recommended) or adopt existing resources under reviewed import;
-do not apply unchanged. Local Docker is an unavailable WSL Desktop shim. Remote
-builds also require deployment/test cost authorization. No cloud state changed.
-
-
-## Authorization blocker audit
-
-The phase 5 authorization condition persists across three consecutive goal turns.
-The first completed offline reviews and evidence; the second completed useful
-read-only preflight; the third revalidated a clean tree, the explicit plan gate,
-and the unanswered authorization request. No live process is pending. Further
-implementation acceptance requires deployment and bounded paid tests. The goal
-remains incomplete and is blocked pending user approval, incremental spending cap,
-and the existing-API collision decision. Recommended choice: separate candidate
-API, preserving the existing service. Automation continuation is not approval.
-
-
-## Preferred API replacement — 2026-10-31
-
-User requests decommissioning koetts-s3-api in favor of koetts-proto-api.
-Terraform default updated to preferred name; current frontend URL remains intact
-until replacement and cutover pass. A fresh read-only check confirms live frontend
-still targets old API, which runs verification mode. Exact retirement sequence is
-in docs/hosted-rollout.md. No cloud mutations, builds or paid calls performed.
-The limited authentication-service replacement must not implicitly deploy all new
-hosted production features. Clarify/approve concrete live cutover scope under the
-substantial changed-scope rule before executing it; full phase 5 cap remains unset.
-
-Verification for preferred-name preparation: repository checks, diff whitespace
-and ten focused infrastructure tests pass. Terraform fmt could not rerun because
-the prior /tmp binary is absent in this runtime; only the default string changed.
-
-
-## API default and free-tier evaluation — 2026-10-31
-
-Latest user instruction supersedes the preferred name: set Terraform
-api_service_name to koetts-api and evaluate current Terraform against free tiers.
-Updated variables.tf and current rollout preference to koetts-api. The live
-frontend and old API remain unchanged. Official-source evaluation is recorded in
-docs/hosted-free-tier-review.md and hosted-free-tier-sources.md. Main result: no
-free-only guarantee; us-east4 artifact storage is outside storage free allowance,
-job runtime/artifact size are uncapped monthly, and existing workloads share
-allowances. Named database metadata reports freeTier=true; Firebase docs agree
-first database is eligible regardless of ID, while Cloud pricing has contrary
-named-database text. Do not migrate or delete the database on that discrepancy.
-Remaining billing usage was not checked. Native service-specific spend caps now
-exist but are not configured; adding one could affect login/playback and needs
-an availability decision. Phase 5 deployment/paid tests remain unauthorized.
-
-The name change and sourced assessment are committed in cc304b6. Independent
-Standards and Spec reviews against 6c20faf report no findings; Spec independently
-checked resource arithmetic against Terraform. Repository and whitespace checks
-and all ten focused infrastructure tests pass. Terraform fmt/schema validation
-were not rerun for this string-only change because the prior temporary binary is
-absent. Full hosted goal remains incomplete; next live work still needs phase 5
-authorization and an incremental spending cap. No live service rename/deletion.
-
-
-## Artifact bucket placement — 2026-10-31
-
-User selected us-east1 for artifact bucket. Added artifact_bucket_location default
-us-east1 independently of region (Cloud Run/Scheduler remain us-east4), wired only
-the bucket location and added an output. Updated current infrastructure/free-tier
-assessment to remove the prior storage-location exclusion and retain volume and
-cross-region transfer caveats. No existing bucket moved or cloud mutation made.
-
-Artifact placement committed ff480e4. Independent Standards/Spec follow-ups against
-f780df0 report no findings. Repository, whitespace and ten infrastructure checks
-pass. No Terraform apply; prior temporary Terraform binary remains unavailable,
-so provider schema validation was not rerun for this location-input change.
-
-
-## Consolidated region decision — 2026-10-31
-
-User supersedes prior us-east1 storage/us-east4 compute choices: new artifact
-bucket and API/jobs go to us-central1. Terraform region and independent bucket
-location defaults updated, also placing Scheduler in us-central1. Existing
-frontend remains us-east4 initially, with a later migration to us-central1 now
-recorded as expected end state in the hosted plan and rollout runbook. Existing
-Firestore stays nam5. No App Hosting config/public URL, cloud resources or live
-traffic changed. Free-tier review updated: storage/processing colocated, initial
-frontend-to-API traffic crosses regions. Deployment/cost approval remains pending.
-
-Regional placement committed 2a82167. Ten infrastructure tests plus repository and
-whitespace checks pass. Both review axes found one stale sentence describing the
-delta as bucket-only; corrected to include API/jobs/Scheduler and storage. No
-Terraform apply or live migration. Schema validation was not rerun because the
-prior temporary Terraform binary is absent; this delta only changes defaults.
-
-
-## Phase 5 architecture visualization — 2026-10-31
-
-User requests Mermaid infrastructure visualization in Markdown. Added
-docs/hosted-infrastructure-diagram.md with application/data paths, billing/control
-flow and staged frontend migration. Diagrams follow Terraform/runtime sources:
-new API/jobs/storage/Scheduler central; existing frontend east initially then
-central; Firestore nam5; private service/user identity, exact-generation artifacts,
-provider-only pipeline key, reference-aware GC, no implicit deployment claims.
-Added documentation links. Preserve unrelated untracked infra/hosted/graph.png.
-No cloud changes, paid calls or inference.
-
-Visualization committed b45f0b9. All three Mermaid blocks parse with Mermaid
-11.12.2 using temporary /tmp/koetts-mermaid-validation dependencies; no project
-dependencies changed. Repository and whitespace checks pass. Independent
-Standards/Spec reviews against 3ef8b6a report no findings. Rendering screenshots
-were not produced. Unrelated untracked infra/hosted/graph.png remains untouched.
-
-
-## ADK and GCP agent research — 2026-10-31
-
-User requests research of Google agent platform/ADK and the supplied ADK migration
-guide, assessing native Gemini agents on GCP. This authorizes research, not agent
-implementation or migration. Delegated primary-source memo to bounded Luna worker
-(owns only docs/gemini-agent-gcp-research.md); parent separately read current ADK
-and Agent Runtime docs, Context7 resolved /websites/adk_dev, and repo Gemini client.
-Current repo uses google-genai API-key client; planning generate_content and TTS
-interactions.create. An ADC/backend switch is not proven drop-in, especially TTS.
-Recommendation under evaluation: bounded planning agent in existing Cloud Run
-worker before considering managed Agent Runtime; retain operation/budget/human
-approval authority. No installs, live probes, paid model calls or cloud changes.
-
-Completed docs/gemini-agent-gcp-research.md with official-source citations and
-three options: direct GCP provider adapter, bounded ADK worker experiment, managed
-Agent Runtime later. Parent verified runtime regions/current pricing and corrected
-evaluation wording: offline saved-response replay cannot establish fresh model
-quality; fresh inference comparisons require paid-test authorization. Current
-AgentRuntime naming/oldReasoningEngine APIs distinguished. No implementation or
-phase5authorization inferred from research.
-
-
-## Approved GCP Gemini implementation — 2026-10-31
-
-User approved concrete migration scope: GenAI ADC/project + us multi-region model
-endpoint; compute/storage central; remove hosted API-key injection; adapt planning
-and TTS preserving controls; tests/reviews/commits. No deployment or paid calls.
-Engine and Terraform delegated to independent bounded Luna jobs, root owns SDK
-lock/web-worker metadata/docs/integration. SDK minimum2.33 and lock2.33.0 synced.
-Metadata provider_configured replaces has_api_key and means config presence only,
-never ADC proof. Hosted calls retain one durable retry authority and SDK attempts1.
-All test runners that previously cleared provider keys now also clear project to
-keep accidental ADC inference disabled. Prior research TTS uncertainty resolved
-from current3.8 docs (generate_content unary completeWAV); no live claims.
-
-
-## GCP Gemini migration acceptance
-
-Implemented d9eb6f1 and review fixes821c02e against baselineccbb728. Independent
-Spec found pipeline execution environment accidentally removed and stale audio
-API-key guidance; Standards found duplicated WAV policy and same stale guidance.
-All fixed and both follow-ups report no remaining findings. Executionidentity
-uses compute region while inference uses us. SharedWAVpolicy retains validated
-24kHz/mono/16bit and truncated/empty checks. SDK2.33 actualHTTPwiretests use
-syntheticcredentials+MockTransport andverifyexacttext/style/voices/auth; noADC
-network or live modelcall. Project/location blankinputs rejectearly.
-
-Checks: repository/Ruff/Python/web90/typecheck final command bundle exit0. Initial
-normalcheck logged330Pythonpass93optional skips before two additionalSDKtests
-and blank-config test; those additions pass in final acceptance. Firestore
-104tests pass /tmp/gcp-gemini-firestore.log. ProductionwebpackHTTP studio+
-frontend-only pass /tmp/gcp-gemini-http.log. DefaultTurbopack fails process/port
-Operationnotpermitted (/tmp/gcp-gemini-check.log), notclaimedpass. Terraform
-fmt/schema validate passes escalated; worker sandboxplugin handshake failure
-resolved withoutcodechanges. ThreeupdatedMermaiddiagrams parse.
-
-Billing limitation now explicit in hosted-cost-controls: Gemini charges sameGCP
-project, providerledger allowance notDeveloperAPIcredit. ProjectfilteredUSD20
-budget includesmodelspend; conservativepausecanoccurbeforeproviderallowanceused.
-Separateinfrastructure-onlybillingattribution requireslivepreflight/decision,
-notunverifiedsubtraction. No cloudapply/deploy/paidcall/userapproval/publication.
-Migrationimplementationcompleteoffline; phase5liveauthorization/capstillpending.
+Navigation walkthroughs (text inspection, not model evaluations): substantial new
+work still routes to prompt approval; quick questions reach the relevant guide;
+approved follow-ups reuse existing scope; material scope changes retain renewed
+approval; explicit bypass remains defined by the unchanged approval guide. Hosting
+now reaches the current deployment runbooks, with historical S3 evidence still
+discoverable from the documentation index. No approval rule was relaxed.

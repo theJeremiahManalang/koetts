@@ -17,7 +17,7 @@ location. Resource names without a fixed value are selected during preflight.
 ```mermaid
 flowchart TB
     user["Reader or admin browser"]
-    provider["GCP Gemini API: us multi-region<br/>Separate model-call allowance"]
+    provider["Gemini inference: us endpoint<br/>Gen AI SDK enterprise mode + ADC<br/>Pipeline identity only"]
 
     subgraph project["Firebase / GCP project: koetts-9bf7f"]
         auth["Firebase Authentication<br/>Google sign-in and user verification"]
@@ -94,7 +94,7 @@ application's production pause preserves identity and published playback.
 
 ```mermaid
 flowchart LR
-    billing["Cloud Billing<br/>Project-filtered USD 20 budget<br/>Alerts at USD 10 / 15 / 20"]
+    billing["Cloud Billing<br/>Project-filtered USD 20 budget includes Gemini<br/>Alerts at USD 10 / 15 / 20"]
     topic["Pub/Sub topic<br/>koetts-hosted-billing"]
     push["Authenticated push subscription<br/>koetts-hosted-billing-push"]
     api["koetts-api<br/>Billing report validation<br/>Production admission and claims"]
@@ -114,10 +114,11 @@ flowchart LR
     api -->|"Pause does not gate published reads"| reads
 ```
 
-New production pauses at USD 15 reported infrastructure cost plus conservative
-retained reservations, or earlier when an admission would exhaust allowance.
-Provider allowance is configured separately and is never assumed available or
-automatically renewed. These controls do not guarantee a monthly bill ceiling:
+New production pauses at USD 15 reported project cost plus conservative retained
+reservations, or earlier when an admission would exhaust allowance. The project
+budget includes Gemini; the separate application provider allowance controls
+admission and does not change billing attribution. These controls do not guarantee
+a monthly bill ceiling:
 builds, retained storage, playback and existing executions can continue charging.
 
 ## Staged frontend migration
@@ -158,7 +159,7 @@ proven. No current website URL is changed by these diagrams.
 | Dedicated workload identities and IAM | `infra/hosted/main.tf`; runtime GCS create/read versus collector read/delete grants |
 | Existing frontend | `apps/web/apphosting.yaml`, `firebase.json` and deployed App Hosting backend; outside Terraform management |
 | Existing Firestore | `firestore_database_id = "koetts-default"`; Terraform does not create or relocate the database |
-| Gemini identity and signing secret | Pipeline uses ADC with inference IAM; frontend signing value/version remains a separate operator input |
+| Gemini identity and signing secret | Pipeline uses Gen AI SDK enterprise mode and ADC with inference IAM; frontend signing value/version remains a separate operator input |
 | Immutable container images | Explicit `api_image`, `magi_image`, `pipeline_image` digests; image builds and registry setup are outside this Terraform |
 
 IAM limits Firestore workload access to the named database, not individual

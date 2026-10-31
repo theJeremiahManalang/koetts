@@ -23,7 +23,7 @@ npm run dev
 # http://127.0.0.1:3000
 ```
 
-The web server selects the root uv environment automatically. `PYTHON_EXECUTABLE` can select another absolute interpreter with the worker packages installed. Workers execute installed Python modules, not repository scripts. For new planning and synthesis, set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us`. Use ADC locally (`gcloud auth application-default login`) or an attached workload service account on GCP. API keys are not a fallback. Configuration presence does not establish credential validity, model access, or budget admission. Reviewing existing state and synthetic tests use no paid calls.
+The web server selects the root uv environment automatically. `PYTHON_EXECUTABLE` can select another absolute interpreter with the worker packages installed. Workers execute installed Python modules, not repository scripts. For new planning and synthesis, set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us`. The engine uses Google Gen AI SDK 2.33+ in enterprise mode with ADC, locally (`gcloud auth application-default login`) or through an attached workload service account on GCP. Gemini API keys are not supported as a fallback. The `provider_configured` indicator reports only whether a project is configured; it does not verify ADC, model access, live provider readiness, or budget admission. Offline fixtures verify the `generate_content` mapping and unary WAV handling, not live access or output quality. Reviewing existing state and synthetic tests make no paid calls.
 
 `MANGA_DATA_ROOT` optionally selects an absolute local state directory. Checkout defaults preserve `results/web`; installed workers outside a checkout default to `~/.local/share/manga-studio`. Web and worker receive the same resolved data directory. `MANGA_REPO_ROOT` optionally selects an absolute checkout root for unusual web launchers. Each web server instance must use one consistent state directory.
 
@@ -242,15 +242,18 @@ mode still refuses hosted project/operation/asset routes until transport integra
 Keep App Hosting frontend-only mode enabled. These are construction contracts, not
 instructions to change deployed settings before the rollout gates pass.
 
-The coordinator requires the cloud storage variables above, `MANGA_CLOUD_REGION`
-(default `us-east4`), and explicit `MANGA_MAGI_JOB` / `MANGA_PIPELINE_JOB` names.
+The coordinator requires the cloud storage variables above, `MANGA_CLOUD_REGION`, and
+explicit `MANGA_MAGI_JOB` / `MANGA_PIPELINE_JOB` names. Runtime code falls back to
+`us-east4` when `MANGA_CLOUD_REGION` is absent; the hosted Terraform target explicitly
+selects `us-central1` for the new API, jobs, and GCS bucket.
 `Dockerfile.jobs` has `pipeline` and CPU `magi` targets and a dedicated build-context
 allowlist. Jobs require explicit `CLOUD_RUN_PROJECT` and `CLOUD_RUN_LOCATION`; Cloud
 Run supplies `CLOUD_RUN_JOB` and `CLOUD_RUN_EXECUTION`. Dispatch overrides provide only
 the persisted operation ID and fence. Task retry zero and 30-minute timeout belong
 to the reviewed deployment configuration; the application owns the attempt ceiling.
 
-The worker restores pinned revisions and uploads into disposable scratch, persists
+This target configuration does not establish deployment or authorize phase-5 live
+calls. The worker restores pinned revisions and uploads into disposable scratch, persists
 provider uncertainty before calls, and acknowledges accepted checkpoints only after
 cloud persistence. After confirmed termination, the coordinator verifies/restores
 the accepted manifest and recovers matching writer ownership. Uncertain provider

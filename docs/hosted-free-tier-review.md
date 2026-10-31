@@ -8,12 +8,13 @@ container builds started, or inference/provider calls made.
 ## Conclusion
 
 The configuration is suitable for a small paid pilot with free allowances; it is
-not constrained to free-tier usage. The artifact bucket now defaults to `us-central1` independently of the service
-region, following the user's placement decision. Neither job count nor retained
-artifact size is capped monthly.
-The existing web frontend and older API also consume resources outside this
-Terraform configuration. Current billing-account usage and remaining allowances
-were not measured, so a zero-dollar bill cannot be established.
+not constrained to free-tier usage. The artifact bucket now defaults to
+`us-central1`, independently of the service region. Neither job count nor retained
+artifact size is capped monthly. The existing frontend and older API also consume
+resources outside this Terraform configuration. Gemini inference uses the GCP
+project's pipeline identity; the project-filtered USD 20 alert budget therefore
+includes its model charges as well as other project usage. No zero-dollar bill,
+remaining free allowance, or spending ceiling is established.
 
 ## Cloud Run compute
 
@@ -70,11 +71,14 @@ Google Cloud pricing paragraph disagrees; the source review records this discrep
 
 ## Budget controls and next decisions
 
-The Terraform USD 20 budget sends alerts at USD 10, 15 and 20. It configures no
-native spend-cap enforcement. The application conservatively pauses new production
-at USD 15 reported cost plus retained reservations; it does not stop playback,
-builds, storage, existing executions or every cloud service. Alert-only budgets
-are not automatic spending ceilings. [Budget documentation](https://docs.cloud.google.com/billing/docs/how-to/budgets).
+The project-filtered USD 20 budget sends alerts at USD 10, 15 and 20 and includes
+Gemini model charges. It configures no native spend-cap enforcement. The
+application provider ledger is a separate admission control, while production
+pause responds to reported project spend plus retained reservations. Pause does
+not stop playback, builds, storage, existing executions or every cloud service.
+Alert-only budgets are not automatic spending ceilings. See the [cost-controls
+record](hosted-cost-controls.md) for the provider-ledger and billing relationship
+and [budget documentation](https://docs.cloud.google.com/billing/docs/how-to/budgets).
 
 Before making a free-tier claim, confirm the selected bucket location,
 measure representative CPU job duration and retained bytes, inspect existing

@@ -34,8 +34,10 @@ The repository currently selects project `koetts-9bf7f` in `.firebaserc`.
    variables to `apps/web/apphosting.yaml` with BUILD availability, then rebuild and
    deploy. Next.js embeds `NEXT_PUBLIC_` values at build time.
 
-The Firebase web configuration is public. Never put a service account private key
-or the server's Gemini API key into `NEXT_PUBLIC_` variables.
+The Firebase web configuration, including `NEXT_PUBLIC_FIREBASE_API_KEY`, is public
+Firebase client configuration; it is not a Gemini credential. Never put a service
+account private key or any server credential into `NEXT_PUBLIC_` variables. Gemini
+uses the enterprise Google Gen AI client with ADC and has no API-key fallback.
 
 ## Server authorization and administrator setup
 
@@ -100,8 +102,10 @@ from Firebase users; history does not replace approval-validity checks.
 
 `GET /api/auth/backend` is an admin-only diagnostic for the optional private Python
 API configured by `S3_API_URL`. It verifies both the calling service and the user
-without exposing identity or accessing projects. See [S3 deployment](S3_DEPLOYMENT.md)
-for service permissions, verification-only rollout and rollback.
+without exposing identity or accessing projects. That URL currently targets the
+historical `koetts-s3-api` verification service in `us-east4`; it remains the
+verification target until the `koetts-api` cutover. See [the historical S3 runbook](S3_DEPLOYMENT.md)
+for the existing verification procedure and rollback.
 
 The existing local-only origin checks and MANGA_FRONTEND_ONLY processing switch
 remain in effect. App Hosting configured with MANGA_FRONTEND_ONLY=1 still redirects

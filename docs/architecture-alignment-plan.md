@@ -2,6 +2,11 @@
 
 Updated 19 October 2026. Read [current architecture](architecture.md) and [the accepted target](target-design.md) first. This plan applies to the existing app in [the supplied baseline](archive/current-app-baseline.md), not a new web application.
 
+The S0–S5 scopes below are the original architecture sequence. Current hosted
+implementation and live acceptance use the phases in the [hosted plan](hosted-service-plan.md).
+Use [current status](alignment-status.md) to distinguish completed offline work
+from outstanding deployment gates.
+
 ## Scope selection
 
 Execute one selected scope per implementation assignment. Stop at that scope's acceptance boundary and report evidence; do not automatically continue into later scopes. Minimal supporting edits outside a scope's likely files are allowed when required by its contract, and must be explained.

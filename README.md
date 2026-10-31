@@ -14,7 +14,7 @@ npm test
 npm run dev
 ```
 
-Configure Firebase login and a trusted admin account before using the studio. Copy `apps/web/.env.example` to `apps/web/.env.local` when first configuring your environment. See [developer setup](docs/development.md) for credentials, optional vision installs, and troubleshooting. The default environment downloads no PyTorch or model weights.
+Configure Firebase login and a trusted admin account before using the studio. Copy `apps/web/.env.example` to `apps/web/.env.local` when first configuring your environment. See [developer setup](docs/development.md) for credentials, optional vision installs, and troubleshooting. Gemini planning and synthesis use GCP Application Default Credentials with an explicit project; API keys are not a fallback. The default environment downloads no PyTorch or model weights.
 
 ## Ownership
 
@@ -43,4 +43,4 @@ uv run manga-vision --help
 uv run manga-worker --help
 ```
 
-[Documentation index](docs/README.md) routes developer, domain, operational, and agent guidance. [Contribution guide](CONTRIBUTING.md) defines the review workflow. Saved projects and local shared publications remain under `results/web` by default; preserve them during cleanup. Local execution coordinates one host. Optional cloud storage and finite-job adapters remain behind the [hosted implementation gates](docs/hosted-service-plan.md); they do not yet enable the hosted product.
+[Documentation index](docs/README.md) routes developer, domain, operational, and agent guidance. [Contribution guide](CONTRIBUTING.md) defines the review workflow. Saved projects and local shared publications remain under `results/web` by default; preserve them during cleanup. Local execution coordinates one host. Hosted storage, authenticated transport, finite jobs and operational controls are implemented and reviewed offline. The hosted product still requires separately authorized live acceptance. Start with [current status](docs/alignment-status.md), [infrastructure diagrams](docs/hosted-infrastructure-diagram.md), and the [documentation guide](docs/README.md).

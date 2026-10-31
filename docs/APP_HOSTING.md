@@ -1,8 +1,9 @@
 # Firebase App Hosting setup
 
-The checkout is linked to Firebase project `koetts-9bf7f` (KoeTTS). The App
-Hosting backend is `koetts` in `us-east4`. Deployments use local source,
-not automatic GitHub rollouts.
+The checkout is linked to Firebase project `koetts-9bf7f` (KoeTTS). The existing
+App Hosting frontend backend is `koetts` in `us-east4`. Deployments use local
+source, not automatic GitHub rollouts. This is the current frontend placement;
+the planned frontend move to `us-central1` is a separate future migration.
 
 Public URL: https://koetts--koetts-9bf7f.us-east4.hosted.app
 
@@ -24,23 +25,34 @@ Run source commands from the repository root. `apps/web` is the configured appli
 The instance limit controls serving capacity; it is not a billing cap. Builds,
 storage, traffic, and other services may still incur charges on Blaze.
 
-## Complete cloud initialization when ready
+## Existing hosted services and target
 
-Run these commands from the repository root. Replace `YOUR_PROJECT_ID` with the
-actual Firebase project ID; do not use the Atlas project from the example workflow.
+The existing Firestore database is `koetts-default` in `nam5`. New hosted API,
+Cloud Run jobs, and GCS artifacts target `us-central1`; the new API service name
+is `koetts-api`. These are target settings, not proof that the replacement API or
+phase-5 workflow has been deployed or live-verified. The currently configured
+`S3_API_URL` still points to the historical `koetts-s3-api` verification service
+in `us-east4`, which remains the verification target until an authorized cutover.
+
+App Hosting remains frontend-only (`MANGA_FRONTEND_ONLY=1`). It does not host
+Python workflow processing or make Gemini calls. Do not enable hosted generation
+or run phase-5 paid/live validation from this setup guide.
+
+## Initialize a different Firebase project
+
+The current checkout is already linked to `koetts-9bf7f`; do not run initialization
+to recreate its existing backend. For a separate project, replace `YOUR_PROJECT_ID`
+with its actual project ID. These commands may create resources.
 
 ```powershell
 npx --yes firebase-tools@latest login
 npx --yes firebase-tools@latest init apphosting --project YOUR_PROJECT_ID
 ```
 
-Select the existing Blaze project. Select an existing App Hosting backend or
-create one named `koetts`, choose a supported region, and set the
-application root to `web`. Choose a Node.js runtime supported by both App Hosting
-and the installed Next.js version. Keep the checked-in runtime settings when
-prompted about overwriting `apps/web/apphosting.yaml` and review any generated changes.
-The initialization flow may create cloud resources; run it only when ready to
-associate this checkout with the real project.
+Select the intended Blaze project and backend, set the application root to
+`apps/web`, and choose a supported Node.js runtime. Keep the checked-in runtime
+settings when prompted about overwriting `apps/web/apphosting.yaml`, then review
+all generated changes. This is setup guidance only, not authorization to deploy.
 
 GitHub integration is optional. No automatic deployment workflow is installed.
 
@@ -58,9 +70,9 @@ shared catalog or browser-local request submission. A previously deployed versio
 may differ; inspect deployed behavior before rollout. No Python processing or
 Gemini calls are provided by this frontend deployment.
 
-For an operational hosted studio, first add a deployed processing backend,
-durable storage, and authentication/authorization. Keep frontend-only mode enabled
-until that integration is ready.
+The separate hosted API, jobs, and storage target is documented in the hosted
+plan. Keep frontend-only mode enabled until its rollout gates and cutover are
+complete.
 
 Validate the production website before rollout:
 
@@ -75,9 +87,9 @@ If provider features are enabled later, use App Hosting secrets backed by Secret
 Manager. Gemini uses the pipeline service identity; do not grant model inference to the frontend. Never commit credentials or place them in `NEXT_PUBLIC_` variables.
 Firestore is not required to initialize or host the website.
 
-The S3 authentication rollout adds an admin-only private-API diagnostic while
-retaining frontend-only mode. It does not enable hosted generation or move local
-projects into container filesystems. See [the S3 runbook](S3_DEPLOYMENT.md).
+The existing admin-only private-API diagnostic still targets the historical
+verification service until cutover. It does not enable hosted generation or move
+local projects into container filesystems. See [the historical S3 runbook](S3_DEPLOYMENT.md).
 
 ## Deploy later
 

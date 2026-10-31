@@ -1,6 +1,6 @@
 # Current application architecture
 
-Source map updated: 28 October 2026. This describes implemented boundaries, not a
+Source map updated: 31 October 2026. This describes implemented boundaries, not a
 new runtime verification. Historical test results remain in the baseline and
 validation record. Reinspect affected source when implementation changes.
 
@@ -57,7 +57,8 @@ worker-owned GCS artifact and Firestore revision adapters now implement the stor
 protocols, with explicit cloud construction and exact-generation shared artifact
 references. Live cloud durability is not yet established. A worker-owned Firestore operation adapter and
 finite Cloud Run dispatcher/runtime now provide offline-tested distributed scheduling
-contracts; hosted browser transport and rollout are still pending. Legacy JSON job
+contracts. Hosted browser transport is implemented and tested offline; live
+rollout and durability acceptance remain pending. Legacy JSON job
 files remain readable for existing IDs; new local work uses SQLite.
 
 The web worker reports stale project-hash rejection with a machine-readable
@@ -103,7 +104,8 @@ Old browser-local demo requests are not imported or deleted.
 in `apps/web/apphosting.yaml` and Next configuration redirects the home route and guards
 workflow/extraction/asset and local shared APIs with HTTP 503 after authorization.
 The local studio remains loopback bound with origin checks, in addition to user
-authentication. Hosted processing and cloud shared storage remain S5 work.
+authentication. Full hosted processing remains gated by live S5 acceptance; its storage and
+transport adapters are implemented and tested offline.
 
 See [target-design.md](target-design.md) for the accepted migration destination.
 See [the historical baseline](archive/current-app-baseline.md) for deeper inspection notes;
@@ -134,7 +136,7 @@ artifact generations behind the shared checksum contract. Local materializations
 are disposable caches. This storage selection does not enable hosted routes or
 replace local operation scheduling. See the [hosted plan](hosted-service-plan.md).
 
-## Hosted transport under implementation
+## Hosted transport and operational controls
 
 Explicit `MANGA_EXECUTION_MODE=cloud` selects server-only Next-to-Python HTTP for
 studio, shared metadata and artifact requests. Local subprocess calls fail closed
@@ -149,5 +151,30 @@ Hosted reader quotas and an atomic monthly production ledger are implemented. Ne
 hosted projects require approved shared chapter work; the work and its recorded
 approval are checked with the monthly reservation and enqueue transaction. The
 monthly allowance counts verified work IDs. Project linking remains explicit. The checked-in
-frontend-only guards remain enabled; cost controls, deployment and live acceptance
-remain separate unfinished gates. This is not evidence of a launched hosted product.
+frontend-only guards remain enabled. Cost controls and reference-aware collection
+are implemented offline; deployment and live acceptance remain unfinished gates. This is not evidence of a launched hosted product.
+
+
+## GCP provider and operations boundary
+
+Gemini planning and synthesis use an explicit GCP project, `us` model endpoint
+and ADC through `google-genai`. Hosted inference is limited to the pipeline service
+identity. The model endpoint is independent of `us-central1` compute/storage.
+Provider configuration is read without initializing credentials or a client;
+`provider_configured` means project configuration exists, not that model access
+has been verified. API keys are not a fallback. Reviewed speech maps to Gemini
+3.8 `generate_content` and validated complete WAV bytes; model changes remain
+explicit. Cache identities distinguish the new transport from earlier results
+without altering human approval fingerprints.
+
+The Firestore budget ledger reserves operation/provider costs and rejects paused
+or exhausted production. Authenticated billing reports cannot clear a latched
+pause; settlement/reconciliation are audited operator actions. Artifact collection
+uses durable maintenance ownership and promotion epochs, follows immutable revision
+and shared-review references, and deletes only eligible unreferenced generations.
+Login and published playback remain outside the production-pause gate.
+
+See [cost controls](hosted-cost-controls.md), [artifact collection](hosted-artifact-collection.md),
+[current acceptance](alignment-status.md) and [infrastructure diagrams](hosted-infrastructure-diagram.md).
+ADK and managed Agent Runtime remain [research options](gemini-agent-gcp-research.md),
+not installed execution dependencies.

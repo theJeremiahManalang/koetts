@@ -11,7 +11,7 @@ Start with `README.md` for entrypoints and `docs/README.md` for authority. Works
 - **Vision:** read `packages/vision/AGENTS.md`; read `docs/MODELS.md` before dependency changes or real inference.
 - **Harness:** read `docs/agents/writing.md` before editing instructions or their context pointers.
 - **Migration:** read `docs/target-design.md`, then the assigned scope in `docs/architecture-alignment-plan.md`; record scope evidence in `docs/alignment-status.md`.
-- **Hosting:** read `docs/APP_HOSTING.md` or `docs/S3_DEPLOYMENT.md` for the affected service.
+- **Hosting:** read `docs/APP_HOSTING.md` for the frontend; read `docs/hosted-infrastructure.md` and `docs/hosted-rollout.md` for new cloud resources, cutover, or recovery.
 - **Domain decisions:** use `GLOSSARY.md`; inspect relevant ADRs when present.
 - **Issues:** read `docs/agents/issue-tracker.md`; use `gh` within the user's authorized tracker scope.
 

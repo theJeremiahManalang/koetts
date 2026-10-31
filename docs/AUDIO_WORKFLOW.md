@@ -2,12 +2,13 @@
 
 The Python CLI and local Next.js studio share a per-project single-writer engine.
 Start with [developer setup](development.md). Firebase identity protects studio access;
-local SQLite and filesystem workers coordinate production on one host. Hosted shared
-processing remains migration work.
+local SQLite and filesystem workers coordinate production on one host. Hosted API,
+jobs and storage have implementation and target configuration, but phase-5 live
+workflow and paid-provider validation have not run.
 
 ## Environment
 
-Follow [developer setup](development.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us` with ADC for planning/synthesis; hosted execution uses the pipeline service identity. Live provider compatibility remains a separate check.
+Follow [developer setup](development.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us` with ADC for planning and synthesis; hosted execution uses the pipeline service identity. The engine uses Google Gen AI SDK 2.33+ in enterprise mode, `generate_content`, and the configured `gemini-3.8-flash` / `gemini-3.8-flash-tts` models. Offline fixtures verify request mapping and unary WAV output handling; no live provider call has established project access, quality, or cost. `provider_configured` means only that a project ID is configured.
 
 The web studio persists operations in `results/web/operations.sqlite3` before
 returning an operation ID. This local SQLite scheduler allows one MAGI operation and
@@ -199,8 +200,8 @@ uv run manga-tts export --workspace results/restored --scenes scene_001 scene_00
 
 Restore stages and validates the bundle before publishing to an empty workspace.
 Existing version-2 approvals and eligible takes are retained; version-1 projects
-require reapproval and new current requests. Neither restore nor export needs an API
-key when the necessary takes already exist.
+require reapproval and new current requests. Restore and export need no provider
+configuration when the necessary takes already exist.
 
 `settings --file settings-command.json` accepts a `SettingsUpdate` object:
 `{"settings":{"planning_model":"gemini-3.8-flash","tts_model":"gemini-3.8-flash-tts","max_chars":1200,"scene_pause":0.65,"segment_pause":0.12}}`.

@@ -1,22 +1,22 @@
 # Hosted infrastructure configuration
 
-`infra/hosted` describes new GCP resources for the hosted pilot. It is offline
-configuration only: no `terraform apply`, `gcloud`, Firebase deployment, paid call,
-or live IAM check was run for this change. It deliberately does not create or manage
-the existing project `koetts-9bf7f`, App Hosting backend `koetts`, or named Firestore
-database `koetts-default`.
+`infra/hosted` describes new GCP resources for the hosted pilot. No Terraform apply,
+Firebase deployment, paid call, or IAM grant change was run for this work. Dated
+read-only cloud observations are recorded in [rollout preparation](hosted-rollout.md).
+This configuration does not create or manage the existing project `koetts-9bf7f`,
+App Hosting backend `koetts`, or named Firestore database `koetts-default`.
 
 See the [phase 5 Mermaid diagrams](hosted-infrastructure-diagram.md) for regional
 placement, application/data paths, cost controls and staged frontend migration.
 
 ## Boundaries and inputs
 
-Cloud Run and Scheduler default to `us-central1`. The artifact bucket has a separate
-`artifact_bucket_location` input, default `us-central1` as selected by the user. This
-qualifies for storage free allowances subject to usage limits. Storage and
-processing share a region. The frontend stays in `us-east4` initially, so its API
-traffic can incur cross-region charges until the planned migration to `us-central1`.
-Terraform does not manage or move that App Hosting backend.
+The new API (`koetts-api`), Cloud Run jobs, Scheduler, and artifact bucket default
+to `us-central1`. The existing App Hosting frontend stays in `us-east4` for the
+initial backend rollout; its traffic to the new API can cross regions until a
+separately verified frontend migration to `us-central1`. Terraform does not manage
+or move that App Hosting backend. The existing Firestore database `koetts-default`
+remains in `nam5`.
 
 The configuration references the existing named Firestore database as a runtime
 setting and creates a clean collection dataset inside it. Choose `cloud_dataset`, a
@@ -79,13 +79,13 @@ status/control actions for future admin UI use, with the same Firebase check.
 the frontend caller receives the current hosted transport actions, Scheduler gets
 `coordinate`, Pub/Sub gets `budget-report`, and the operator gets identity,
 readiness, production-status, and production-control actions. API pause mutations
-still require a verified Firebase administrator in addition to the service token. The existing
-App Hosting runtime identity can read the audio signing secret used by the Next.js
-server. The API does not receive this key. The existing backend must
-still reference `MANGA_AUDIO_SIGNING_KEY` as a runtime-only App Hosting secret at
-the pinned numeric version; this configuration does not manage that backend or
-edit its `apphosting.yaml`. The reviewed web configuration change will have this
-shape, with the numeric version supplied from approved Secret Manager setup:
+still require a verified Firebase administrator in addition to the service token.
+The existing App Hosting runtime identity can read the audio signing secret used
+by the Next.js server. The API does not receive this key. The current frontend
+configuration does not yet reference `MANGA_AUDIO_SIGNING_KEY`; a separately
+reviewed frontend update must add it as a runtime-only App Hosting secret at the
+approved numeric version. This Terraform configuration does not manage that
+backend or its `apphosting.yaml`:
 
 ```yaml
 - variable: MANGA_AUDIO_SIGNING_KEY
@@ -94,15 +94,15 @@ shape, with the numeric version supplied from approved Secret Manager setup:
     - RUNTIME
 ```
 
-Gemini planning and synthesis use the Google Gen AI SDK with ADC and the pipeline
-job's attached service account. Only that identity receives
-`aiplatform.endpoints.predict`; the API, frontend, Magi and collector do not.
-`inference_location` defaults to `us` independently of compute/storage region
-`us-central1`. Project/location configuration is nonsecret and does not establish
-credential validity, model access or budget admission. The provider API-key secret,
-its version input and accessor grant are removed from desired configuration.
-Before any apply, inspect state for prior managed secrets and preserve existing
-secret values; this change authorizes no deletion of a live secret.
+Gemini planning and synthesis use `google-genai` 2.33.0, enterprise mode, and ADC
+through the pipeline job's attached service account. Terraform sets
+`GOOGLE_CLOUD_PROJECT` to `koetts-9bf7f` and `GOOGLE_CLOUD_LOCATION` to `us`;
+compute and storage remain in `us-central1`. Only the pipeline identity receives
+`aiplatform.endpoints.predict`; the API, frontend, Magi job, and collector do not.
+No Gemini provider key or provider-key secret is configured. These offline settings
+do not prove live credentials or model access. Before any apply, inspect state for
+prior managed secrets and preserve existing secret values; this documentation
+authorizes no deletion of a live secret.
 
 The remaining audio-signing secret is frontend-only. Terraform creates its
 container and IAM binding, not secret values or versions. Add the signing value
@@ -119,13 +119,16 @@ on is an explicit cost decision, not a replacement for reference-aware collectio
 ## Billing and rollout gates
 
 The USD 20 budget filters to this project and sends configured notifications at
-50%, 75%, and 100%, matching USD 10, 15, and 20. Its notification topic and
-authenticated Pub/Sub push subscription target the private API. The API receives
-the generated budget ID, billing account ID, and exact subscription resource name.
+50%, 75%, and 100%, matching USD 10, 15, and 20. It includes Gemini model charges
+and other project spend; it is not an infrastructure-only budget or a spend cap.
+The application provider ledger remains a separate admission control and does not
+change billing attribution. Its notification topic and authenticated Pub/Sub push
+subscription target the private API. The API receives the generated budget ID,
+billing account ID, and exact subscription resource name.
 Budget notifications are delayed estimates and are not a hard spend cap. The
-operating target remains USD 10/month and USD 20 is a desired infrastructure
-ceiling, not a guarantee. Existing traffic and other services can continue to accrue
-cost while production is paused.
+operating target remains USD 10/month total project spend; USD 20 is an alert
+threshold, not a guaranteed ceiling. Existing traffic and other services can
+continue to accrue cost while production is paused.
 
 Before rollout, verify the real API URL equals `canonical_api_url`; the same
 operator-supplied URL is used for service-token validation and Scheduler/Pub/Sub
@@ -202,9 +205,10 @@ Primary references:
 
 ## Free-tier assessment
 
-The API service default is `koetts-api`. The existing verification API remains
-`koetts-s3-api` until an authorized, verified cutover. The Terraform configuration
-is not restricted to no-cost usage: the new artifact bucket defaults to eligible
-`us-central1`, but execution/storage volumes have no cumulative free-tier cap.
-The initial frontend-to-API path crosses regions until frontend migration. See the dated [free-tier review](hosted-free-tier-review.md)
+The API service default is `koetts-api`. The existing frontend and verification
+API remain in place until an authorized, verified cutover. The Terraform
+configuration is not restricted to no-cost usage: the new artifact bucket defaults
+to eligible `us-central1`, but execution and storage volumes have no cumulative
+free-tier cap. The project-filtered USD 20 budget includes Gemini model spend and
+other project charges. See the dated [free-tier review](hosted-free-tier-review.md)
 and [official-source notes](hosted-free-tier-sources.md) before estimating costs.

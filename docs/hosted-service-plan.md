@@ -26,15 +26,17 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   same work do not consume another chapter slot. Creation does not implicitly link
   the project to the work; explicit admin linking remains separate. Local creation
   retains its existing behavior.
-- Target USD 10/month and seek to keep infrastructure below USD 20/month. This is
-  not a guaranteed ceiling: billing is delayed and existing service traffic can
-  continue accruing charges. Alert at USD 10, 15, and 20 reported spend. Pause new
-  extraction and generation at USD 15 or earlier when conservative reservations
-  exhaust the remaining allowance. Keep login and published playback available.
-  Resuming production requires explicit admin action.
-- Keep the existing, developer-controlled USD 80 provider budget separate from the
-  infrastructure budget. Never launch work without admission against configured
-  production limits. Do not automatically retry an uncertain paid provider call.
+- Target total project spend of USD 10/month. Configure a project-filtered USD 20
+  alert budget with notifications at USD 10, 15, and 20. This includes Gemini model
+  charges as well as infrastructure, but is not a guaranteed ceiling: billing is
+  delayed and existing traffic and services can keep accruing charges. Pause new
+  extraction and generation at USD 15 reported project spend, or earlier when
+  conservative reservations exhaust the remaining allowance. Keep login and
+  published playback available. Resuming production requires explicit admin action.
+- Keep the application provider allowance (at most USD 80) as a separate developer-
+  configured admission control. It is not a separate billing account, Gemini credit,
+  or infrastructure-only budget. Never launch work without admission against
+  configured production limits. Do not automatically retry an uncertain paid call.
 - Start with scale-to-zero CPU Cloud Run Jobs and one global slot per stage. Run a
   representative CPU benchmark before enabling hosted extraction. If it misses
   quality, time, memory, or budget limits, block full hosted launch and revisit
@@ -51,6 +53,12 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   current backend until the replacement passes authentication, playback and
   rollback checks. Use a clean cloud dataset. Do not import local projects, legacy requests, or local
   publication records as part of this pilot.
+- Use the Google Gen AI SDK with enterprise mode and Application Default
+  Credentials (ADC). Set `GOOGLE_CLOUD_PROJECT` to the existing project and use
+  inference location `us`, independently of `us-central1` compute and storage.
+  Only the pipeline job receives `aiplatform.endpoints.predict`; the frontend,
+  API, Magi job, and collector receive no Gemini provider key or inference grant.
+  Keep the audio-signing secret frontend-only.
 - Retain accepted and referenced artifacts. Remove only unreferenced temporary
   artifacts after seven days, using reference-aware collection.
 - Authenticate every published audio request and range request through the

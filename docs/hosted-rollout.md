@@ -144,59 +144,47 @@ this preflight. Ordinary CLI credential/log-cache access required sandbox
 escalation; the read-only cloud queries succeeded.
 
 
-### Preferred API name and retirement scope — 2026-10-31
+### Current target and migration gates — 2026-10-31
 
-The replacement service name is `koetts-api`. This is a service replacement,
-not an in-place rename. A read-only check confirms that live `koetts` still uses
-`S3_API_URL=https://koetts-s3-api-gu5jb64hpq-uk.a.run.app` and frontend-only mode.
-The existing API uses verification mode, the recorded immutable image above,
-1 CPU / 512 MiB, maximum one instance, and the existing dedicated runtime identity.
-Its service invocation policy grants the App Hosting runtime identity access.
+The current target is defined in the [hosted plan](hosted-service-plan.md) and
+[infrastructure configuration](hosted-infrastructure.md): new `koetts-api`, CPU
+jobs, Scheduler and artifact storage in `us-central1`; existing `koetts` frontend
+in `us-east4` initially; existing `koetts-default` Firestore database in `nam5`.
+The Terraform region does not relocate the frontend or database. The dated
+2026-10-30 read-only preflight above records the observed frontend revision and
+old API image; refresh all serving state and rollback targets before rollout.
 
-The reviewable cutover scope is:
+The frontend currently targets the old verification API and remains in
+frontend-only mode. Treat replacement as a service cutover, not an in-place rename:
 
-1. Capture the old service configuration, invocation policy, image and frontend
-   revision as rollback evidence, excluding credentials from committed records.
-2. Create private `koetts-api`, configure its actual canonical audience and
-   intended runtime identity, and validate readiness plus credential-denial cases.
-3. Update the frontend URL through a reviewed App Hosting rollout. Preserve
+1. Capture the old service configuration, invocation policy, immutable image and
+   frontend revision as rollback evidence, excluding credentials from records.
+2. Create private `koetts-api`, set its actual canonical audience and intended
+   runtime identity, and verify readiness and credential-denial cases.
+3. Update the frontend URL through a reviewed App Hosting rollout. Keep
    frontend-only guards for an authentication-only replacement; full production
-   activation still requires the hosted phase 5 acceptance gates.
+   activation still requires all phase 5 acceptance gates.
 4. Verify frontend authentication diagnostics and confirm no active caller targets
-   the old service before deleting it. Retain the old runtime identity and image
-   unless separately proven unused; service retirement does not authorize deleting
-   shared identities, artifacts, Firestore data, or buckets.
-5. Recheck that the old service is absent, the replacement is private and healthy,
-   and the frontend uses the replacement. Record serving revisions and checks.
+   the old service before retiring it. Retain old identities and images unless
+   separately proven unused; never remove shared data or storage as part of API
+   retirement.
+5. Confirm the old service is retired, the replacement is private and healthy,
+   and the frontend uses it. Record actual revisions and checks.
 
-Do not rewrite the checked-in frontend URL to an unverified endpoint ahead of
-this sequence. The user's service-name request selects the replacement name;
-full hosted deployment, paid inference, and provider tests remain separately
-controlled. No cloud mutation has been performed for this preference change.
+After backend acceptance, prepare a regional App Hosting backend in `us-central1`
+before switching users or retiring the east-region backend. Discover its generated
+URL and runtime identity, then verify API invocation, signing-secret access,
+Firebase authorized domains, public origin/CSRF, session cookies, sign-in,
+authenticated byte-range playback and rollback. A changed site domain can require
+users to sign in again. Keep the east-region site available until cutover passes.
+See [App Hosting locations](https://firebase.google.com/docs/app-hosting/about-app-hosting#app-hosting-locations)
+and the [backend resource](https://firebase.google.com/docs/reference/apphosting/rest/v1/projects.locations.backends).
 
-
-### Regional placement and later frontend migration — 2026-10-31
-
-The latest placement decision supersedes earlier defaults: create `koetts-api`,
-CPU jobs, Scheduler and artifact storage in `us-central1`. Keep the current
-`koetts` frontend in `us-east4` for the initial backend rollout. The historical
-`us-east4` service/image observations above remain rollback evidence to refresh,
-not instructions to deploy new backend resources there. Firestore `koetts-default`
-stays in `nam5`; the regional input does not relocate that existing database.
-
-A later frontend migration to `us-central1` is part of the expected end state.
-Prepare a regional App Hosting backend and validate it before switching users or
-retiring the east-region backend. Discover its actual generated URL and runtime
-identity; verify API invocation, Secret Manager access, Firebase authorized domains,
-public origin/CSRF and session-cookie behavior, sign-in, authenticated byte-range
-playback and rollback. A changed generated website domain can require users to
-sign in again. Do not assume that changing Terraform `region` migrates App Hosting
-or preserves its generated public URL. Keep the east-region site available until
-that cutover passes. The new backend's regional resource identity and output URI
-must be recorded from live preflight rather than invented.
-
-App Hosting creates regional backend resources, and its API identifies backends by
-project/location/backend. See [App Hosting locations](https://firebase.google.com/docs/app-hosting/about-app-hosting#app-hosting-locations)
-and [backend resource](https://firebase.google.com/docs/reference/apphosting/rest/v1/projects.locations.backends).
-These are preparation steps; no frontend deployment, DNS change or cloud migration
-has been performed or newly authorized by this placement update.
+The Gemini migration (`d9eb6f1`, review fixes `821c02e`) passed offline SDK and
+ADC-wire validation. Runtime uses `google-genai` 2.33.0, enterprise mode,
+`GOOGLE_CLOUD_PROJECT`, inference location `us`, and pipeline-only inference IAM.
+The project USD 20 budget includes Gemini charges; the application provider
+allowance is separate admission control. See [cost controls](hosted-cost-controls.md).
+These checks do not establish deployment, live credentials, model access, measured
+cost, or provider acceptance. No build, deployment, paid inference, IAM mutation,
+DNS change, or frontend migration is authorized by this runbook.

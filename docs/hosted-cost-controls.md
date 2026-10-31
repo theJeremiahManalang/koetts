@@ -1,9 +1,9 @@
 # Hosted production cost controls
 
-This document describes the implemented ledger boundary. It does not establish
-live billing configuration, measured model costs, or a guaranteed spending cap.
-The phase 4 operational rollout remains incomplete until its notification,
-operator tooling, cleanup, infrastructure and review evidence is recorded.
+This document describes the implemented ledger boundary. Offline phase 4
+implementation, review and acceptance are complete. Live billing configuration,
+notification delivery, measured model costs and rollout remain unverified; no
+guaranteed spending cap is established.
 
 ## Admission and execution
 
@@ -35,13 +35,19 @@ uncertain paid call.
 
 ## Pause and visibility
 
-New reservations reject when reported infrastructure cost plus retained
-reservations would reach USD 15, or when the separate provider allowance cannot
-cover the reservation. Infrastructure reports accumulate interval highwater marks;
+New reservations reject when reported project cost plus retained reservations
+would reach USD 15, or when the separate provider allowance cannot cover the
+reservation. Billing reports accumulate interval highwater marks;
 duplicate or lower out-of-order reports cannot reduce costs or clear a pause.
-USD 10, 15 and 20 thresholds are exposed as alert configuration. Delivery of actual
-Cloud Billing notifications requires separately provisioned budget alerts and a
-Pub/Sub push subscription; no live delivery is established by offline tests.
+The project-filtered USD 20 billing budget includes Gemini model charges and other
+project spend; it is not an infrastructure-only budget or a hard cap. The separate
+application provider allowance is an admission control, not separate billing credit
+or attribution. The application stores received project charges in its
+`infrastructure_reported_micro` ledger field; this is an accounting bucket, not an
+infrastructure-only measurement or SKU filter. USD 10, 15 and 20 thresholds are
+exposed as alert configuration. Delivery of actual Cloud Billing notifications
+requires separately provisioned budget alerts and a Pub/Sub push subscription; no
+live delivery is established by offline tests.
 
 `GET /production/status` requires the private service's `production-status`
 permission and a verified Firebase administrator. `POST /production/pause`
@@ -135,17 +141,10 @@ or initialize inference/provider clients. Never delete a ledger to reset a budge
 
 Billing reports are delayed. Login, playback, storage, builds, existing executions
 and other services can continue accruing charges while production is paused.
-The USD 10 target and desired USD 20 ceiling remain operating goals, not guarantees.
-
-
-## GCP service-identity billing attribution
-
-Gemini now uses the pipeline service identity and bills the configured GCP model
-project. The separate provider ledger is an application allowance, not transferred
-Developer API credit or a separate billing account. The current Terraform budget
-filters the entire project, so reported spend can include Gemini model charges
-alongside infrastructure. This is conservative: production can pause before the
-provider ledger allowance is exhausted. It does not establish separate
-infrastructure-only USD 20 billing enforcement. Before live activation, review
-actual service/SKU attribution and decide whether separate service-filtered
-budgets are needed; do not subtract estimated model charges from accepted reports.
+The USD 10 total project-spend target and USD 20 alert threshold remain operating
+goals, not a guaranteed ceiling. Gemini uses the pipeline identity and configured
+GCP project; its charges are included in project-reported costs. The provider
+ledger is an application allowance, not separate billing credit or a separate
+billing account. Production can pause before that allowance is exhausted.
+There is no infrastructure-only USD 20 budget. Do not subtract estimated model
+charges from accepted project reports.
