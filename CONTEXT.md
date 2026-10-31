@@ -168,3 +168,8 @@ us-east1 independently of region (Cloud Run/Scheduler remain us-east4), wired on
 the bucket location and added an output. Updated current infrastructure/free-tier
 assessment to remove the prior storage-location exclusion and retain volume and
 cross-region transfer caveats. No existing bucket moved or cloud mutation made.
+
+Artifact placement committed ff480e4. Independent Standards/Spec follow-ups against
+f780df0 report no findings. Repository, whitespace and ten infrastructure checks
+pass. No Terraform apply; prior temporary Terraform binary remains unavailable,
+so provider schema validation was not rerun for this location-input change.
