@@ -8,6 +8,11 @@ database `koetts-default`.
 
 ## Boundaries and inputs
 
+Cloud Run and Scheduler default to `us-east4`. The artifact bucket has a separate
+`artifact_bucket_location` input, default `us-east1` as selected by the user. This
+qualifies for storage free allowances subject to usage limits; cross-region
+transfers between storage and processing can still incur charges.
+
 The configuration references the existing named Firestore database as a runtime
 setting and creates a clean collection dataset inside it. Choose `cloud_dataset`, a
 new globally unique artifact bucket, and a stable `artifact_namespace` explicitly
@@ -185,7 +190,7 @@ Primary references:
 
 The API service default is `koetts-api`. The existing verification API remains
 `koetts-s3-api` until an authorized, verified cutover. The Terraform configuration
-is not restricted to no-cost usage: its artifact bucket inherits `us-east4`, which
-is outside Cloud Storage's storage free-tier locations, and execution/storage
-volumes have no cumulative free-tier cap. See the dated [free-tier review](hosted-free-tier-review.md)
+is not restricted to no-cost usage: the new artifact bucket defaults to eligible
+`us-east1`, but execution/storage volumes have no cumulative free-tier cap and
+processing in `us-east4` can incur cross-region transfer charges. See the dated [free-tier review](hosted-free-tier-review.md)
 and [official-source notes](hosted-free-tier-sources.md) before estimating costs.

@@ -8,8 +8,9 @@ container builds started, or inference/provider calls made.
 ## Conclusion
 
 The configuration is suitable for a small paid pilot with free allowances; it is
-not constrained to free-tier usage. In particular, its new artifact bucket inherits
-`us-east4`, and neither job count nor retained artifact size is capped monthly.
+not constrained to free-tier usage. The artifact bucket now defaults to `us-east1` independently of the service
+region, following the user's placement decision. Neither job count nor retained
+artifact size is capped monthly.
 The existing web frontend and older API also consume resources outside this
 Terraform configuration. Current billing-account usage and remaining allowances
 were not measured, so a zero-dollar bill cannot be established.
@@ -46,15 +47,17 @@ reads also count toward their respective usage allowances.
 
 ## Storage and other services
 
-The bucket uses STANDARD storage in `var.region`, default `us-east4`. The 5 GB-month
-storage allowance applies only in `us-west1`, `us-central1` and `us-east1`; this
-bucket therefore does not qualify. Retained accepted artifacts have no size cap.
+The bucket uses STANDARD storage in `var.artifact_bucket_location`, default
+`us-east1`. This is an eligible location for the 5 GB-month storage allowance,
+subject to shared usage and other pricing conditions. Services and jobs remain in
+`us-east4`. Cross-region reads are not same-location transfers and can incur
+network charges; eligible storage placement alone does not guarantee free delivery.
 [Cloud Storage pricing](https://cloud.google.com/storage/pricing).
 
-Moving only the bucket to an eligible region would require a separate location
-variable and assessment of cross-region transfer. Moving the entire region would
-also move new API/jobs; existing App Hosting and Firestore locations would stay.
-Neither change is included in this service-name request.
+This changes only new bucket configuration. No existing bucket was relocated or
+created. The earlier `us-east4` storage exclusion is resolved for the default new
+artifact bucket, while compute, operation, storage-volume and transfer limits
+still need measured usage evidence.
 
 See [ancillary service source review](hosted-free-tier-sources.md) for Firestore,
 Scheduler, Pub/Sub retention, Secret Manager, build/image storage and App Hosting.
@@ -71,7 +74,7 @@ at USD 15 reported cost plus retained reservations; it does not stop playback,
 builds, storage, existing executions or every cloud service. Alert-only budgets
 are not automatic spending ceilings. [Budget documentation](https://docs.cloud.google.com/billing/docs/how-to/budgets).
 
-Before making a free-tier claim, select eligible storage placement if desired,
+Before making a free-tier claim, confirm the selected bucket location,
 measure representative CPU job duration and retained bytes, inspect existing
 billing-account consumption, and set conservative operation caps from that evidence.
 Keep schedules paused until the separately authorized rollout passes. Do not lower

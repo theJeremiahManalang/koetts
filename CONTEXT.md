@@ -159,3 +159,12 @@ and all ten focused infrastructure tests pass. Terraform fmt/schema validation
 were not rerun for this string-only change because the prior temporary binary is
 absent. Full hosted goal remains incomplete; next live work still needs phase 5
 authorization and an incremental spending cap. No live service rename/deletion.
+
+
+## Artifact bucket placement — 2026-10-31
+
+User selected us-east1 for artifact bucket. Added artifact_bucket_location default
+us-east1 independently of region (Cloud Run/Scheduler remain us-east4), wired only
+the bucket location and added an output. Updated current infrastructure/free-tier
+assessment to remove the prior storage-location exclusion and retain volume and
+cross-region transfer caveats. No existing bucket moved or cloud mutation made.

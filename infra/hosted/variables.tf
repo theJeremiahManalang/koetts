@@ -15,7 +15,7 @@ variable "project_number" {
 }
 
 variable "region" {
-  description = "Region for new Cloud Run, Scheduler, and GCS resources."
+  description = "Region for new Cloud Run and Scheduler resources."
   type        = string
   default     = "us-east4"
 }
@@ -37,6 +37,12 @@ variable "cloud_dataset" {
     condition     = can(regex("^[A-Za-z0-9_-]{1,100}$", var.cloud_dataset))
     error_message = "cloud_dataset must be a valid explicit dataset identifier."
   }
+}
+
+variable "artifact_bucket_location" {
+  description = "Location for the new artifact bucket, independent of the service region. us-east1 is eligible for Cloud Storage Always Free usage allowances."
+  type        = string
+  default     = "us-east1"
 }
 
 variable "artifact_bucket_name" {

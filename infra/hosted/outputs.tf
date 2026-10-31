@@ -18,6 +18,11 @@ output "artifact_bucket" {
   description = "New private GCS artifact bucket."
 }
 
+output "artifact_bucket_location" {
+  value       = google_storage_bucket.artifacts.location
+  description = "Artifact bucket location, configured independently of the service region."
+}
+
 output "artifact_namespace" {
   value       = var.artifact_namespace
   description = "Canonical artifact object prefix."
