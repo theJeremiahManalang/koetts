@@ -9,7 +9,9 @@ acceptance. Deployed behavior and actual billing delivery remain unverified.
 ## Offline preparation
 
 Use the existing Firebase project `koetts-9bf7f`, Firestore database
-`koetts-default`, and region `us-east4`. A clean cloud dataset is required, but
+`koetts-default`, and target region `us-central1` for new API/jobs and artifact
+storage. The current frontend remains in `us-east4` until its later verified
+migration. A clean cloud dataset is required, but
 no dataset, artifact bucket, or artifact namespace has been provisioned by this
 preparation. Confirm their exact names through the authorized provisioning task;
 do not infer a name from local configuration. Capture actual prior web and API
@@ -171,3 +173,30 @@ Do not rewrite the checked-in frontend URL to an unverified endpoint ahead of
 this sequence. The user's service-name request selects the replacement name;
 full hosted deployment, paid inference, and provider tests remain separately
 controlled. No cloud mutation has been performed for this preference change.
+
+
+### Regional placement and later frontend migration — 2026-10-31
+
+The latest placement decision supersedes earlier defaults: create `koetts-api`,
+CPU jobs, Scheduler and artifact storage in `us-central1`. Keep the current
+`koetts` frontend in `us-east4` for the initial backend rollout. The historical
+`us-east4` service/image observations above remain rollback evidence to refresh,
+not instructions to deploy new backend resources there. Firestore `koetts-default`
+stays in `nam5`; the regional input does not relocate that existing database.
+
+A later frontend migration to `us-central1` is part of the expected end state.
+Prepare a regional App Hosting backend and validate it before switching users or
+retiring the east-region backend. Discover its actual generated URL and runtime
+identity; verify API invocation, Secret Manager access, Firebase authorized domains,
+public origin/CSRF and session-cookie behavior, sign-in, authenticated byte-range
+playback and rollback. A changed generated website domain can require users to
+sign in again. Do not assume that changing Terraform `region` migrates App Hosting
+or preserves its generated public URL. Keep the east-region site available until
+that cutover passes. The new backend's regional resource identity and output URI
+must be recorded from live preflight rather than invented.
+
+App Hosting creates regional backend resources, and its API identifies backends by
+project/location/backend. See [App Hosting locations](https://firebase.google.com/docs/app-hosting/about-app-hosting#app-hosting-locations)
+and [backend resource](https://firebase.google.com/docs/reference/apphosting/rest/v1/projects.locations.backends).
+These are preparation steps; no frontend deployment, DNS change or cloud migration
+has been performed or newly authorized by this placement update.

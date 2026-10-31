@@ -8,7 +8,7 @@ container builds started, or inference/provider calls made.
 ## Conclusion
 
 The configuration is suitable for a small paid pilot with free allowances; it is
-not constrained to free-tier usage. The artifact bucket now defaults to `us-east1` independently of the service
+not constrained to free-tier usage. The artifact bucket now defaults to `us-central1` independently of the service
 region, following the user's placement decision. Neither job count nor retained
 artifact size is capped monthly.
 The existing web frontend and older API also consume resources outside this
@@ -17,7 +17,7 @@ were not measured, so a zero-dollar bill cannot be established.
 
 ## Cloud Run compute
 
-`us-east4` has Tier 1 pricing. Monthly request-based allowances are 180,000
+`us-central1` has Tier 1 pricing. Monthly request-based allowances are 180,000
 vCPU-seconds, 360,000 GiB-seconds and two million requests. Jobs have 240,000
 vCPU-seconds and 450,000 GiB-seconds; usage is aggregated by billing account.
 Jobs incur at least one billed minute. [Cloud Run pricing](https://cloud.google.com/run/pricing).
@@ -48,10 +48,12 @@ reads also count toward their respective usage allowances.
 ## Storage and other services
 
 The bucket uses STANDARD storage in `var.artifact_bucket_location`, default
-`us-east1`. This is an eligible location for the 5 GB-month storage allowance,
-subject to shared usage and other pricing conditions. Services and jobs remain in
-`us-east4`. Cross-region reads are not same-location transfers and can incur
-network charges; eligible storage placement alone does not guarantee free delivery.
+`us-central1`. This is an eligible location for the 5 GB-month storage allowance,
+subject to shared usage and other pricing conditions. Services and jobs also default to
+`us-central1`, eliminating the planned bucket-to-worker region mismatch. The
+frontend initially remains in `us-east4`; its API traffic can incur cross-region
+network charges until migration. Eligible placement alone does not guarantee
+free delivery.
 [Cloud Storage pricing](https://cloud.google.com/storage/pricing).
 
 This changes only new bucket configuration. No existing bucket was relocated or

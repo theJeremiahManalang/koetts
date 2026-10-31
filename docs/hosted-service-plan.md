@@ -44,9 +44,12 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   attempts, with 30-minute attempt timeout, 15-second heartbeat, and 60-second
   lease. Reconcile execution identity and checkpoints before releasing a lease.
   An uncertain external outcome retains its slot until an explicit admin decision.
-- Keep existing Firebase project, App Hosting backend, and `koetts-default`
-  Firestore database. Put new regional compute and storage in `us-east4`. Use a
-  clean cloud dataset. Do not import local projects, legacy requests, or local
+- Keep the existing Firebase project and `koetts-default` Firestore database.
+  Put new regional compute and artifact storage in `us-central1`. Keep the
+  existing App Hosting frontend in `us-east4` initially, then migrate it to
+  `us-central1` through a separately verified frontend cutover. Preserve the
+  current backend until the replacement passes authentication, playback and
+  rollback checks. Use a clean cloud dataset. Do not import local projects, legacy requests, or local
   publication records as part of this pilot.
 - Retain accepted and referenced artifacts. Remove only unreferenced temporary
   artifacts after seven days, using reference-aware collection.

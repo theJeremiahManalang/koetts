@@ -8,10 +8,12 @@ database `koetts-default`.
 
 ## Boundaries and inputs
 
-Cloud Run and Scheduler default to `us-east4`. The artifact bucket has a separate
-`artifact_bucket_location` input, default `us-east1` as selected by the user. This
-qualifies for storage free allowances subject to usage limits; cross-region
-transfers between storage and processing can still incur charges.
+Cloud Run and Scheduler default to `us-central1`. The artifact bucket has a separate
+`artifact_bucket_location` input, default `us-central1` as selected by the user. This
+qualifies for storage free allowances subject to usage limits. Storage and
+processing share a region. The frontend stays in `us-east4` initially, so its API
+traffic can incur cross-region charges until the planned migration to `us-central1`.
+Terraform does not manage or move that App Hosting backend.
 
 The configuration references the existing named Firestore database as a runtime
 setting and creates a clean collection dataset inside it. Choose `cloud_dataset`, a
@@ -191,6 +193,6 @@ Primary references:
 The API service default is `koetts-api`. The existing verification API remains
 `koetts-s3-api` until an authorized, verified cutover. The Terraform configuration
 is not restricted to no-cost usage: the new artifact bucket defaults to eligible
-`us-east1`, but execution/storage volumes have no cumulative free-tier cap and
-processing in `us-east4` can incur cross-region transfer charges. See the dated [free-tier review](hosted-free-tier-review.md)
+`us-central1`, but execution/storage volumes have no cumulative free-tier cap.
+The initial frontend-to-API path crosses regions until frontend migration. See the dated [free-tier review](hosted-free-tier-review.md)
 and [official-source notes](hosted-free-tier-sources.md) before estimating costs.

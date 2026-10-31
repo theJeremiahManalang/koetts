@@ -17,7 +17,7 @@ variable "project_number" {
 variable "region" {
   description = "Region for new Cloud Run and Scheduler resources."
   type        = string
-  default     = "us-east4"
+  default     = "us-central1"
 }
 
 variable "firestore_database_id" {
@@ -40,9 +40,9 @@ variable "cloud_dataset" {
 }
 
 variable "artifact_bucket_location" {
-  description = "Location for the new artifact bucket, independent of the service region. us-east1 is eligible for Cloud Storage Always Free usage allowances."
+  description = "Location for the new artifact bucket, independent of the service region. us-central1 is eligible for Cloud Storage Always Free usage allowances."
   type        = string
-  default     = "us-east1"
+  default     = "us-central1"
 }
 
 variable "artifact_bucket_name" {

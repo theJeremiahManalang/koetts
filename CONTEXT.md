@@ -14,8 +14,10 @@ samples, model caches, credentials and unrelated changes. No push was requested.
 
 ## Decisions
 
-Use existing project koetts-9bf7f, backend koetts, region us-east4, named Firestore
-koetts-default, and a clean hosted dataset. Do not migrate local data implicitly.
+Use existing project koetts-9bf7f and named Firestore koetts-default (nam5), with
+a clean hosted dataset. Latest target: new API/jobs/Scheduler and storage in
+us-central1. Existing frontend koetts stays us-east4 initially; expected later
+frontend migration to us-central1 needs verified regional cutover. Do not migrate local data implicitly.
 Public Google signup; trusted admins approve production. Hosted creation requires
 approved shared work, five distinct work IDs/UTC month and 40 pages/work.
 Reader quotas are five pending and ten new/day UTC; duplicates are free.
@@ -173,3 +175,15 @@ Artifact placement committed ff480e4. Independent Standards/Spec follow-ups agai
 f780df0 report no findings. Repository, whitespace and ten infrastructure checks
 pass. No Terraform apply; prior temporary Terraform binary remains unavailable,
 so provider schema validation was not rerun for this location-input change.
+
+
+## Consolidated region decision — 2026-10-31
+
+User supersedes prior us-east1 storage/us-east4 compute choices: new artifact
+bucket and API/jobs go to us-central1. Terraform region and independent bucket
+location defaults updated, also placing Scheduler in us-central1. Existing
+frontend remains us-east4 initially, with a later migration to us-central1 now
+recorded as expected end state in the hosted plan and rollout runbook. Existing
+Firestore stays nam5. No App Hosting config/public URL, cloud resources or live
+traffic changed. Free-tier review updated: storage/processing colocated, initial
+frontend-to-API traffic crosses regions. Deployment/cost approval remains pending.
