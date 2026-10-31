@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import array
 import hashlib
+import io
 import math
 import shutil
 import subprocess
@@ -149,7 +150,16 @@ def wav_info(path: PathLike) -> tuple[dict[str, Any], bytes]:
 
     Metadata includes frame count, duration and clipping. Raises ValueError for
     unexpected format; wave/IO errors propagate. No project mutation."""
-    with wave.open(str(path), "rb") as wav:
+    return _wav_info(str(path))
+
+
+def wav_bytes_info(data: bytes) -> tuple[dict[str, Any], bytes]:
+    """Validate provider WAV bytes using the same format policy as persisted takes."""
+    return _wav_info(io.BytesIO(data))
+
+
+def _wav_info(source) -> tuple[dict[str, Any], bytes]:
+    with wave.open(source, "rb") as wav:
         if (wav.getframerate(), wav.getnchannels(), wav.getsampwidth(), wav.getcomptype()) != (SAMPLE_RATE, 1, 2, "NONE"):
             raise ValueError("Expected mono 24 kHz 16-bit PCM WAV")
         frames = wav.getnframes()

@@ -531,6 +531,14 @@ resource "google_cloud_run_v2_job" "pipeline" {
             value = env.value
           }
         }
+        env {
+          name  = "CLOUD_RUN_PROJECT"
+          value = var.project_id
+        }
+        env {
+          name  = "CLOUD_RUN_LOCATION"
+          value = var.region
+        }
       }
     }
   }

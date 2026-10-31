@@ -40,6 +40,8 @@ class HostedInfrastructureTests(unittest.TestCase):
             self.assertRegex(section, r'max_retries\s*=\s*0')
             self.assertRegex(section, r'timeout\s*=\s*"1800s"')
             self.assertNotIn("nvidia.com/gpu", section)
+            self.assertRegex(section, r'name\s*=\s*"CLOUD_RUN_PROJECT"\s+value\s*=\s*var\.project_id')
+            self.assertRegex(section, r'name\s*=\s*"CLOUD_RUN_LOCATION"\s+value\s*=\s*var\.region')
         api = MAIN.split('resource "google_cloud_run_v2_service" "api"', 1)[1]
         api = api.split('\nresource "google_cloud_run_v2_service_iam_member"', 1)[0]
         self.assertNotIn("audio_signing.secret_id", api)

@@ -63,6 +63,11 @@ class GeminiConfigTests(unittest.TestCase):
         self.assertTrue(config.provider_configured)
         self.assertTrue(provider_configured())
 
+    def test_blank_explicit_provider_configuration_is_rejected(self):
+        for fields in ({"project": " "}, {"location": " "}):
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                PipelineConfig(workspace=tempfile.gettempdir(), **fields)
+
     def test_no_api_key_fallback_and_explicit_enterprise_adc_client(self):
         os.environ["GEMINI_API_KEY"] = "ignored-key"
         with patch("google.genai.Client") as client:

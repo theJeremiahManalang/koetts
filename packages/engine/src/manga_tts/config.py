@@ -51,6 +51,15 @@ class PipelineConfig(BaseModel):
     max_attempts: int = Field(default=DEFAULT_MAX_RETRIES, ge=1)
     timeout_ms: int = Field(default=DEFAULT_CLIENT_TIMEOUT_MS, ge=1)
 
+    @field_validator("project", "location")
+    @classmethod
+    def explicit_provider_value(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if not value.strip():
+            raise ValueError("Provider project and location must not be blank")
+        return value.strip()
+
     @property
     def provider_configured(self) -> bool:
         """Whether this config names a project, without checking credentials or initializing a client."""

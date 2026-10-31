@@ -1,7 +1,6 @@
 """Gemini stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
 
-import io
 import logging
 import re
 import time
@@ -127,12 +126,8 @@ class GeminiRenderer:
             LOGGER.warning("synthesis_response_invalid", extra={"operation": "synthesis", "outcome": "missing_audio"})
             raise ValueError("Gemini returned no audio WAV")
         try:
-            with wave.open(io.BytesIO(data), "rb") as wav:
-                valid_header = (wav.getframerate(), wav.getnchannels(), wav.getsampwidth(), wav.getcomptype()) == (24000, 1, 2, "NONE")
-                frames = wav.getnframes()
-                pcm = wav.readframes(frames)
-                if not valid_header or frames <= 0 or len(pcm) != frames * 2:
-                    raise ValueError
+            from .tts import wav_bytes_info
+            wav_bytes_info(data)
         except (wave.Error, EOFError, ValueError):
             LOGGER.warning("synthesis_response_invalid", extra={"operation": "synthesis", "outcome": "invalid_wav"})
             raise ValueError("Gemini returned an invalid mono 24 kHz 16-bit PCM WAV") from None
