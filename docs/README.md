@@ -15,6 +15,7 @@ Runtime source, workspace manifests, and lockfiles establish implemented behavio
 | Frontend hosting | [App Hosting](APP_HOSTING.md) |
 | Private HTTP service | [API deployment](S3_DEPLOYMENT.md) |
 | Hosted pilot implementation and gates | [Hosted plan](hosted-service-plan.md), [infrastructure](hosted-infrastructure.md), [Mermaid diagrams](hosted-infrastructure-diagram.md) |
+| Gemini agents on GCP: feasibility research | [ADK and Agent Runtime](gemini-agent-gcp-research.md) |
 | Hosted operations and recovery | [Cost controls](hosted-cost-controls.md), [artifact collection](hosted-artifact-collection.md), [rollout](hosted-rollout.md) |
 | Accepted target/open decisions | [Target design](target-design.md) |
 | Migration scopes and evidence | [Plan](architecture-alignment-plan.md), [status](alignment-status.md) |

@@ -211,3 +211,25 @@ Visualization committed b45f0b9. All three Mermaid blocks parse with Mermaid
 dependencies changed. Repository and whitespace checks pass. Independent
 Standards/Spec reviews against 3ef8b6a report no findings. Rendering screenshots
 were not produced. Unrelated untracked infra/hosted/graph.png remains untouched.
+
+
+## ADK and GCP agent research — 2026-10-31
+
+User requests research of Google agent platform/ADK and the supplied ADK migration
+guide, assessing native Gemini agents on GCP. This authorizes research, not agent
+implementation or migration. Delegated primary-source memo to bounded Luna worker
+(owns only docs/gemini-agent-gcp-research.md); parent separately read current ADK
+and Agent Runtime docs, Context7 resolved /websites/adk_dev, and repo Gemini client.
+Current repo uses google-genai API-key client; planning generate_content and TTS
+interactions.create. An ADC/backend switch is not proven drop-in, especially TTS.
+Recommendation under evaluation: bounded planning agent in existing Cloud Run
+worker before considering managed Agent Runtime; retain operation/budget/human
+approval authority. No installs, live probes, paid model calls or cloud changes.
+
+Completed docs/gemini-agent-gcp-research.md with official-source citations and
+three options: direct GCP provider adapter, bounded ADK worker experiment, managed
+Agent Runtime later. Parent verified runtime regions/current pricing and corrected
+evaluation wording: offline saved-response replay cannot establish fresh model
+quality; fresh inference comparisons require paid-test authorization. Current
+AgentRuntime naming/oldReasoningEngine APIs distinguished. No implementation or
+phase5authorization inferred from research.
