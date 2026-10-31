@@ -503,6 +503,26 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("private database", response.text)
                 self.assertNotIn("credential", response.text if expected == 500 else "")
 
+    async def test_enqueue_preserves_sanitized_cloud_budget_denial(self):
+        from manga_worker.cloud_budget import CloudBudgetExceeded
+
+        class PausedBackend:
+            def enqueue_operation(self, payload, key):
+                raise CloudBudgetExceeded("private ledger path and remaining allowance")
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app(PausedBackend())),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                "/operations", headers=self.headers,
+                json={"action": "create", "mode": "images"},
+            )
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()["error"]["code"], "production_paused")
+        self.assertNotIn("private ledger", response.text)
+        self.assertNotIn("remaining allowance", response.text)
+
     async def test_enqueue_rejects_ambiguous_or_non_json_inputs_before_persistence(self):
         class Backend:
             def __init__(self):

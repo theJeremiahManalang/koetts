@@ -102,3 +102,19 @@ build. Fresh-checkout acceptance also passed frozen installs, repository checks,
 those test suites, absence of torch, and external-directory CLI entrypoints. The
 fresh-copy helper now includes developer resources and infrastructure source while
 excluding credentials, local Terraform state/inputs and generated caches.
+
+
+## Manual access evidence and project-creation denial
+
+The user confirmed hosted login and single-image upload. Captured logs show
+successful `/identity`, `/projects`, `/shared`, `/production/status` and upload
+requests. These establish basic authenticated transport and storage access, not
+session revocation, processing quality or full production acceptance.
+
+Two creation attempts returned 400. An injected regression proved that the HTTP
+enqueue wrapper converted `CloudBudgetExceeded` into a generic invalid-request
+response. The fix preserves the existing sanitized 429 `production_paused` handler.
+The regression failed with 400 before the fix and passed afterward. All 15 HTTP
+unit tests, the full Python suite (334 tests, 93 optional skips), and disposable
+studio/frontend-only HTTP acceptance passed. Production remains paused by the
+user's explicit choice; no extraction trial or Gemini call is authorized to run.

@@ -317,7 +317,7 @@ def create_app(
         except (ValueError, RuntimeError) as exc:
             from manga_tts.schemas import WorkflowError
 
-            if isinstance(exc, WorkflowError):
+            if isinstance(exc, (WorkflowError, CloudBudgetExceeded)):
                 raise
             from manga_tts.operations import OperationConflict
 

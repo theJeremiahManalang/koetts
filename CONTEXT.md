@@ -178,3 +178,12 @@ Do not resume or enable dispatch. ASGI regression reproduced wrong400vs429 in
 all15HTTPunit tests. Default-sandbox test hung and was explicitly stopped (130);
 escalated synthetic regression then ran red and green. Next commit tools/review
 fixes, then API regression fix and independent follow-up review before deployment.
+
+Tool review/fresh-copy fixes committed cb970be. API budget-denial fix verified:
+15HTTPunit,334Python/93optional skips, and pinned disposable studio/frontend-only
+HTTP acceptance passed (http-budget-denial-regression.log, python-budget-fix.log,
+http-budget-fix-acceptance.log). User confirms hosted login/upload; actual logs
+showidentity/projects/shared/status/upload200 and create400. Captures do not
+prove session revocation or full production acceptance. Next commit minimal API
+exception fix plus regression, run independent follow-up reviews, build/deploy
+API-only update. Keep production/schedules/providercalls disabled.
