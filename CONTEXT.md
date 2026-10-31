@@ -65,21 +65,21 @@ auth/frontend/audio/research updates within separate file ownership.
 The previous long alignment log is preserved in
 `docs/archive/alignment-status-through-2026-10-31.md`; the active
 `docs/STATUS.md` now summarizes current acceptance and remaining gates.
-The S3 runbook remains at its original path for stable pointers, clearly marked
-historical. Current production rollout belongs to `docs/resources/hosted-rollout.md`.
-Only the AGENTS.md hosting pointer changes: frontend setup routes to App Hosting,
-and new cloud resources/cutover routes to the current infrastructure/rollout guides.
-No skill, approval policy or runtime configuration changes.
+The S3 runbook is now `docs/archive/S3_DEPLOYMENT.md`, clearly historical. Current
+production rollout is `docs/resources/hosted-rollout.md`. Root and scoped AGENTS
+migration, vision, hosting, engine and web pointers now target the moved canonical
+files. Their triggers and approval policies are unchanged; runtime configuration
+is unchanged.
 
 ## Completion and next action
 
-Documentation consolidation and both worker assignments are complete. Main commit
-`997e1b3` and review fixes `166f0f7` preserve history and accepted operating policy.
-Both review axes accepted fixes; the final Standards note corrected the recorded
-infrastructure-guide reading count, now reflected below. Final validation checked
-166 local Markdown targets with zero missing files; all three Mermaid diagrams
-parse; repository and whitespace checks pass. No application tests or live probes
-were rerun for this documentation-only change.
+Directory reorganization is committed in `7f1ca7d`. Spec review reports no findings.
+Standards review found stale handoff claims about the old S3 path and which agent
+pointers changed; both statements are corrected. The archive index's former inline
+path references now link to current uppercase harness documents. Final checks
+cover all canonical moves, Markdown links, the repository-checker regression and
+Mermaid parsing. No application or live cloud tests are needed for this path-only
+change; the original application acceptance remains recorded above.
 
 Next implementation gate remains bounded phase 5 cloud/test authorization with
 incremental infrastructure/build and model spending allowances, actual rollout
@@ -141,10 +141,18 @@ explicit bypass remains in the unchanged approval guide. Hosting, engine, vision
 and web pointers now resolve to their moved canonical documents. These are text
 walkthroughs, not model evaluations. Reading-cost measurement uses whitespace
 words; document relocation changes path spelling rather than domain-rule content.
-Final before/after counts and review outcomes will be recorded after validation.
+Reading-size evidence and independent review outcomes are recorded below.
 
 Validation before review: 20 source/destination moves verified with no
 old active file left; 203 local Markdown targets resolve. Repository checker
 and its unit regression pass; three Mermaid diagrams parse. AGENTS.md remains
 286 whitespace words before/after; docs/README.md grows from 381 to 452 words
 for explicit directory routing. No token estimate or model evaluation is claimed.
+
+
+Directory-review outcome: Spec found no gaps; Standards stale-handoff finding
+corrected. Earlier consolidation-review notes above describe the prior task's
+accepted-policy fix, not a new policy change during this reorganization. Root
+resources contains developer documentation and GCP diagrams; docs/research holds
+research notes. The interrupted root research/ request was superseded before
+filesystem mutation. No root research/ directory was created.
