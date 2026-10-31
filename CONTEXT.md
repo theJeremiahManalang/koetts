@@ -118,3 +118,19 @@ implementation acceptance requires deployment and bounded paid tests. The goal
 remains incomplete and is blocked pending user approval, incremental spending cap,
 and the existing-API collision decision. Recommended choice: separate candidate
 API, preserving the existing service. Automation continuation is not approval.
+
+
+## Preferred API replacement — 2026-10-31
+
+User requests decommissioning koetts-s3-api in favor of koetts-proto-api.
+Terraform default updated to preferred name; current frontend URL remains intact
+until replacement and cutover pass. A fresh read-only check confirms live frontend
+still targets old API, which runs verification mode. Exact retirement sequence is
+in docs/hosted-rollout.md. No cloud mutations, builds or paid calls performed.
+The limited authentication-service replacement must not implicitly deploy all new
+hosted production features. Clarify/approve concrete live cutover scope under the
+substantial changed-scope rule before executing it; full phase 5 cap remains unset.
+
+Verification for preferred-name preparation: repository checks, diff whitespace
+and ten focused infrastructure tests pass. Terraform fmt could not rerun because
+the prior /tmp binary is absent in this runtime; only the default string changed.

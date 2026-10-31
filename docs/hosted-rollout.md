@@ -126,12 +126,12 @@ Cloud Run list/describe queries against `koetts-9bf7f`, `us-east4` returned:
 - The regional Cloud Run jobs list is empty.
 
 These observations are timestamped preparation, not immutable rollout targets;
-refresh them before deployment. In particular, the infrastructure default
-`api_service_name = "koetts-s3-api"` collides with an existing service. Do not
-apply the offline configuration unchanged or assume the API is absent. Before
-rollout, explicitly choose either a separately named candidate API or reviewed
-adoption of the existing service and its configuration/IAM into managed state.
-The existing API must remain available until that choice and rollback are approved.
+refresh them before deployment. The user selected `koetts-proto-api` as the replacement service name. The
+infrastructure default now uses that name. The existing `koetts-s3-api` remains
+the live frontend authentication target until a verified cutover; it is not
+adopted into Terraform or deleted by this configuration. Refresh preflight for
+both names before deployment and preserve the existing API until its callers
+have moved successfully.
 
 The Docker command resolves to a Windows Docker Desktop shim but cannot contact
 an engine from this WSL distribution. Local container builds are therefore not
@@ -140,3 +140,34 @@ explicitly approved remote build path with its costs included in the test cap.
 No builds, deployments, paid inference, IAM changes, or secret reads occurred in
 this preflight. Ordinary CLI credential/log-cache access required sandbox
 escalation; the read-only cloud queries succeeded.
+
+
+### Preferred API name and retirement scope — 2026-10-31
+
+The replacement service name is `koetts-proto-api`. This is a service replacement,
+not an in-place rename. A read-only check confirms that live `koetts` still uses
+`S3_API_URL=https://koetts-s3-api-gu5jb64hpq-uk.a.run.app` and frontend-only mode.
+The existing API uses verification mode, the recorded immutable image above,
+1 CPU / 512 MiB, maximum one instance, and the existing dedicated runtime identity.
+Its service invocation policy grants the App Hosting runtime identity access.
+
+The reviewable cutover scope is:
+
+1. Capture the old service configuration, invocation policy, image and frontend
+   revision as rollback evidence, excluding credentials from committed records.
+2. Create private `koetts-proto-api`, configure its actual canonical audience and
+   intended runtime identity, and validate readiness plus credential-denial cases.
+3. Update the frontend URL through a reviewed App Hosting rollout. Preserve
+   frontend-only guards for an authentication-only replacement; full production
+   activation still requires the hosted phase 5 acceptance gates.
+4. Verify frontend authentication diagnostics and confirm no active caller targets
+   the old service before deleting it. Retain the old runtime identity and image
+   unless separately proven unused; service retirement does not authorize deleting
+   shared identities, artifacts, Firestore data, or buckets.
+5. Recheck that the old service is absent, the replacement is private and healthy,
+   and the frontend uses the replacement. Record serving revisions and checks.
+
+Do not rewrite the checked-in frontend URL to an unverified endpoint ahead of
+this sequence. The user's service-name request selects the replacement name;
+full hosted deployment, paid inference, and provider tests remain separately
+controlled. No cloud mutation has been performed for this preference change.
