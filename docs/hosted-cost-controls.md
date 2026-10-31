@@ -141,8 +141,10 @@ or initialize inference/provider clients. Never delete a ledger to reset a budge
 
 Billing reports are delayed. Login, playback, storage, builds, existing executions
 and other services can continue accruing charges while production is paused.
-The USD 10 total project-spend target and USD 20 alert threshold remain operating
-goals, not a guaranteed ceiling. Gemini uses the pipeline identity and configured
+The accepted USD 10 infrastructure target and desired USD 20 infrastructure
+ceiling remain operating goals, not guarantees. Current project-wide reporting
+does not establish independent infrastructure-only attribution; resolve that gap
+before live activation without silently changing the accepted target. Gemini uses the pipeline identity and configured
 GCP project; its charges are included in project-reported costs. The provider
 ledger is an application allowance, not separate billing credit or a separate
 billing account. Production can pause before that allowance is exhausted.

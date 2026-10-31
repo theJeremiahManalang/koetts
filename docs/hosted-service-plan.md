@@ -26,17 +26,17 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   same work do not consume another chapter slot. Creation does not implicitly link
   the project to the work; explicit admin linking remains separate. Local creation
   retains its existing behavior.
-- Target total project spend of USD 10/month. Configure a project-filtered USD 20
-  alert budget with notifications at USD 10, 15, and 20. This includes Gemini model
-  charges as well as infrastructure, but is not a guaranteed ceiling: billing is
-  delayed and existing traffic and services can keep accruing charges. Pause new
-  extraction and generation at USD 15 reported project spend, or earlier when
-  conservative reservations exhaust the remaining allowance. Keep login and
-  published playback available. Resuming production requires explicit admin action.
-- Keep the application provider allowance (at most USD 80) as a separate developer-
-  configured admission control. It is not a separate billing account, Gemini credit,
-  or infrastructure-only budget. Never launch work without admission against
-  configured production limits. Do not automatically retry an uncertain paid call.
+- Target USD 10/month and seek to keep infrastructure below USD 20/month. This is
+  not a guaranteed ceiling: billing is delayed and existing service traffic can
+  continue accruing charges. Alert at USD 10, 15, and 20 reported spend. Pause new
+  extraction and generation at USD 15 or earlier when conservative reservations
+  exhaust the remaining allowance. Keep login and published playback available.
+  Resuming production requires explicit admin action.
+- Keep the developer-controlled provider allowance (at most USD 80) separate from
+  the infrastructure budget. Never launch work without admission against configured
+  production limits. Do not automatically retry an uncertain paid provider call.
+  This application allowance is not a separate billing account or transferred
+  Gemini Developer API credit.
 - Start with scale-to-zero CPU Cloud Run Jobs and one global slot per stage. Run a
   representative CPU benchmark before enabling hosted extraction. If it misses
   quality, time, memory, or budget limits, block full hosted launch and revisit
@@ -64,6 +64,17 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
 - Authenticate every published audio request and range request through the
   same-origin application path. Verify the session and publication before streaming
   private GCS bytes. Preserve byte-range seeking and prevent shared caching.
+
+## Billing attribution gap before live activation
+
+The accepted infrastructure target above is unchanged. Current Terraform filters
+billing reports to the entire project, including GCP Gemini model charges; the
+application can therefore pause conservatively before the separate provider
+allowance is exhausted. This implementation does not yet establish independent
+infrastructure-only billing attribution. Resolve service/SKU attribution and any
+budget-filter changes during authorized preflight, or obtain an explicit change
+to the operating policy. Documentation cleanup does not approve a new total-project
+spending target. See [cost controls](hosted-cost-controls.md).
 
 ## Phases and acceptance
 

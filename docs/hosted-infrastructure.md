@@ -126,8 +126,9 @@ change billing attribution. Its notification topic and authenticated Pub/Sub pus
 subscription target the private API. The API receives the generated budget ID,
 billing account ID, and exact subscription resource name.
 Budget notifications are delayed estimates and are not a hard spend cap. The
-operating target remains USD 10/month total project spend; USD 20 is an alert
-threshold, not a guaranteed ceiling. Existing traffic and other services can
+accepted infrastructure target remains USD 10/month with a desired USD 20
+ceiling. Current project-wide reporting does not independently enforce that
+infrastructure-only target; billing attribution remains a preflight decision. Existing traffic and other services can
 continue to accrue cost while production is paused.
 
 Before rollout, verify the real API URL equals `canonical_api_url`; the same

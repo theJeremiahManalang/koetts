@@ -52,12 +52,11 @@ Temporary evidence paths: `/tmp/gcp-gemini-check.log`,
 runtime replacement. Pinned tooling: Node 22.22.3, npm 10.9.8, uv 0.11.16,
 Python 3.11.15. No heavy inference dependencies or model downloads are required.
 
-## Documentation work in progress
+## Documentation changes
 
-Root owns README/navigation, architecture, status/archive and this handoff.
-A bounded worker owns hosted operational/plan/free-tier documents and diagrams;
-another owns developer/auth/frontend/audio and agent-research documents.
-Workers preserve each other's edits. No further delegation is allowed for them.
+Updated README/navigation, architecture, active status/archive and this handoff.
+Two bounded workers completed hosted operational/plan/free-tier and developer/
+auth/frontend/audio/research updates within separate file ownership.
 
 The previous long alignment log is preserved in
 `docs/archive/alignment-status-through-2026-10-31.md`; the active
@@ -91,3 +90,23 @@ approved follow-ups reuse existing scope; material scope changes retain renewed
 approval; explicit bypass remains defined by the unchanged approval guide. Hosting
 now reaches the current deployment runbooks, with historical S3 evidence still
 discoverable from the documentation index. No approval rule was relaxed.
+
+
+Reading-size evidence uses reproducible whitespace-word counts (`len(text.split())`)
+from `git show 40182c8:PATH` versus the updated file, not token estimates or model
+evaluations. AGENTS.md: 278 to 286 words. Frontend hosting path APP_HOSTING.md:
+662 to 762 words. Prior private-service pointer S3_DEPLOYMENT.md: 1,177 words;
+replacement infrastructure/rollout references: 1,758 and 1,573 words (3,331
+combined). The larger disclosed path covers the full hosted stack rather than
+only verification. CONTEXT.md reduced from 2,012 to 708 words before this review
+record; active alignment status from 8,705 to 566 words. Documentation index grew
+from 216 to 381 words to provide task-based routing.
+
+Review of 40182c8...997e1b3 found missing reading-size evidence and an unintended
+rewrite of the accepted infrastructure spending target as total-project spending.
+The measurements above address the first. Restored the original infrastructure
+USD 10 target/desired USD 20 ceiling and separate provider allowance, explicitly
+recording project-wide billing aggregation as an unresolved implementation gap.
+No new spending policy or authorization was inferred from cleanup. The archived
+alignment record was mechanically compared with its prior content: all original
+text remains, with only the wrapper and normalized relative links changed.
