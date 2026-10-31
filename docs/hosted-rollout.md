@@ -126,7 +126,7 @@ Cloud Run list/describe queries against `koetts-9bf7f`, `us-east4` returned:
 - The regional Cloud Run jobs list is empty.
 
 These observations are timestamped preparation, not immutable rollout targets;
-refresh them before deployment. The user selected `koetts-proto-api` as the replacement service name. The
+refresh them before deployment. The user selected `koetts-api` as the replacement service name. The
 infrastructure default now uses that name. The existing `koetts-s3-api` remains
 the live frontend authentication target until a verified cutover; it is not
 adopted into Terraform or deleted by this configuration. Refresh preflight for
@@ -144,7 +144,7 @@ escalation; the read-only cloud queries succeeded.
 
 ### Preferred API name and retirement scope — 2026-10-31
 
-The replacement service name is `koetts-proto-api`. This is a service replacement,
+The replacement service name is `koetts-api`. This is a service replacement,
 not an in-place rename. A read-only check confirms that live `koetts` still uses
 `S3_API_URL=https://koetts-s3-api-gu5jb64hpq-uk.a.run.app` and frontend-only mode.
 The existing API uses verification mode, the recorded immutable image above,
@@ -155,7 +155,7 @@ The reviewable cutover scope is:
 
 1. Capture the old service configuration, invocation policy, image and frontend
    revision as rollback evidence, excluding credentials from committed records.
-2. Create private `koetts-proto-api`, configure its actual canonical audience and
+2. Create private `koetts-api`, configure its actual canonical audience and
    intended runtime identity, and validate readiness plus credential-denial cases.
 3. Update the frontend URL through a reviewed App Hosting rollout. Preserve
    frontend-only guards for an authentication-only replacement; full production

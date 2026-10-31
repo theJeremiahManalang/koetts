@@ -179,3 +179,13 @@ Primary references:
 - [Programmatic Cloud Billing notifications](https://docs.cloud.google.com/billing/docs/how-to/budgets-programmatic-notifications)
 - [Firestore Security Rules and server client behavior](https://firebase.google.com/docs/firestore/security/rules-conditions)
 - [App Hosting Secret Manager references](https://firebase.google.com/docs/app-hosting/configure)
+
+
+## Free-tier assessment
+
+The API service default is `koetts-api`. The existing verification API remains
+`koetts-s3-api` until an authorized, verified cutover. The Terraform configuration
+is not restricted to no-cost usage: its artifact bucket inherits `us-east4`, which
+is outside Cloud Storage's storage free-tier locations, and execution/storage
+volumes have no cumulative free-tier cap. See the dated [free-tier review](hosted-free-tier-review.md)
+and [official-source notes](hosted-free-tier-sources.md) before estimating costs.

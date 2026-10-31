@@ -87,7 +87,7 @@ variable "pipeline_image" {
 variable "api_service_name" {
   description = "New private Cloud Run API service name."
   type        = string
-  default     = "koetts-proto-api"
+  default     = "koetts-api"
 }
 
 variable "magi_job_name" {

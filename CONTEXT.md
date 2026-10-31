@@ -134,3 +134,20 @@ substantial changed-scope rule before executing it; full phase 5 cap remains uns
 Verification for preferred-name preparation: repository checks, diff whitespace
 and ten focused infrastructure tests pass. Terraform fmt could not rerun because
 the prior /tmp binary is absent in this runtime; only the default string changed.
+
+
+## API default and free-tier evaluation — 2026-10-31
+
+Latest user instruction supersedes the preferred name: set Terraform
+api_service_name to koetts-api and evaluate current Terraform against free tiers.
+Updated variables.tf and current rollout preference to koetts-api. The live
+frontend and old API remain unchanged. Official-source evaluation is recorded in
+docs/hosted-free-tier-review.md and hosted-free-tier-sources.md. Main result: no
+free-only guarantee; us-east4 artifact storage is outside storage free allowance,
+job runtime/artifact size are uncapped monthly, and existing workloads share
+allowances. Named database metadata reports freeTier=true; Firebase docs agree
+first database is eligible regardless of ID, while Cloud pricing has contrary
+named-database text. Do not migrate or delete the database on that discrepancy.
+Remaining billing usage was not checked. Native service-specific spend caps now
+exist but are not configured; adding one could affect login/playback and needs
+an availability decision. Phase 5 deployment/paid tests remain unauthorized.
