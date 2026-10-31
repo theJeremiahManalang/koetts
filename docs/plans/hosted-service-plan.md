@@ -33,7 +33,7 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   exhaust the remaining allowance. Keep login and published playback available.
   Resuming production requires explicit admin action.
 - Keep the developer-controlled provider allowance (at most USD 80) separate from
-  the infrastructure budget. Never launch work without admission against configured
+  the combined project budget. Never launch work without admission against configured
   production limits. Do not automatically retry an uncertain paid provider call.
   This application allowance is not a separate billing account or transferred
   Gemini Developer API credit.
@@ -65,16 +65,16 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   same-origin application path. Verify the session and publication before streaming
   private GCS bytes. Preserve byte-range seeking and prevent shared caching.
 
-## Billing attribution gap before live activation
+## Combined billing policy
 
-The accepted infrastructure target above is unchanged. Current Terraform filters
-billing reports to the entire project, including GCP Gemini model charges; the
-application can therefore pause conservatively before the separate provider
-allowance is exhausted. This implementation does not yet establish independent
-infrastructure-only billing attribution. Resolve service/SKU attribution and any
-budget-filter changes during authorized preflight, or obtain an explicit change
-to the operating policy. Documentation cleanup does not approve a new total-project
-spending target. See [cost controls](../resources/hosted-cost-controls.md).
+On 2026-11-01, the user accepted the existing combined project budget for now.
+Keep the USD 20 project-filtered budget, USD 10/15/20 alerts, and USD 15 production
+pause threshold inclusive of infrastructure and Gemini charges. The user will
+monitor the infrastructure-versus-Gemini breakdown in the GCP console; separate
+service/SKU budgets are not a launch prerequisite. The infrastructure target above
+remains an operating goal, and the provider ledger remains a separate application
+admission allowance. This decision does not authorize deployment or paid tests.
+See [cost controls](../resources/hosted-cost-controls.md).
 
 ## Phases and acceptance
 
@@ -151,3 +151,8 @@ playback, rollback, and actual billing controls. Record revisions, commands, cos
 and acceptance evidence. Human cast/script decisions, audio review, and publication
 remain explicit. Keep this phase gated; this document alone authorizes no deployment,
 paid calls, account changes, or publication.
+
+
+The [phase 5 decision record](phase-5-authorization.md) captures the approved
+preparation scope, selected backend/frontend cutover boundary, USD 5 infrastructure
+and USD 5 Gemini campaign allowances, and remaining execution gates.

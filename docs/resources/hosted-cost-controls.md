@@ -1,8 +1,10 @@
 # Hosted production cost controls
 
 This document describes the implemented ledger boundary. Offline phase 4
-implementation, review and acceptance are complete. Live billing configuration,
-notification delivery, measured model costs and rollout remain unverified; no
+implementation, review and acceptance are complete. Authorized phase 5 provisioning
+created the billing budget and notification resources. Real report ingestion was
+verified after ledger initialization; measured model costs, final charges and
+full production acceptance remain unverified; no
 guaranteed spending cap is established.
 
 ## Admission and execution
@@ -143,10 +145,28 @@ Billing reports are delayed. Login, playback, storage, builds, existing executio
 and other services can continue accruing charges while production is paused.
 The accepted USD 10 infrastructure target and desired USD 20 infrastructure
 ceiling remain operating goals, not guarantees. Current project-wide reporting
-does not establish independent infrastructure-only attribution; resolve that gap
-before live activation without silently changing the accepted target. Gemini uses the pipeline identity and configured
+does not establish independent infrastructure-only attribution. On 2026-11-01,
+the user accepted combined project monitoring for now and will inspect the
+infrastructure-versus-Gemini breakdown in the GCP console. Separate service/SKU
+budgets are not a launch prerequisite. Keep the USD 20 combined budget, USD
+10/15/20 alerts, and USD 15 production pause threshold. Gemini uses the pipeline identity and configured
 GCP project; its charges are included in project-reported costs. The provider
 ledger is an application allowance, not separate billing credit or a separate
 billing account. Production can pause before that allowance is exhausted.
 There is no infrastructure-only USD 20 budget. Do not subtract estimated model
 charges from accepted project reports.
+
+
+## Initial deployed controls — 2026-11-01
+
+Initial billing deliveries returned 429 because the clean ledger was not initialized.
+The deployment operator initialized the namespace and controls while frontend guards
+and paused schedules contained admission, with provider allowance and call caps zero,
+then explicitly paused production. A real October billing interval was subsequently
+recorded. Its preliminary reported zero is not a final cost reconciliation.
+
+Both stages currently hold USD 5 infrastructure caps with no provider calls enabled.
+These are blocked setup reservations, not measured operating estimates. Do not resume
+production using these setup caps. Replace them with measured operation/call bounds
+and explicitly configure the user-controlled provider allowance before manual hosted
+generation. Never infer paid-call authorization from billing initialization.

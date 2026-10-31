@@ -7,8 +7,11 @@ runConfig:
   maxInstances: 2
   concurrency: 40
 env:
+  - variable: MANGA_EXECUTION_MODE
+    value: cloud
+    availability: [BUILD, RUNTIME]
   - variable: MANGA_FRONTEND_ONLY
-    value: "1"
+    value: "0"
     availability:
       - BUILD
       - RUNTIME
@@ -31,5 +34,8 @@ env:
     value: 1:907898221016:web:ee2b810d9a68d350b442ad
     availability: [BUILD, RUNTIME]
   - variable: S3_API_URL
-    value: https://koetts-s3-api-gu5jb64hpq-uk.a.run.app
+    value: https://koetts-api-gu5jb64hpq-uc.a.run.app
+    availability: [RUNTIME]
+  - variable: MANGA_AUDIO_SIGNING_KEY
+    secret: hosted-audio-signing-key@1
     availability: [RUNTIME]

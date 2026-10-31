@@ -54,8 +54,10 @@ service-specific canonical procedure after approval for the exact target and
 scope. Before acting, refresh web/API/job serving state, IAM, Firestore rules,
 bucket state, billing controls, and the operator-supplied rollback targets.
 Confirm the captured candidate matches the source intended for that rollout.
-Keep frontend-only mode and production pause controls in force until all
-separately required hosted acceptance evidence passes.
+Keep production pause controls in force until all separately required hosted
+acceptance evidence passes. After private API readiness, billing initialization
+and configuration cutover, cloud admin navigation may be enabled for manual
+acceptance; keep production and scheduling paused.
 
 Verify and record actual deployed image digests/revisions, configuration, narrow
 IAM bindings, readiness and denial cases, restart recovery, session revocation,
@@ -188,3 +190,38 @@ allowance is separate admission control. See [cost controls](hosted-cost-control
 These checks do not establish deployment, live credentials, model access, measured
 cost, or provider acceptance. No build, deployment, paid inference, IAM mutation,
 DNS change, or frontend migration is authorized by this runbook.
+
+
+### Authorized phase 5 provisioning — 2026-11-01
+
+The user approved backend deployment and cutover of the existing east-region
+frontend within USD 5 infrastructure/build spend. Paid Gemini calls are run
+manually by the user within USD 5; the agent captures available logs. Publication
+intent is approved, but exact-export human review and admin publication remain
+required. Frontend migration and old API retirement are excluded.
+
+Backend Terraform provisioning succeeded after explicitly configuring the provider
+quota project. Private `koetts-api` revision `koetts-api-00002-w5s` is ready at
+`https://koetts-api-gu5jb64hpq-uc.a.run.app`; both Scheduler jobs remain PAUSED.
+The new artifact bucket is `koetts-9bf7f-hosted-artifacts-us-central1`, namespace
+`hosted/pilot_20261101`, dataset `hosted_pilot_20261101`. These are isolated new
+resources; existing buckets and local projects were not adopted. Signing-secret
+version 1 was generated without recording its value. Named Firestore browser
+rules deny all, and the API denies unauthenticated invocation. The operator lacks
+frontend service-account impersonation permission; authenticated end-to-end tests
+remain manual.
+
+Two App Hosting build attempts failed before traffic promotion: the first lacked
+an app-local lockfile, and the second compiled Next.js but failed adapter packaging
+of nested workspace standalone output. Existing frontend and old API revisions
+remain unchanged at this checkpoint. Use the sanitized app-only staging helper
+and verify exact adapter output locally before another retry. See the
+[decision record](../plans/phase-5-authorization.md) and
+[manual validation guide](hosted-manual-validation.md).
+
+
+The final same-day retry succeeded using app-only source staging after exact
+adapter validation. Frontend `koetts-build-2026-10-31-003` now serves 100% and targets
+the new API. The later admin-access revision `koetts-build-2026-10-31-004` enables
+authenticated cloud navigation; the budget ledger and schedules remain paused. The
+old API is preserved. See STATUS and the decision record for manual acceptance.

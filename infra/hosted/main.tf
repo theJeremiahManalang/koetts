@@ -137,7 +137,6 @@ resource "google_project_iam_custom_role" "firestore_operator" {
   permissions = [
     "datastore.databases.get",
     "datastore.entities.create",
-    "datastore.entities.delete",
     "datastore.entities.get",
     "datastore.entities.list",
     "datastore.entities.update",

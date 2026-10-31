@@ -1,6 +1,6 @@
 # Implementation status
 
-Updated 31 October 2026. Runtime source, manifests and lockfiles establish behavior.
+Updated 1 November 2026. Runtime source, manifests and lockfiles establish behavior.
 This record distinguishes offline acceptance from deployed behavior. Detailed earlier
 scope evidence is preserved in the [chronological archive](archive/alignment-status-through-2026-10-31.md).
 
@@ -10,7 +10,8 @@ The local studio and shared review/publication workflow are implemented. Hosted
 storage, distributed operations, authenticated transport, reader quotas, cost
 controls, collection and infrastructure configuration passed offline phase reviews.
 Gemini now uses GCP service identity through the Google Gen AI SDK. The full hosted
-product has not been deployed or accepted live by this task.
+production workflow is not yet accepted live. The backend and guarded frontend
+are deployed; manual acceptance remains pending.
 
 | Scope | Evidence and state |
 | --- | --- |
@@ -20,7 +21,7 @@ product has not been deployed or accepted live by this task.
 | Hosted phase 4 | Budget, billing notifications, Terraform, settlement/GC and controls through `8703d04`; Standards fixes `364c4a6`; Spec rollback proof `8703d04`; both follow-up reviews clear |
 | API/region decisions | API default `koetts-api`; new compute/storage `us-central1`; initial frontend `us-east4`, later migration to `us-central1`; see infrastructure and rollout guides |
 | GCP Gemini migration | `d9eb6f1`, review fixes `821c02e`, evidence `40182c8`; ADC/project plus `us` inference endpoint; no API-key fallback; both reviews clear |
-| Hosted phase 5 | Live deployment, CPU/model performance, IAM/session/storage/billing/playback and rollback acceptance remain unverified and separately gated |
+| Hosted phase 5 | Backend provisioned; frontend `koetts-build-2026-10-31-004` serves 100% with new API URL and authenticated cloud admin UI. Manual production/identity/recovery/billing/playback acceptance remains pending |
 
 ## Latest verification
 
@@ -46,20 +47,43 @@ records remain available; refresh live preflight and checks before rollout.
 
 ## Authorization and remaining work
 
-Implementation and the ADC migration were approved. Cloud deployment, paid
-CPU/model/provider tests and real publication were not authorized by those
-approvals. Human cast/script/audio decisions remain explicit. No task-owned
-phase 5 cloud mutation or paid provider call has been performed.
+Deployment is approved for the new backend and existing frontend cutover, within
+USD 5 infrastructure/build spend. The user runs paid Gemini tests manually within
+USD 5; the agent captures available logs and initiates no model calls. Publication
+intent is approved; human cast/script decisions, exact-export audio review and the
+admin publication decision remain explicit. Regional frontend migration and old
+API retirement are excluded.
 
-Before live execution, obtain a bounded deployment/test authorization and separate
-incremental infrastructure/build and model-call allowances. Confirm the new bucket,
-clean dataset/namespace, actual image digests, service URLs, secret versions and
-rollback targets. Resolve model-versus-infrastructure billing attribution: the
-current project-filtered USD 20 budget includes Gemini model charges, while the
-provider ledger remains a separate application allowance.
+Live provisioning and cutover completed on 2026-11-01 (Asia/Taipei):
 
-Use the [hosted plan](plans/hosted-service-plan.md) for acceptance requirements,
-[infrastructure](resources/hosted-infrastructure.md) for inputs,
-[Mermaid diagrams](../resources/GCP_ARCHITECTURE.md) for topology, and
-[rollout](resources/hosted-rollout.md) for cutover and recovery. Existing deployment
-observations are dated snapshots, not fresh assertions of current cloud state.
+- New private API `koetts-api-00002-w5s` is ready in `us-central1`.
+- Frontend `koetts-build-2026-10-31-004` serves 100% in `us-east4`, with the new API
+  URL and signing-secret version 1. Admin access uses `MANGA_FRONTEND_ONLY=0` and
+  `MANGA_EXECUTION_MODE=cloud`; production remains paused.
+- Both Scheduler jobs are PAUSED. Existing `koetts-s3-api-00001-gl5` is preserved.
+- Artifact storage privacy, named Firestore browser denial rules, absence of public
+  API invokers, and unauthenticated API denial were verified. Public browse/login
+  returned 200; Studio/dashboard use streamed Login redirects for unauthenticated
+  visitors; unauthenticated admin/workflow API requests returned 401.
+- Pinned Node 22 HTTP acceptance passed both modes after the tracing-root change;
+  typecheck, repository checks, Ruff and 10 infrastructure tests passed. Exact
+  Firebase adapter 14.0.21 passed locally and the final hosted build succeeded.
+
+The user accepted combined project monitoring: USD 20 budget, USD 10/15/20 alerts,
+and USD 15 production pause inclusive of Gemini. The user reviews the cost breakdown
+in GCP. Budget/topic/subscription configuration is provisioned. Real billing notification
+delivery was verified after initializing the ledger; the October interval was
+recorded with a preliminary reported amount of zero, which does not establish
+final charges. The ledger is explicitly paused, with zero provider allowance and
+zero provider call caps. Infrastructure hold caps are USD 5 per stage and are not
+measured production estimates. Configure measured stage caps before activation.
+
+Manual local and hosted admin-flow acceptance, CPU/model performance, session
+revocation, authenticated playback, recovery and rollback remain pending. Operator
+impersonation of the frontend identity was denied; no access grants were expanded.
+Full hosted production remains gated. Do not claim that the entire phase is complete.
+See the [decision record](plans/phase-5-authorization.md),
+[manual validation guide](resources/hosted-manual-validation.md),
+[hosted plan](plans/hosted-service-plan.md),
+[infrastructure](resources/hosted-infrastructure.md) and
+[rollout](resources/hosted-rollout.md).

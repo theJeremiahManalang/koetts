@@ -1,8 +1,11 @@
 # Hosted infrastructure configuration
 
-`infra/hosted` describes new GCP resources for the hosted pilot. No Terraform apply,
-Firebase deployment, paid call, or IAM grant change was run for this work. Dated
-read-only cloud observations are recorded in [rollout preparation](hosted-rollout.md).
+`infra/hosted` describes GCP resources for the hosted pilot. Authorized phase 5
+provisioning on 2026-11-01 created the new backend resources and completed the
+guarded frontend cutover; full live acceptance remains pending. No agent-initiated paid model calls were
+made. See the [phase 5 record](../plans/phase-5-authorization.md) for current
+evidence and remaining gates, and [rollout preparation](hosted-rollout.md) for
+historical observations and recovery requirements.
 This configuration does not create or manage the existing project `koetts-9bf7f`,
 App Hosting backend `koetts`, or named Firestore database `koetts-default`.
 
@@ -81,11 +84,10 @@ the frontend caller receives the current hosted transport actions, Scheduler get
 readiness, production-status, and production-control actions. API pause mutations
 still require a verified Firebase administrator in addition to the service token.
 The existing App Hosting runtime identity can read the audio signing secret used
-by the Next.js server. The API does not receive this key. The current frontend
-configuration does not yet reference `MANGA_AUDIO_SIGNING_KEY`; a separately
-reviewed frontend update must add it as a runtime-only App Hosting secret at the
-approved numeric version. This Terraform configuration does not manage that
-backend or its `apphosting.yaml`:
+by the Next.js server. The API does not receive this key. The phase 5 frontend configuration references `MANGA_AUDIO_SIGNING_KEY` as a
+runtime-only App Hosting secret at numeric version 1. Its first version was
+created during authorized deployment without exposing secret bytes. This Terraform
+configuration does not manage that backend or its `apphosting.yaml`:
 
 ```yaml
 - variable: MANGA_AUDIO_SIGNING_KEY
@@ -128,7 +130,9 @@ billing account ID, and exact subscription resource name.
 Budget notifications are delayed estimates and are not a hard spend cap. The
 accepted infrastructure target remains USD 10/month with a desired USD 20
 ceiling. Current project-wide reporting does not independently enforce that
-infrastructure-only target; billing attribution remains a preflight decision. Existing traffic and other services can
+infrastructure-only target. The user accepted combined monitoring on 2026-11-01
+and will review infrastructure-versus-Gemini costs in the GCP console; separate
+service/SKU budgets are not a rollout prerequisite. Existing traffic and other services can
 continue to accrue cost while production is paused.
 
 Before rollout, verify the real API URL equals `canonical_api_url`; the same

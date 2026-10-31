@@ -102,20 +102,16 @@ from Firebase users; history does not replace approval-validity checks.
 
 `GET /api/auth/backend` is an admin-only diagnostic for the optional private Python
 API configured by `S3_API_URL`. It verifies both the calling service and the user
-without exposing identity or accessing projects. That URL currently targets the
-historical `koetts-s3-api` verification service in `us-east4`; it remains the
-verification target until the `koetts-api` cutover. See [the historical S3 runbook](../docs/archive/S3_DEPLOYMENT.md)
-for the existing verification procedure and rollback.
+without exposing identity or accessing projects. The deployed URL targets private
+`koetts-api` in `us-central1` after phase 5 cutover. See the
+[manual validation guide](../docs/resources/hosted-manual-validation.md) for current
+admin-access checks; the historical S3 runbook is not the current rollout procedure.
 
-The existing local-only origin checks and MANGA_FRONTEND_ONLY processing switch
-remain in effect. App Hosting configured with MANGA_FRONTEND_ONLY=1 still redirects
-`/` to Browse and disables processing even for admins. Hosting the Python studio
-remotely requires a separate deployment decision.
-
-Files: lib/firebase-admin.ts initializes the server SDK; lib/require-admin.ts verifies
-permissions; app/api/auth/session/route.ts manages session cookies; scripts/set-admin.mjs
-manages claims. app/studio-workspace.tsx holds the previous client studio UI behind
-the server page guard.
+Admin navigation requires `MANGA_FRONTEND_ONLY=0` and `MANGA_EXECUTION_MODE=cloud`
+in hosting configuration, in addition to the admin claim and valid session.
+Website-only mode (`MANGA_FRONTEND_ONLY=1`) redirects even admins from `/` and
+`/admin/requests` to Browse. Cloud UI access does not bypass the backend production
+pause or provider budget checks. Never enable local Python execution on App Hosting.
 
 ## Verification
 

@@ -1,0 +1,38 @@
+# Build the API and both Cloud Run job images sequentially. Supply a new unique
+# _TAG for each invocation; use the pushed image digests in Terraform.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.s3
+      - -t
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/koetts-api:${_TAG}'
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.jobs
+      - --target
+      - pipeline
+      - -t
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/koetts-pipeline:${_TAG}'
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.jobs
+      - --target
+      - magi
+      - -t
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/koetts-magi:${_TAG}'
+      - .
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/koetts-api:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/koetts-pipeline:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/koetts-magi:${_TAG}'
+substitutions:
+  _REGION: us-central1
+timeout: 1800s
