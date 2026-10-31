@@ -26,6 +26,9 @@ Enabling navigation does not authorize or enable paid generation.
    or tokens into evidence.
 4. Create a test chapter request through `/request`, then approve it through
    `/admin/requests`. Check that approval alone starts no processing.
+   Open Studio through an approved request's project-creation link so its work
+   reference is selected. Opening Studio directly without an eligible work keeps
+   project creation disabled; that is separate from production pause.
 5. Confirm production status is paused. Do not resume using the setup cost caps.
    Extraction/generation require separately configured measured test limits and
    explicit activation; they remain blocked during this first access pass.

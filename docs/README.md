@@ -40,6 +40,7 @@ initial and final regional placement.
 | Configure Terraform inputs, identities, resources and secrets | [Hosted infrastructure](resources/hosted-infrastructure.md) |
 | Configure or migrate the frontend | [Firebase App Hosting](../resources/APP_HOSTING.md) |
 | Prepare rollout evidence, replace the API, migrate frontend and roll back | [Hosted rollout](resources/hosted-rollout.md) |
+| Inspect phase 5 checkpoint review and fixes | [Code review](resources/phase-5-code-review.md) |
 | Run manual admin acceptance and capture hosted logs | [Manual validation](resources/hosted-manual-validation.md) |
 | Configure allowances, pause production and reconcile spending | [Cost controls](resources/hosted-cost-controls.md) |
 | Collect orphan artifacts and recover interrupted cleanup | [Artifact collection](resources/hosted-artifact-collection.md) |

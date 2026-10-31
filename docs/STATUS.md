@@ -56,7 +56,7 @@ API retirement are excluded.
 
 Live provisioning and cutover completed on 2026-11-01 (Asia/Taipei):
 
-- New private API `koetts-api-00002-w5s` is ready in `us-central1`.
+- New private API `koetts-api-00003-fx8` is ready in `us-central1`.
 - Frontend `koetts-build-2026-10-31-004` serves 100% in `us-east4`, with the new API
   URL and signing-secret version 1. Admin access uses `MANGA_FRONTEND_ONLY=0` and
   `MANGA_EXECUTION_MODE=cloud`; production remains paused.
@@ -118,3 +118,9 @@ The regression failed with 400 before the fix and passed afterward. All 15 HTTP
 unit tests, the full Python suite (334 tests, 93 optional skips), and disposable
 studio/frontend-only HTTP acceptance passed. Production remains paused by the
 user's explicit choice; no extraction trial or Gemini call is authorized to run.
+
+The reviewed error fix is deployed as `koetts-api-00003-fx8`, built from commit
+`4b3b7a7` by Cloud Build `ec6667fc-bf83-42d1-aa1b-3460dcb33e36`. The saved rollout
+changed only the API image. Ready status and digest were verified afterward;
+the ledger remains paused with provider allowance zero and both schedules PAUSED.
+See the [phase 5 review record](resources/phase-5-code-review.md).

@@ -37,7 +37,7 @@ published by this deployment.
 
 | Resource | Verified state |
 | --- | --- |
-| API | Private `koetts-api-00002-w5s`, `us-central1`; URL `https://koetts-api-gu5jb64hpq-uc.a.run.app`; configured audiences match |
+| API | Private `koetts-api-00003-fx8`, `us-central1`; URL `https://koetts-api-gu5jb64hpq-uc.a.run.app`; configured audiences match |
 | Frontend | `koetts-build-2026-10-31-004`, 100% traffic in `us-east4`; `MANGA_FRONTEND_ONLY=0`, `MANGA_EXECUTION_MODE=cloud` |
 | Prior API | `koetts-s3-api-00001-gl5` preserved unchanged |
 | Jobs | `koetts-magi`, `koetts-pipeline`, `koetts-artifact-gc`; no task-owned inference execution |

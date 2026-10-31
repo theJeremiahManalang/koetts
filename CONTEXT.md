@@ -26,7 +26,7 @@ Phase 5 review baseline 75b0f5bac39a. Git history records the checkpoint commits
 deployment source hashes record
 the dirty candidate; do not identify deployed source solely by HEAD.
 
-- API: koetts-api-00002-w5s ready, private, canonical URL
+- API: koetts-api-00003-fx8 ready, private, canonical URL
   https://koetts-api-gu5jb64hpq-uc.a.run.app. URI and configured audiences match.
 - Frontend: koetts-build-2026-10-31-004 serves 100% in us-east4 at
   https://koetts--koetts-9bf7f.us-east4.hosted.app. Its API URL and signing-secret
@@ -91,8 +91,9 @@ frontend-only modes after final Next config change; typecheck passed. Repository
 checks, Ruff on both helpers,10 infrastructure unit tests, Terraform schema/plan
 validation, lock consistency and exact local adapter output checks passed. Initial
 sandbox DNS/provider process failures recovered with authorized escalation. Next
-still warns about dynamic filesystem tracing in lib/python.ts. Full npm run check
-was not rerun; manual admin/real provider acceptance is not claimed.
+still warns about dynamic filesystem tracing in lib/python.ts. Full npm run check passed before the HTTP regression fix (333 Python/93 skips,
+90 web); afterward full Python334/93 and required HTTP acceptance passed. Manual
+full admin/provider acceptance is not claimed.
 
 ## Changed paths
 
@@ -187,3 +188,29 @@ showidentity/projects/shared/status/upload200 and create400. Captures do not
 prove session revocation or full production acceptance. Next commit minimal API
 exception fix plus regression, run independent follow-up reviews, build/deploy
 API-only update. Keep production/schedules/providercalls disabled.
+
+
+## Goal continuation outcome
+
+Commits109c539 deployment, cb970be Standards/fresh-checkout fixes,4b3b7a7 HTTP
+paused-error regression. Independent Standards and Spec follow-up reviews of
+109c539...4b3b7a7 both clear; original Standards smell resolved. Review record:
+docs/resources/phase-5-code-review.md. Branch ancestry verified main merge-base
+0bdacc5cd0092cf33d53afb4d12f6b64b5ba16bb.
+
+API-only build ec6667fc-bf83-42d1-aa1b-3460dcb33e36 succeeded; immutable image
+sha256:d642438d400fdd8385c948eb746795ab41bb696bcd81115addc25d684869e107.
+Reviewed Terraform plan changed only API image, applied successfully; revision
+koetts-api-00003-fx8 ready, digest matches. Previous revision02 remains rollback
+target. Post-rollout SDK read verified paused ledger/provider allowance0, gcloud
+verified both schedules PAUSED. No image extraction, Gemini call or publication.
+
+User explicitly chose KEEP PRODUCTION PAUSED; do not ask again or resume. An async
+manual question asks whether retrying Create now yields the paused notification;
+no answer yet. User's sometimes-disabled Create also requires approved-work
+selection from dashboard; guide updated. Full phase5 cannot be declared complete:
+manual full-flow/CPU/model quality, session revocation, authenticated playback,
+restart/rollback and finalcost evidence remain pending, with processing intentionally
+disabled. This goal turn made progress (commits/reviews/regression/deployment), not
+a blocked/no-progress turn. Continue independent acceptance work if available;
+never run paid models or override the production pause.
