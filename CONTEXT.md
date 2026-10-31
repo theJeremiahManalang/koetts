@@ -193,3 +193,15 @@ whitespace checks pass. Both review axes found one stale sentence describing the
 delta as bucket-only; corrected to include API/jobs/Scheduler and storage. No
 Terraform apply or live migration. Schema validation was not rerun because the
 prior temporary Terraform binary is absent; this delta only changes defaults.
+
+
+## Phase 5 architecture visualization — 2026-10-31
+
+User requests Mermaid infrastructure visualization in Markdown. Added
+docs/hosted-infrastructure-diagram.md with application/data paths, billing/control
+flow and staged frontend migration. Diagrams follow Terraform/runtime sources:
+new API/jobs/storage/Scheduler central; existing frontend east initially then
+central; Firestore nam5; private service/user identity, exact-generation artifacts,
+provider-only pipeline key, reference-aware GC, no implicit deployment claims.
+Added documentation links. Preserve unrelated untracked infra/hosted/graph.png.
+No cloud changes, paid calls or inference.

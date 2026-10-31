@@ -6,6 +6,9 @@ or live IAM check was run for this change. It deliberately does not create or ma
 the existing project `koetts-9bf7f`, App Hosting backend `koetts`, or named Firestore
 database `koetts-default`.
 
+See the [phase 5 Mermaid diagrams](hosted-infrastructure-diagram.md) for regional
+placement, application/data paths, cost controls and staged frontend migration.
+
 ## Boundaries and inputs
 
 Cloud Run and Scheduler default to `us-central1`. The artifact bucket has a separate
