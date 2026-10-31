@@ -166,3 +166,15 @@ and sometimes disabled button. Captured logs results/admin-project-create-202611
 Found potential HTTP catch masking CloudBudgetExceeded(RuntimeError) as400; build
 ASGI regression to prove429 production_paused is preserved. No agent provider calls
 or production resume. User exact notification text still unavailable.
+
+
+Checkpoint109c539 committed. Independent code-review against75b0f5b: Standards
+0hard violations,1smell unused project parameter in log filter; removed. Spec0code
+findings; remaining live gates acknowledged. Fresh-checkout helper fixed and
+verified with pinned tooling:333Python/93skips,90web, no torch, CLIentrypoints.
+User explicitly chose KEEP PRODUCTION PAUSED when offered oneCPU-onlytrial.
+Do not resume or enable dispatch. ASGI regression reproduced wrong400vs429 in
+0.068s with injected paused backend; one-line exception propagation fix passes
+all15HTTPunit tests. Default-sandbox test hung and was explicitly stopped (130);
+escalated synthetic regression then ran red and green. Next commit tools/review
+fixes, then API regression fix and independent follow-up review before deployment.

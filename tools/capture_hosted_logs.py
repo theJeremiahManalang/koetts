@@ -47,7 +47,7 @@ def _output_directory(value: str) -> Path:
     return target
 
 
-def _filter(project: str, region: str, since: str, until: str) -> str:
+def _filter(region: str, since: str, until: str) -> str:
     clauses = [
         f'timestamp >= "{since}"',
         f'timestamp <= "{until}"',
@@ -101,7 +101,7 @@ def capture(project: str, region: str, since: str, until: str, output: str) -> P
     if datetime.fromisoformat(since.replace("Z", "+00:00")) >= datetime.fromisoformat(until.replace("Z", "+00:00")):
         raise ValueError("--since must be earlier than --until")
     target = _output_directory(output)
-    query = _filter(project, region, since, until)
+    query = _filter(region, since, until)
     try:
         result = subprocess.run(
             ["gcloud", "logging", "read", query, f"--project={project}", "--format=json"],

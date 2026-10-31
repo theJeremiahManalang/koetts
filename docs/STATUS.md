@@ -87,3 +87,18 @@ See the [decision record](plans/phase-5-authorization.md),
 [hosted plan](plans/hosted-service-plan.md),
 [infrastructure](resources/hosted-infrastructure.md) and
 [rollout](resources/hosted-rollout.md).
+
+
+## Phase 5 checkpoint review
+
+Deployment checkpoint `109c539` was reviewed against phase start `75b0f5b` with
+independent Standards and Spec axes. Standards reported no hard violations and one
+unused-parameter smell in the log collector; the parameter was removed. Spec
+reported no code findings; live acceptance gates remain open.
+
+The full pinned `npm run check` passed before the project-creation regression fix:
+333 Python tests (93 optional skips), 90 web tests, lint, typecheck and production
+build. Fresh-checkout acceptance also passed frozen installs, repository checks,
+those test suites, absence of torch, and external-directory CLI entrypoints. The
+fresh-copy helper now includes developer resources and infrastructure source while
+excluding credentials, local Terraform state/inputs and generated caches.
