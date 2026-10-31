@@ -7,7 +7,7 @@ processing remains migration work.
 
 ## Environment
 
-Follow [developer setup](development.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GEMINI_API_KEY` only in the server environment for planning/synthesis. Live provider compatibility remains a separate check.
+Follow [developer setup](development.md). The root uv workspace installs review/audio and worker dependencies; optional vision extras add extraction dependencies. MP3 export uses the bundled imageio-ffmpeg encoder or system ffmpeg. Configure `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us` with ADC for planning/synthesis; hosted execution uses the pipeline service identity. Live provider compatibility remains a separate check.
 
 The web studio persists operations in `results/web/operations.sqlite3` before
 returning an operation ID. This local SQLite scheduler allows one MAGI operation and

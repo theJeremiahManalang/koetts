@@ -73,7 +73,7 @@ export async function GET(request: Request) {
       if (!/^[a-f0-9]{32}$/.test(name)) continue;
       try { const p = await jsonFile(path.join(dataRoot, "projects", name, "project.json")); projects.push({ id: name, name: p.title || p.chapter_id, scenes: p.scenes.length }); } catch { /* incomplete import */ }
     }
-    return Response.json({ projects, has_api_key: !!process.env.GEMINI_API_KEY });
+    return Response.json({ projects, provider_configured: !!process.env.GOOGLE_CLOUD_PROJECT?.trim() });
   } catch (error) {
     if (error instanceof PrivateApiError) return Response.json({ error: error.message, code: error.code }, { status: error.status });
     return Response.json({ error: "Could not load this workspace. A job may still be running; try reloading shortly." }, { status: 409 });

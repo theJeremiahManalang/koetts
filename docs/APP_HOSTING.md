@@ -72,7 +72,7 @@ container network interface. The existing local `start` script binds to loopback
 it has deliberately not been changed as part of configuration initialization.
 
 If provider features are enabled later, use App Hosting secrets backed by Secret
-Manager. Do not commit `GEMINI_API_KEY` or place it in a `NEXT_PUBLIC_` variable.
+Manager. Gemini uses the pipeline service identity; do not grant model inference to the frontend. Never commit credentials or place them in `NEXT_PUBLIC_` variables.
 Firestore is not required to initialize or host the website.
 
 The S3 authentication rollout adds an admin-only private-API diagnostic while

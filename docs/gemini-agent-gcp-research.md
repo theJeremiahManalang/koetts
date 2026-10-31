@@ -54,3 +54,16 @@ The existing durable operation/budget and approval controls stay authoritative i
 - [Application Default Credentials](https://docs.cloud.google.com/docs/authentication/application-default-credentials)
 - [Gemini API billing](https://ai.google.dev/gemini-api/docs/billing)
 - [Gemini TTS API/model/region guide](https://docs.cloud.google.com/text-to-speech/docs/gemini-tts)
+
+
+## Approved provider migration follow-up
+
+The user approved GCP SDK/service identity implementation with `us` inference
+endpoint, separate from `us-central1` compute/storage. The initial TTS uncertainty
+above is superseded by the current [Gemini 3.8 TTS overview](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/text-to-speech/overview):
+it documents SDK >=2.33.0, enterprise ADC clients, `generate_content` with exact
+text and speech metadata, and complete WAV bytes for unary output. The current
+implementation adapts existing reviewed requests to that transport and validates
+the returned WAV. It does not downgrade models or automatically add WAV headers.
+Offline fixtures establish mapping and preservation, not real model quality or
+project access. Live compatibility and paid-cost verification remain gated.

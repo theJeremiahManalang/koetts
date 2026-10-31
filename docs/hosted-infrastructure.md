@@ -94,11 +94,20 @@ shape, with the numeric version supplied from approved Secret Manager setup:
     - RUNTIME
 ```
 
-The provider key is exposed only to the pipeline job;
-it is absent from the API, browser, and `magi` job. Terraform creates secret
-containers and IAM bindings, but no secret versions or secret values. Add values
-through an approved Secret Manager procedure and provide explicit numeric version
-inputs. Never put secret bytes in a `.tfvars` file or Terraform state.
+Gemini planning and synthesis use the Google Gen AI SDK with ADC and the pipeline
+job's attached service account. Only that identity receives
+`aiplatform.endpoints.predict`; the API, frontend, Magi and collector do not.
+`inference_location` defaults to `us` independently of compute/storage region
+`us-central1`. Project/location configuration is nonsecret and does not establish
+credential validity, model access or budget admission. The provider API-key secret,
+its version input and accessor grant are removed from desired configuration.
+Before any apply, inspect state for prior managed secrets and preserve existing
+secret values; this change authorizes no deletion of a live secret.
+
+The remaining audio-signing secret is frontend-only. Terraform creates its
+container and IAM binding, not secret values or versions. Add the signing value
+through the approved Secret Manager procedure and provide its explicit numeric
+version. Never put secret bytes in `.tfvars` or Terraform state.
 
 The GCS bucket enforces uniform bucket-level access and public access prevention,
 cannot be destroyed by this configuration, and has no age-based lifecycle rule.

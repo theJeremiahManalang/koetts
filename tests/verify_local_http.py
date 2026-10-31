@@ -92,7 +92,7 @@ export function getAdminAuth() {
 ''')
         env = {**os.environ, "PYTHON_EXECUTABLE": str(interpreter),
                "MANGA_REPO_ROOT": str(runtime), "MANGA_DATA_ROOT": str(runtime / "results/web"),
-               "GEMINI_API_KEY": "", "NEXT_TELEMETRY_DISABLED": "1"}
+               "GEMINI_API_KEY": "", "GOOGLE_CLOUD_PROJECT": "", "NEXT_TELEMETRY_DISABLED": "1"}
         env.pop("MANGA_WEB_TEST_URL", None)
         env.pop("VIRTUAL_ENV", None)
         for frontend_only in (False, True):

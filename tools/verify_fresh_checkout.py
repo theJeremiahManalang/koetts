@@ -15,7 +15,7 @@ def main():
         for name in ("apps", "packages", "tests", "tools", "docs", "images"):
             shutil.copytree(root / name, checkout / name, ignore=shutil.ignore_patterns(
                 "node_modules", ".next", "__pycache__", "*.tsbuildinfo", "next-env.d.ts", ".env", ".env.local"))
-        env = {**os.environ, "GEMINI_API_KEY": "", "NEXT_TELEMETRY_DISABLED": "1"}
+        env = {**os.environ, "GEMINI_API_KEY": "", "GOOGLE_CLOUD_PROJECT": "", "NEXT_TELEMETRY_DISABLED": "1"}
         for name in ("PYTHON_EXECUTABLE", "MANGA_DATA_ROOT", "MANGA_REPO_ROOT", "MANGA_TTS_SAMPLE_PROJECT", "MANGA_WEB_TEST_URL", "VIRTUAL_ENV"):
             env.pop(name, None)
         for command in (["uv", "sync", "--frozen"], ["npm", "ci"], ["npm", "run", "check:repo"], ["npm", "test"]):

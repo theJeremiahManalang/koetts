@@ -44,7 +44,7 @@ class WorkerProcessTests(unittest.TestCase):
     def spawn(self, job, mode="normal"):
         repo = Path(__file__).resolve().parents[2]
         env = {**os.environ, "PYTHONPATH": str(repo),
-               "GEMINI_API_KEY": ""}
+               "GEMINI_API_KEY": "", "GOOGLE_CLOUD_PROJECT": ""}
         child = subprocess.Popen([sys.executable, str(repo / "tests/helpers/worker_process.py"),
                                   str(self.root), job, mode], env=env,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

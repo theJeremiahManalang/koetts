@@ -49,7 +49,7 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
       return { ok: true, json: async () => { if (jobStatus === 'reconciliation_required') observedReconciliation = true; return { status: jobStatus, message: 'Rendering fixture' }; } };
     }
     if (pending && url === '/api/auth/session') await pending;
-    return { ok: !fail, json: async () => ({ projects: [], has_api_key: false }) };
+    return { ok: !fail, json: async () => ({ projects: [], provider_configured: false }) };
   };
   const mocks = {
     'firebase/auth': { onIdTokenChanged: (_, next) => { observer = next; return () => {}; }, GoogleAuthProvider: class { setCustomParameters() {} }, signInWithPopup: async () => { loginCalls++; }, signOut: async () => {} },

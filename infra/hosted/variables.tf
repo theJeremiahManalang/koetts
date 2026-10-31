@@ -20,6 +20,12 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "inference_location" {
+  description = "Vertex AI location for Gemini inference, independent of the Cloud Run and storage region."
+  type        = string
+  default     = "us"
+}
+
 variable "firestore_database_id" {
   description = "Existing named Firestore database ID. The database is referenced as runtime configuration only."
   type        = string
@@ -162,15 +168,6 @@ variable "audio_signing_secret_version" {
   validation {
     condition     = can(regex("^[1-9][0-9]*$", var.audio_signing_secret_version))
     error_message = "Set an explicit numeric version for the audio signing secret."
-  }
-}
-
-variable "provider_secret_version" {
-  description = "Explicit numeric Secret Manager version containing the provider key, exposed only to the pipeline job."
-  type        = string
-  validation {
-    condition     = can(regex("^[1-9][0-9]*$", var.provider_secret_version))
-    error_message = "Set an explicit numeric version for the pipeline provider secret."
   }
 }
 

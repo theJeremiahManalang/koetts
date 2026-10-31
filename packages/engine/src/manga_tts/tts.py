@@ -17,6 +17,7 @@ from .config import (
     CACHE_REVISION,
     MAX_SILENCE_SEC,
     NARRATOR,
+    SPEECH_BACKEND_VERSION,
     SAMPLE_RATE,
     TEXT_POLICY_VERSION,
     PathLike,
@@ -110,7 +111,8 @@ def compile_segments(p: dict[str, Any], scene: dict[str, Any]) -> list[dict[str,
         seg["scene_id"] = scene["scene_id"]
         seg["source_ids"] = [sid for t in seg["turns"] for sid in t["source_ids"]]
         seg["request"] = None if seg["silence_sec"] else build_request(p, scene, seg["turns"])
-        seg["signature"] = digest({"cache_revision": CACHE_REVISION, "text_policy": TEXT_POLICY_VERSION, "request": seg["request"], "silence": seg["silence_sec"],
+        seg["signature"] = digest({"cache_revision": CACHE_REVISION, "backend_version": SPEECH_BACKEND_VERSION,
+                                    "text_policy": TEXT_POLICY_VERSION, "request": seg["request"], "silence": seg["silence_sec"],
                                     "model": p["settings"]["tts_model"], "sample_rate": SAMPLE_RATE})
     return segments
 

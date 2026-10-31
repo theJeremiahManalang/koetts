@@ -233,3 +233,17 @@ evaluation wording: offline saved-response replay cannot establish fresh model
 quality; fresh inference comparisons require paid-test authorization. Current
 AgentRuntime naming/oldReasoningEngine APIs distinguished. No implementation or
 phase5authorization inferred from research.
+
+
+## Approved GCP Gemini implementation — 2026-10-31
+
+User approved concrete migration scope: GenAI ADC/project + us multi-region model
+endpoint; compute/storage central; remove hosted API-key injection; adapt planning
+and TTS preserving controls; tests/reviews/commits. No deployment or paid calls.
+Engine and Terraform delegated to independent bounded Luna jobs, root owns SDK
+lock/web-worker metadata/docs/integration. SDK minimum2.33 and lock2.33.0 synced.
+Metadata provider_configured replaces has_api_key and means config presence only,
+never ADC proof. Hosted calls retain one durable retry authority and SDK attempts1.
+All test runners that previously cleared provider keys now also clear project to
+keep accidental ADC inference disabled. Prior research TTS uncertainty resolved
+from current3.8 docs (generate_content unary completeWAV); no live claims.

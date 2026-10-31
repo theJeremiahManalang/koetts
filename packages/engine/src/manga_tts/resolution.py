@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .cleaner import normalize_planning_data, normalize_text
-from .config import CACHE_REVISION, DEFAULT_MAX_RETRIES, TEXT_POLICY_VERSION, PathLike
+from .config import CACHE_REVISION, DEFAULT_MAX_RETRIES, PLANNING_BACKEND_VERSION, TEXT_POLICY_VERSION, PathLike
 from .gemini import LOGGER, retry_api
 from .schemas import Project, validate_contract
 from .script import apply_proposal
@@ -107,7 +107,8 @@ def propose_plan(p: dict[str, Any], root: PathLike, client: Any, progress: Calla
     evidence = evidence_signature(p, root)
     validate_contract(p, Project, "project")
     data = normalize_planning_data({"sources": p["sources"], "cast": p["cast"], "appearances": p["appearances"], "chapter": p["chapter"]})
-    key = digest({"cache_revision": CACHE_REVISION, "text_policy": TEXT_POLICY_VERSION, "prompt": PLAN_PROMPT, "schema": PLAN_SCHEMA, "model": p["settings"]["planning_model"],
+    key = digest({"cache_revision": CACHE_REVISION, "backend_version": PLANNING_BACKEND_VERSION,
+                  "text_policy": TEXT_POLICY_VERSION, "prompt": PLAN_PROMPT, "schema": PLAN_SCHEMA, "model": p["settings"]["planning_model"],
                   "data": data, "evidence": evidence})
     path = Path(root) / "planning_cache" / f"{key}.json"
     if path.exists():

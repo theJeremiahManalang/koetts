@@ -22,7 +22,7 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.backend.candidate_path.return_value = self.audio
         self.backend.asset_path.return_value = self.audio
         self.backend.shared.return_value = {"id": "safe-result"}
-        self.backend.list_projects.return_value = {"projects": [], "has_api_key": False}
+        self.backend.list_projects.return_value = {"projects": [], "provider_configured": False}
         self.backend.operation_by_key.return_value = {"id": "original-operation"}
         self.config = BoundaryConfig("demo-hosted", "https://private.example", {
             "web": frozenset({"snapshot", "asset", "enqueue", "poll", "shared", "upload"}),

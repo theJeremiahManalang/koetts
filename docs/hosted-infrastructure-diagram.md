@@ -17,11 +17,11 @@ location. Resource names without a fixed value are selected during preflight.
 ```mermaid
 flowchart TB
     user["Reader or admin browser"]
-    provider["External Gemini API<br/>Separate provider allowance"]
+    provider["GCP Gemini API: us multi-region<br/>Separate model-call allowance"]
 
     subgraph project["Firebase / GCP project: koetts-9bf7f"]
         auth["Firebase Authentication<br/>Google sign-in and user verification"]
-        secrets["Secret Manager<br/>Audio signing key and provider key"]
+        secrets["Secret Manager<br/>Frontend audio signing key"]
 
         subgraph east["us-east4: existing frontend initially"]
             web["Firebase App Hosting: koetts<br/>Next.js server<br/>1 CPU / 512 MiB; min 0, max 2"]
@@ -48,7 +48,6 @@ flowchart TB
     web -->|"Service ID token plus user credential"| api
     api -->|"Revocation and user verification"| auth
     secrets -->|"Signing key: frontend only"| web
-    secrets -->|"Provider key: pipeline only"| pipeline
     dispatch -->|"OIDC: private coordinator endpoint"| api
     api -->|"Dispatch and reconcile"| magi
     api -->|"Dispatch and reconcile"| pipeline
@@ -58,7 +57,7 @@ flowchart TB
     api -->|"Create and read exact artifacts"| bucket
     magi -->|"Read sources; create artifacts"| bucket
     pipeline -->|"Read and create artifacts"| bucket
-    pipeline -->|"Budget-authorized provider calls"| provider
+    pipeline -->|"ADC identity; budget-authorized calls"| provider
     gcSchedule -->|"OAuth: run only collector job"| gc
     gc -->|"Reference roots and maintenance barrier"| firestore
     gc -->|"Delete only eligible unreferenced generations"| bucket
@@ -159,7 +158,7 @@ proven. No current website URL is changed by these diagrams.
 | Dedicated workload identities and IAM | `infra/hosted/main.tf`; runtime GCS create/read versus collector read/delete grants |
 | Existing frontend | `apps/web/apphosting.yaml`, `firebase.json` and deployed App Hosting backend; outside Terraform management |
 | Existing Firestore | `firestore_database_id = "koetts-default"`; Terraform does not create or relocate the database |
-| Provider and signing secrets | Terraform creates containers and access grants; explicit secret values/versions are separate operator inputs |
+| Gemini identity and signing secret | Pipeline uses ADC with inference IAM; frontend signing value/version remains a separate operator input |
 | Immutable container images | Explicit `api_image`, `magi_image`, `pipeline_image` digests; image builds and registry setup are outside this Terraform |
 
 IAM limits Firestore workload access to the named database, not individual

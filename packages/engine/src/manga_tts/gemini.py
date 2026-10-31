@@ -1,10 +1,11 @@
 """Gemini stage implementation; public workflow commands live in PipelineRouter."""
 from __future__ import annotations
 
-import base64
+import io
 import logging
 import re
 import time
+import wave
 from collections.abc import Callable, Iterable
 from typing import Any, TypeVar
 
@@ -16,14 +17,14 @@ LOGGER.addHandler(logging.NullHandler())
 
 
 def create_client(config: PipelineConfig) -> Any:
-    """Create a provider client lazily from runtime-only credentials; no generation call.
-
-    Raises ValueError without a key. The SDK is optional until this function is used.
-    """
-    if not config.api_key or not config.api_key.get_secret_value():
-        raise ValueError("Configure GEMINI_API_KEY or inject a client_factory")
+    """Create an Agent Platform client lazily, authenticating with Application Default Credentials."""
+    if not config.project:
+        raise ValueError("Configure GOOGLE_CLOUD_PROJECT or inject a client_factory")
     from google import genai
-    return genai.Client(api_key=config.api_key.get_secret_value(), http_options={"timeout": config.timeout_ms})
+    from google.genai import types
+    return genai.Client(enterprise=True, project=config.project, location=config.location,
+                        http_options=types.HttpOptions(timeout=config.timeout_ms,
+                            retry_options=types.HttpRetryOptions(attempts=1)))
 
 
 
@@ -69,7 +70,7 @@ def error_summary(exc: Exception, secrets: Iterable[str] = ()) -> str:
     message = re.sub(r"(?i)Bearer\s+[^\s\"'}]+", "Bearer [REDACTED]", message)
     message = re.sub(r"(?i)((?:api[_-]?key|key|authorization)\s*[=:]\s*)[^\s&,\"'}]+", r"\1[REDACTED]", message)
     code = getattr(exc, "code", None)
-    hint = {"400": "Check the model and structured-output schema.", "401": "Check the API key.",
+    hint = {"400": "Check the model and structured-output schema.", "401": "Check Application Default Credentials.",
             "403": "Check API/project access.", "404": "Check that this model is available to your account.",
             "429": "Quota/rate limit reached; wait or check your project quota."}.get(str(code), "")
     return f"{type(exc).__name__}: {message[:1000]} {hint}".strip()
@@ -87,21 +88,52 @@ class GeminiRenderer:
         self.max_retries, self.last_call = max_retries, None
 
     def __call__(self, request: dict[str, Any]) -> bytes:
-        """Send request through client.interactions.create and return decoded audio bytes.
+        """Send reviewed speech through Gemini 3.8 TTS and return its complete WAV bytes.
 
         May incur cost and sleep for pacing/backoff. Retries transient status/network errors
         up to max_retries total attempts; permanent errors propagate immediately. Raises
-        ValueError for missing audio; decoding/SDK errors propagate. WAV validation is the caller responsibility."""
+        ValueError for missing or invalid WAV audio; SDK errors propagate."""
         from .tts import validate_speech_request
         validate_speech_request(request)
+        parts = []
+        for item in request["input"][0]["content"]:
+            metadata = item["annotations"][0]
+            speech_metadata = {"style": metadata["style"]}
+            if "speaker" in metadata:
+                speech_metadata["speaker"] = metadata["speaker"]
+            parts.append({"text": item["text"], "speech_metadata": speech_metadata})
+        voices = request["generation_config"]["speech_config"]
+        if isinstance(voices, list):
+            speech_config = {"voice_config": {"voice": voices[0]["voice"]}}
+        else:
+            speech_config = {"multi_speaker_voice_config": {"speaker_voice_configs": [
+                {"speaker": item["speaker"], "voice_config": {"voice": item["voice"]}}
+                for item in voices["speakers"]
+            ]}}
+        contents = [{"role": "user", "parts": parts}]
+        config = {"response_modalities": ["AUDIO"], "speech_config": speech_config}
         def send():
             if self.last_call is not None:
                 time.sleep(max(0, self.interval - (time.monotonic() - self.last_call)))
             self.last_call = time.monotonic()
-            return self.client.interactions.create(model=self.model, **request)
+            return self.client.models.generate_content(model=self.model, contents=contents, config=config)
         response = retry_api(send, name="synthesis", max_attempts=self.max_retries)
-        audio = getattr(response, "output_audio", None)
-        if not audio or not getattr(audio, "data", None):
+        candidates = getattr(response, "candidates", None) or []
+        content = getattr(candidates[0], "content", None) if candidates else None
+        audio = next((getattr(part, "inline_data", None) for part in (getattr(content, "parts", None) or [])
+                      if getattr(getattr(part, "inline_data", None), "data", None)), None)
+        data = getattr(audio, "data", None)
+        if not isinstance(data, bytes) or not data:
             LOGGER.warning("synthesis_response_invalid", extra={"operation": "synthesis", "outcome": "missing_audio"})
-            raise ValueError("Gemini returned no audio")
-        return base64.b64decode(audio.data, validate=True)
+            raise ValueError("Gemini returned no audio WAV")
+        try:
+            with wave.open(io.BytesIO(data), "rb") as wav:
+                valid_header = (wav.getframerate(), wav.getnchannels(), wav.getsampwidth(), wav.getcomptype()) == (24000, 1, 2, "NONE")
+                frames = wav.getnframes()
+                pcm = wav.readframes(frames)
+                if not valid_header or frames <= 0 or len(pcm) != frames * 2:
+                    raise ValueError
+        except (wave.Error, EOFError, ValueError):
+            LOGGER.warning("synthesis_response_invalid", extra={"operation": "synthesis", "outcome": "invalid_wav"})
+            raise ValueError("Gemini returned an invalid mono 24 kHz 16-bit PCM WAV") from None
+        return data

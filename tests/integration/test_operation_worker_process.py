@@ -40,7 +40,7 @@ class OperationWorkerProcessTests(unittest.TestCase):
         environment = {
             **os.environ,
             "PYTHONPATH": str(repository),
-            "GEMINI_API_KEY": "",
+            "GEMINI_API_KEY": "", "GOOGLE_CLOUD_PROJECT": "",
         }
         process = subprocess.Popen(
             [sys.executable, str(repository / "tests/helpers/operation_worker_process.py"),

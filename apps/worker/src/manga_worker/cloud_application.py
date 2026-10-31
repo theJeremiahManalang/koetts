@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from manga_tts import PipelineRouter, schemas
+from manga_tts.config import provider_configured
 from manga_tts.operations import Operation
 from manga_tts.persistence import ArtifactRef
 from manga_tts.shared_requests import ReaderIntakePolicy, SharedRequests
@@ -262,7 +263,7 @@ class CloudApplication:
                                  "scenes": len(data.get("scenes", []))})
             except (ValueError, FileNotFoundError):
                 continue
-        return {"projects": projects, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
+        return {"projects": projects, "provider_configured": provider_configured()}
 
     def snapshot(self, project_id: str) -> dict:
         revision = self.stores.persistence.current(self.identifier(project_id))

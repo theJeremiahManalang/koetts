@@ -1,6 +1,7 @@
 locals {
   enabled_services = toset([
     "artifactregistry.googleapis.com",
+    "aiplatform.googleapis.com",
     "billingbudgets.googleapis.com",
     "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
@@ -24,6 +25,8 @@ locals {
 
   common_cloud_env = {
     FIREBASE_PROJECT_ID      = var.project_id
+    GOOGLE_CLOUD_PROJECT     = var.project_id
+    GOOGLE_CLOUD_LOCATION    = var.inference_location
     FIRESTORE_DATABASE_ID    = var.firestore_database_id
     MANGA_CLOUD_DATASET      = var.cloud_dataset
     MANGA_ARTIFACT_BUCKET    = google_storage_bucket.artifacts.name
@@ -173,6 +176,14 @@ resource "google_project_iam_custom_role" "firebase_user_reader" {
   permissions = ["firebaseauth.users.get"]
 }
 
+resource "google_project_iam_custom_role" "gemini_inference" {
+  project     = var.project_id
+  role_id     = "hostedGeminiInference"
+  title       = "Hosted pipeline Gemini inference"
+  description = "Call Gemini publisher models through Vertex AI generateContent."
+  permissions = ["aiplatform.endpoints.predict"]
+}
+
 resource "google_project_iam_custom_role" "coordinator" {
   project     = var.project_id
   role_id     = "hostedJobCoordinator"
@@ -243,6 +254,12 @@ resource "google_project_iam_member" "api_firebase_auth" {
   project = var.project_id
   role    = google_project_iam_custom_role.firebase_user_reader.name
   member  = "serviceAccount:${google_service_account.api.email}"
+}
+
+resource "google_project_iam_member" "pipeline_gemini_inference" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.gemini_inference.name
+  member  = "serviceAccount:${google_service_account.pipeline.email}"
 }
 
 resource "google_project_iam_member" "coordinator_operations" {
@@ -318,19 +335,12 @@ resource "google_storage_managed_folder_iam_member" "artifact_gc" {
   member         = "serviceAccount:${google_service_account.gc.email}"
 }
 
+# Provider-key secret resources and access bindings were removed from desired
+# configuration. Audit any prior Terraform state and live secret before apply;
+# this offline change does not delete a Secret Manager secret or version.
 resource "google_secret_manager_secret" "audio_signing" {
   project   = var.project_id
   secret_id = "hosted-audio-signing-key"
-  replication {
-    auto {}
-  }
-  deletion_protection = true
-  depends_on          = [google_project_service.enabled]
-}
-
-resource "google_secret_manager_secret" "provider" {
-  project   = var.project_id
-  secret_id = "hosted-provider-key"
   replication {
     auto {}
   }
@@ -343,13 +353,6 @@ resource "google_secret_manager_secret_iam_member" "frontend_audio_signing" {
   secret_id = google_secret_manager_secret.audio_signing.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_service_account.frontend.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "pipeline_provider" {
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.provider.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.pipeline.email}"
 }
 
 resource "google_cloud_run_v2_service" "api" {
@@ -528,23 +531,6 @@ resource "google_cloud_run_v2_job" "pipeline" {
             value = env.value
           }
         }
-        env {
-          name  = "CLOUD_RUN_PROJECT"
-          value = var.project_id
-        }
-        env {
-          name  = "CLOUD_RUN_LOCATION"
-          value = var.region
-        }
-        env {
-          name = "GEMINI_API_KEY"
-          value_source {
-            secret_key_ref {
-              secret  = google_secret_manager_secret.provider.secret_id
-              version = var.provider_secret_version
-            }
-          }
-        }
       }
     }
   }
@@ -552,7 +538,7 @@ resource "google_cloud_run_v2_job" "pipeline" {
     google_project_service.enabled,
     google_project_iam_member.runtime_firestore,
     google_storage_managed_folder_iam_member.artifact_runtime,
-    google_secret_manager_secret_iam_member.pipeline_provider,
+    google_project_iam_member.pipeline_gemini_inference,
   ]
 }
 

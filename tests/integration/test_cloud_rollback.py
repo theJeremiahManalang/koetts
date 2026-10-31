@@ -281,6 +281,7 @@ class CloudRollbackAcceptanceTests(unittest.TestCase):
         script.write_text(_LEGACY_READER.lstrip("\\\n"), encoding="utf-8")
         environment = dict(os.environ)
         environment["GEMINI_API_KEY"] = ""
+        environment["GOOGLE_CLOUD_PROJECT"] = ""
         environment["GOOGLE_API_KEY"] = ""
         environment["PYTHONPATH"] = os.pathsep.join(str(archive_root / path) for path in (
             "apps/worker/src", "packages/engine/src", "packages/vision/src"))

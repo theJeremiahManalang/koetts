@@ -31,7 +31,7 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertNotRegex(MAIN, r'(?i)age\s*=\s*[0-9]+')
         self.assertNotIn('allUsers', MAIN)
 
-    def test_jobs_are_bounded_cpu_only_and_secret_is_pipeline_only(self):
+    def test_jobs_are_bounded_cpu_only_and_gemini_uses_adc_only_on_pipeline(self):
         for job in ("magi", "pipeline"):
             section = MAIN.split(f'resource "google_cloud_run_v2_job" "{job}"', 1)[1]
             section = section.split("\nresource ", 1)[0]
@@ -43,12 +43,26 @@ class HostedInfrastructureTests(unittest.TestCase):
         api = MAIN.split('resource "google_cloud_run_v2_service" "api"', 1)[1]
         api = api.split('\nresource "google_cloud_run_v2_service_iam_member"', 1)[0]
         self.assertNotIn("audio_signing.secret_id", api)
-        self.assertNotIn("provider.secret_id", api)
         self.assertIn('resource "google_secret_manager_secret_iam_member" "frontend_audio_signing"', MAIN)
         pipeline = MAIN.split('resource "google_cloud_run_v2_job" "pipeline"', 1)[1]
         pipeline = pipeline.split('\nresource "google_cloud_scheduler_job"', 1)[0]
-        self.assertIn('name = "GEMINI_API_KEY"', pipeline)
-        self.assertIn("provider.secret_id", pipeline)
+        self.assertNotIn("GEMINI_API_KEY", MAIN)
+        self.assertNotIn("provider.secret_id", MAIN)
+        self.assertIn('GOOGLE_CLOUD_PROJECT     = var.project_id', MAIN)
+        self.assertIn('GOOGLE_CLOUD_LOCATION    = var.inference_location', MAIN)
+        self.assertIn('default     = "us"', VARIABLES)
+        self.assertIn('"aiplatform.googleapis.com"', MAIN)
+        inference_role = MAIN.split('resource "google_project_iam_custom_role" "gemini_inference"', 1)[1]
+        inference_role = inference_role.split('\nresource ', 1)[0]
+        self.assertIn('permissions = ["aiplatform.endpoints.predict"]', inference_role)
+        inference_binding = MAIN.split('resource "google_project_iam_member" "pipeline_gemini_inference"', 1)[1]
+        inference_binding = inference_binding.split('\nresource ', 1)[0]
+        self.assertIn('google_service_account.pipeline.email', inference_binding)
+        self.assertNotIn('google_service_account.api.email', inference_binding)
+        self.assertNotIn('google_service_account.magi.email', inference_binding)
+        self.assertIn('google_project_iam_member.pipeline_gemini_inference', pipeline)
+        self.assertNotIn('provider_secret_version', VARIABLES)
+        self.assertNotIn('google_secret_manager_secret" "provider', MAIN)
 
     def test_reference_aware_collector_has_maintenance_permissions_and_namespace_scope(self):
         gc_role = MAIN.split('resource "google_project_iam_custom_role" "firestore_gc"', 1)[1]

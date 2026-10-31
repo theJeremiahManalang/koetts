@@ -19,6 +19,7 @@ from typing import Any, cast
 import psutil
 
 from manga_tts import PipelineConfig, PipelineRouter, schemas, tts
+from manga_tts.config import provider_configured
 from manga_tts.cli import recover_operation_lock, workspace_lock
 from manga_tts.config import VOICES
 from manga_tts.extraction import extract_chapter
@@ -662,7 +663,7 @@ def snapshot(router, manifest=None):
     return {"project": data, "revision": digest(data), "pages": pages, "voices": VOICES,
             "cast_approved": data["cast_approval"] == cast_signature(data),
             "approved_scenes": [s["scene_id"] for s in data["scenes"] if data["approvals"].get(s["scene_id"]) == scene_signature(data, s)],
-            "workflow_status": workflow_status(data, router.root, manifest), "exports": exports, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
+            "workflow_status": workflow_status(data, router.root, manifest), "exports": exports, "provider_configured": provider_configured()}
 
 
 def perform(router, request, progress, *, operation: Operation | None = None, before_provider=None,

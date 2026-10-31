@@ -16,14 +16,14 @@ To update dependencies, edit the owning package manifest and regenerate `uv.lock
 
 ## Run and configure
 
-Copy `apps/web/.env.example` to `apps/web/.env.local` on first setup, preserving any existing settings. Follow [Firebase authentication](FIREBASE_AUTH.md) for Google login, server credentials, and trusted admin claims. Browser-visible Firebase settings are public configuration; server credentials and `GEMINI_API_KEY` remain private.
+Copy `apps/web/.env.example` to `apps/web/.env.local` on first setup, preserving any existing settings. Follow [Firebase authentication](FIREBASE_AUTH.md) for Google login, server credentials, and trusted admin claims. Browser-visible Firebase settings are public configuration; server credentials remain private. Gemini uses Application Default Credentials (ADC).
 
 ```bash
 npm run dev
 # http://127.0.0.1:3000
 ```
 
-The web server selects the root uv environment automatically. `PYTHON_EXECUTABLE` can select another absolute interpreter with the worker packages installed. Workers execute installed Python modules, not repository scripts. For new planning and synthesis, provide `GEMINI_API_KEY` in the server environment. Reviewing existing state and synthetic tests use no paid calls.
+The web server selects the root uv environment automatically. `PYTHON_EXECUTABLE` can select another absolute interpreter with the worker packages installed. Workers execute installed Python modules, not repository scripts. For new planning and synthesis, set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION=us`. Use ADC locally (`gcloud auth application-default login`) or an attached workload service account on GCP. API keys are not a fallback. Configuration presence does not establish credential validity, model access, or budget admission. Reviewing existing state and synthetic tests use no paid calls.
 
 `MANGA_DATA_ROOT` optionally selects an absolute local state directory. Checkout defaults preserve `results/web`; installed workers outside a checkout default to `~/.local/share/manga-studio`. Web and worker receive the same resolved data directory. `MANGA_REPO_ROOT` optionally selects an absolute checkout root for unusual web launchers. Each web server instance must use one consistent state directory.
 
