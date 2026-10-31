@@ -69,13 +69,18 @@ No skill, approval policy or runtime configuration changes.
 
 ## Completion and next action
 
-Collect both documentation workers, audit cross-file consistency, run repository
-and Markdown/Mermaid checks, commit the consolidation, then obtain independent
-Standards/Spec review and fix findings. Record exact results here before handoff.
-Do not claim that documentation cleanup refreshes live cloud state or reruns
-previous acceptance suites. Next implementation gate remains bounded phase 5
-cloud/test authorization with incremental infrastructure/build and model spending
-allowances, plus real rollout targets, IAM/model access and billing attribution.
+Documentation consolidation and both worker assignments are complete. Main commit
+`997e1b3` and review fixes `166f0f7` preserve history and accepted operating policy.
+Both review axes accepted fixes; the final Standards note corrected the recorded
+infrastructure-guide reading count, now reflected below. Final validation checked
+166 local Markdown targets with zero missing files; all three Mermaid diagrams
+parse; repository and whitespace checks pass. No application tests or live probes
+were rerun for this documentation-only change.
+
+Next implementation gate remains bounded phase 5 cloud/test authorization with
+incremental infrastructure/build and model spending allowances, actual rollout
+targets, IAM/model access and billing attribution. Documentation cleanup does not
+refresh live cloud state, authorize spending, or complete the broader hosted goal.
 
 ## Documentation validation
 
@@ -96,7 +101,7 @@ Reading-size evidence uses reproducible whitespace-word counts (`len(text.split(
 from `git show 40182c8:PATH` versus the updated file, not token estimates or model
 evaluations. AGENTS.md: 278 to 286 words. Frontend hosting path APP_HOSTING.md:
 662 to 762 words. Prior private-service pointer S3_DEPLOYMENT.md: 1,177 words;
-replacement infrastructure/rollout references: 1,758 and 1,573 words (3,331
+replacement infrastructure/rollout references: 1,768 and 1,573 words (3,341
 combined). The larger disclosed path covers the full hosted stack rather than
 only verification. CONTEXT.md reduced from 2,012 to 708 words before this review
 record; active alignment status from 8,705 to 566 words. Documentation index grew
