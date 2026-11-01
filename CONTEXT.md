@@ -201,7 +201,7 @@ Source trace found stale selected-work eligibility across URL navigation; hosted
 server admission and production pause remain authoritative. Implemented URL-reactive
 selection, matching-ID gating, and explicit context labels. RCA:
 `docs/resources/phase-5-manual-acceptance-review.md`; updated checklist and docs
-pointers. Focused upload/context/draft tests 18 pass; typecheck and build pass. Full web
+pointers. Focused mounted-Studio navigation/upload/context/draft tests 19 pass; typecheck and build pass. Full web
 suite 89/90 under unsupported Node 24/npm 11; multipart stream test fails with a
 closed ReadableStream. HTTP suite setup also fails on DNS while downloading `h11`.
 Node 22.22.3 unavailable. No browser package; manual live

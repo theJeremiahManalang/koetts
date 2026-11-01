@@ -25,8 +25,9 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
-for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
-  const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${'a'.repeat(32)}&create=1` : 'http://localhost/request' });
+for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+  const initialWork = 'a'.repeat(32);
+  const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${initialWork}&create=1` : surface === 'hosted-selection' ? `http://localhost/?work=${initialWork}` : 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage, File: dom.window.File, URL: dom.window.URL, ResizeObserver: class { observe() {} disconnect() {} }, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   dom.window.HTMLElement.prototype.scrollTo = () => {};
@@ -40,10 +41,15 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
   let polls = 0;
   let jobStatus = 'running';
   let observedReconciliation = false;
+  let delayWorkResponse = false;
   const requestedUrls = [];
   globalThis.fetch = async url => {
     requestedUrls.push(String(url));
-    if (String(url).startsWith('/api/shared/admin?work_id=')) return { ok: true, json: async () => ({ work: [{ id: 'a'.repeat(32), title: 'Requested story', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
+    if (String(url).startsWith('/api/shared/admin?work_id=')) {
+      const id = new URL(String(url), 'http://localhost').searchParams.get('work_id');
+      if (delayWorkResponse) await new Promise(resolve => setTimeout(resolve, 25));
+      return { ok: true, json: async () => ({ work: [{ id, title: id === initialWork ? 'Requested story' : 'Second request', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
+    }
     if (String(url).includes('?job=')) {
       polls++;
       return { ok: true, json: async () => { if (jobStatus === 'reconciliation_required') observedReconciliation = true; return { status: jobStatus, message: 'Rendering fixture' }; } };
@@ -71,7 +77,8 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
   const { createRoot } = require('react-dom/client');
   const root = createRoot(document.getElementById('root'));
   t.after(async () => { await act(async () => root.unmount()); if (surface === 'polling') await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); }); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
-  await act(async () => root.render(React.createElement(AuthProvider, null, React.createElement(Page))));
+  const app = () => React.createElement(AuthProvider, null, React.createElement(Page, surface === 'hosted-selection' ? { hosted: true } : {}));
+  await act(async () => root.render(app()));
   const emit = user => { firebaseAuth.currentUser = user; return observer(user); };
   const user = uid => ({ uid, getIdToken: async () => 'token', getIdTokenResult: async () => ({ token: 'token', claims: { admin: true } }) });
   if (surface === 'polling') {
@@ -80,6 +87,31 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
   }
   if (surface === 'work-prepare') localStorage.setItem('manga-tts-project', 'unrelated-saved-project');
   await act(async () => emit(user('alice')));
+  if (surface === 'hosted-selection') {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    const images = document.querySelector('input[aria-label="Upload manga images"]');
+    await act(async () => {
+      Object.defineProperty(images, 'files', { configurable: true, value: [new dom.window.File(['page'], 'page.png', { type: 'image/png' })] });
+      images.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    const create = () => [...document.querySelectorAll('button')].find(button => button.textContent.includes('Extract & create project'));
+    assert.equal(create().disabled, false, 'verified selected work enables hosted creation');
+    window.history.pushState(null, '', '/');
+    await act(async () => root.render(app()));
+    assert.equal(create().disabled, true, 'removing the work query disables creation immediately');
+    assert.match(document.body.textContent, /No chapter work selected/);
+    window.history.pushState(null, '', `/?work=${'b'.repeat(32)}`);
+    delayWorkResponse = true;
+    await act(async () => root.render(app()));
+    assert.equal(create().disabled, true, 'a different unverified work never inherits prior eligibility');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(create().disabled, true, 'creation stays disabled while the new work is still loading');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    delayWorkResponse = false;
+    assert.equal(create().disabled, false, 'the newly verified current work enables creation');
+    assert.match(document.body.textContent, /Second request · Chapter 3/);
+    return;
+  }
   if (surface === 'work-prepare') {
     assert.ok(document.querySelector('input[aria-label="Upload manga images"]'));
     assert.match(document.body.textContent, /Requested story · Chapter 3/);
