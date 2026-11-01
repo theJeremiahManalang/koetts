@@ -400,6 +400,8 @@ def create_app(
             initial, version, watcher = await run_in_threadpool(backend.watch_operation, operation_id, publish)
         except FileNotFoundError:
             raise HTTPException(404, "Operation not found") from None
+        except ValueError:
+            raise HTTPException(400, "Invalid operation identifier") from None
 
         async def stream():
             last_version = version

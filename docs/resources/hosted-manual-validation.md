@@ -13,8 +13,9 @@ UTC window and the `koetts-api`, `koetts-magi`, `koetts-pipeline`, and
 calls, starts no jobs, changes no cloud configuration, and does not inspect
 credentials.
 
-Hosted Studio status now arrives over authenticated `/api/workflow/events` SSE.
-During an approved hosted run, confirm status changes arrive without recurring
+After the reviewed frontend and API are deployed, hosted Studio status should arrive
+over authenticated `/api/workflow/events` SSE. During an approved hosted run, confirm
+status changes arrive without recurring
 `/api/workflow?job=` requests. Reload or disconnect and confirm the stream reconnects
 to current operation state without submitting another operation. Sign out and
 confirm the browser closes the stream; server authorization must also close a stream

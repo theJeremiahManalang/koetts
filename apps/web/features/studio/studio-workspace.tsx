@@ -279,6 +279,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     return false;
   }
   async function watchHosted(job: { id: string; project: string; operation?: Operation; idempotencyKey?: string }, operation: Operation) {
+    console.error("debug-w-hosted");
     operationSection.current = operation.section ?? null;
     startOperation(operation);
     localStorage.setItem("manga-tts-job", JSON.stringify(job));
@@ -348,7 +349,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
           if (terminal) return !needsReconciliation;
           if (controller.signal.aborted && (!mounted.current || !getFirebaseAuth().currentUser)) return false;
           if (!receivedEvent) setBusy("Reconnecting to your operation…");
-          delay = Math.max(delay, 5000);
+          delay = 1000;
         } catch (error) {
           const status = (error as Error & { status?: number }).status;
           if (status === 401 || status === 403) throw error;
@@ -458,6 +459,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     } catch (e) { failOperation(operation, e); setBusy(""); return false; }
   }
   async function upload(form: FormData) {
+    console.error("debug-upload", hosted);
     if (busy) return;
     const action = String(form.get("action") || "");
     const intentWorkId = hosted && action === "create" ? hostedWorkId(window.location.search) : undefined;
@@ -485,6 +487,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     catch (e) { failOperation(operation, e); setBusy(""); }
   }
   function createProject() {
+    console.error("debug-create");
     setTab("cast");
     const form = new FormData(); form.set("action", "create"); form.set("mode", mode); form.set("direction", direction);
     files.forEach(f => form.append("images", f)); if (archive && mode !== "images") form.set("chapter", archive); if (castZip && mode !== "restore") form.set("cast", castZip);
