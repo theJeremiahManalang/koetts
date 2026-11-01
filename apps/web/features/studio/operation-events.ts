@@ -1,5 +1,9 @@
 import type { Job } from "./types";
 
+export function shouldReconnect(status?: number): boolean {
+  return status === undefined || status === 408 || status === 429 || status >= 500;
+}
+
 export function takeOperationEvents(buffer: string): { events: Job[]; controls: string[]; remainder: string } {
   const blocks = buffer.replace(/\r\n/g, "\n").split("\n\n");
   const remainder = blocks.pop() ?? "";

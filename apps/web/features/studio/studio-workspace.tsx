@@ -22,7 +22,7 @@ import { RequireSignIn } from "../identity/require-sign-in";
 import { AdminNav } from "../identity/admin-nav";
 import { StudioRequestContext, type HostedWorkState } from "./studio-request-context";
 import { currentHostedWork, hostedIntentFingerprint, hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
-import { takeOperationEvents } from "./operation-events";
+import { shouldReconnect, takeOperationEvents } from "./operation-events";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -279,7 +279,6 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     return false;
   }
   async function watchHosted(job: { id: string; project: string; operation?: Operation; idempotencyKey?: string }, operation: Operation) {
-    console.error("debug-w-hosted");
     operationSection.current = operation.section ?? null;
     startOperation(operation);
     localStorage.setItem("manga-tts-job", JSON.stringify(job));
@@ -310,7 +309,11 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
               error.status = 401;
               throw error;
             }
-            if (parsed.controls.includes("stream-error")) throw new Error("Operation status stream failed.");
+            if (parsed.controls.includes("stream-error")) {
+              const error = new Error("Operation status stream failed.") as Error & { status: number };
+              error.status = 422;
+              throw error;
+            }
             if (parsed.controls.includes("reconnect")) break;
             for (const state of parsed.events) {
               receivedEvent = true;
@@ -335,7 +338,8 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
               if (state.status === "failed") {
                 localStorage.removeItem("manga-tts-job");
                 if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
-                throw new Error(state.message);
+                failOperation(operation, new Error(state.message));
+                return false;
               }
               await loadProject(job.project);
               localStorage.removeItem("manga-tts-job");
@@ -352,7 +356,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
           delay = 1000;
         } catch (error) {
           const status = (error as Error & { status?: number }).status;
-          if (status === 401 || status === 403) throw error;
+          if (!shouldReconnect(status)) throw error;
           if (!mounted.current || !getFirebaseAuth().currentUser) return false;
           if (!authorization.current.ready) {
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -459,7 +463,6 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     } catch (e) { failOperation(operation, e); setBusy(""); return false; }
   }
   async function upload(form: FormData) {
-    console.error("debug-upload", hosted);
     if (busy) return;
     const action = String(form.get("action") || "");
     const intentWorkId = hosted && action === "create" ? hostedWorkId(window.location.search) : undefined;
@@ -487,7 +490,6 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     catch (e) { failOperation(operation, e); setBusy(""); }
   }
   function createProject() {
-    console.error("debug-create");
     setTab("cast");
     const form = new FormData(); form.set("action", "create"); form.set("mode", mode); form.set("direction", direction);
     files.forEach(f => form.append("images", f)); if (archive && mode !== "images") form.set("chapter", archive); if (castZip && mode !== "restore") form.set("cast", castZip);

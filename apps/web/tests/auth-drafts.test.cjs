@@ -37,7 +37,7 @@ test('hosted job updates use SSE rather than recurring status requests', () => {
   assert.match(hostedWatch, /removePendingOperationKey/);
 });
 
-for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection', 'hosted-stream']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : surface === 'hosted-stream' ? 'hosted create reconnects by SSE without resubmitting or polling' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection', 'hosted-stream']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : surface === 'hosted-stream' ? 'hosted Studio reconnects a saved operation by SSE without polling or resubmitting' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
   const initialWork = 'a'.repeat(32);
   const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${initialWork}&create=1` : ['hosted-selection', 'hosted-stream'].includes(surface) ? `http://localhost/?work=${initialWork}` : 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -59,15 +59,11 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
   const requestedUrls = [];
   globalThis.fetch = async (url, options = {}) => {
     requestedUrls.push(String(url));
+    if (String(url) === '/api/workflow' && options.method === 'POST') enqueuePosts++;
     if (String(url).startsWith('/api/shared/admin?work_id=')) {
       const id = new URL(String(url), 'http://localhost').searchParams.get('work_id');
       if (delayWorkResponse) await new Promise(resolve => setTimeout(resolve, 25));
       return { ok: true, json: async () => ({ work: [{ id, title: id === initialWork ? 'Requested story' : 'Second request', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
-    }
-    if (surface === 'hosted-stream' && String(url).includes('/api/workflow/upload')) return Response.json({ ok: true });
-    if (surface === 'hosted-stream' && String(url) === '/api/workflow' && options.method === 'POST') {
-      enqueuePosts++;
-      return Response.json({ id: 'c'.repeat(32), project: 'd'.repeat(32), status: 'queued', message: 'Waiting' }, { status: 202 });
     }
     if (surface === 'hosted-stream' && String(url).startsWith('/api/workflow/events?job=')) {
       eventStreams++;
@@ -109,6 +105,7 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
     localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'a'.repeat(32), project: 'b'.repeat(32), idempotencyKey: 'retained-intent' }));
     localStorage.setItem('manga-tts-pending-operation', JSON.stringify([{ key: 'retained-intent', fingerprint: 'operation' }]));
   }
+  if (surface === 'hosted-stream') localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'c'.repeat(32), project: 'd'.repeat(32), operation: { pending: 'Working…', success: 'Ready', detail: 'Complete' } }));
   if (surface === 'work-prepare') localStorage.setItem('manga-tts-project', 'unrelated-saved-project');
   await act(async () => emit(user('alice')));
   if (surface === 'hosted-selection') {
@@ -137,22 +134,14 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
     return;
   }
   if (surface === 'hosted-stream') {
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-    const images = document.querySelector('input[aria-label="Upload manga images"]');
     await act(async () => {
-      Object.defineProperty(images, 'files', { configurable: true, value: [new dom.window.File(['page'], 'page.png', { type: 'image/png' })] });
-      images.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    });
-    const create = [...document.querySelectorAll('button')].find(button => button.textContent.includes('Extract & create project'));
-    assert.ok(create && !create.disabled, 'selected approved work enables Create');
-    await act(async () => {
-      create.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       for (let elapsed = 0; elapsed < 3000 && eventStreams < 2; elapsed += 25) await new Promise(resolve => setTimeout(resolve, 25));
     });
-    assert.equal(enqueuePosts, 1);
     assert.equal(eventStreams, 2, 'a disconnected stream reconnects to current operation state');
     assert.equal(requestedUrls.some(url => url.startsWith('/api/workflow?job=')), false);
     assert.equal(localStorage.getItem('manga-tts-job'), null);
+    assert.equal(enqueuePosts, 0, 'reconnecting status must not enqueue another operation');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     return;
   }
   if (surface === 'work-prepare') {

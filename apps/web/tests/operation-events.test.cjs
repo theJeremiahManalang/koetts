@@ -22,3 +22,9 @@ test("operation SSE parser ignores keepalives and unknown event types", () => {
   assert.deepEqual(parsed.controls, ["auth-expired"]);
   assert.equal(parsed.remainder, "");
 });
+
+test("operation stream retries transient HTTP failures but stops on permanent errors", () => {
+  for (const status of [400, 401, 403, 404, 422]) assert.equal(operationEvents.shouldReconnect(status), false);
+  for (const status of [408, 429, 500, 503]) assert.equal(operationEvents.shouldReconnect(status), true);
+  assert.equal(operationEvents.shouldReconnect(), true);
+});
