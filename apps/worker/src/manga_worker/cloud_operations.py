@@ -624,7 +624,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 query = query.where(filter=FieldFilter("stage", "==", stage))
             query = query.order_by("created_at").limit(100)
             rows = list(query.stream(transaction=tx))
-            return [row.id for row in rows if stage is None or row.to_dict().get("stage") == stage], bound
+            return [row.id for row in rows], bound
 
         ids = self._run(candidates)
         for operation_id in ids:

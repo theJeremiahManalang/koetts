@@ -153,6 +153,13 @@ class FirestoreOperationStoreTests(unittest.TestCase):
         self.assertTrue(all(signal.to_dict()["stage"] in {"magi", "pipeline"} for signal in signals))
         self.assertEqual(self.store.claim(blocked_stage.operation_id, now=11).fence, 1)
 
+    def test_claim_next_filters_queued_work_by_stage(self):
+        magi = self.enqueue("queued-magi", project="magi-project")
+        pipeline = self.enqueue("queued-pipeline", project="pipeline-project", stage="pipeline")
+        claim = self.store.claim_next(stage="pipeline")
+        self.assertEqual(claim.operation_id, pipeline.operation_id)
+        self.assertEqual(self.store.get(magi.operation_id).status, "queued")
+
     def test_dispatch_signal_stage_is_validated_and_ttl_bound(self):
         self.enqueue("signal")
         snapshot = next(iter(self.store.root.collection("dispatch_signals").stream()))
