@@ -117,6 +117,14 @@ def _execute(args):
             result = ledger.status()
         elif args.command in {"pause", "resume"}:
             ledger.set_paused(args.actor, args.reason, paused=args.command == "pause", evidence=args.evidence)
+            if args.command == "resume":
+                from .cloud_operations import FirestoreOperationStore
+
+                operations = FirestoreOperationStore(
+                    client, settings.dataset, artifact_store_identity(settings.bucket, settings.namespace),
+                    budget=ledger,
+                )
+                operations.repair_dispatch_signals()
             result = ledger.status()
         elif args.command == "settle":
             from .cloud_jobs import CloudRunJobs

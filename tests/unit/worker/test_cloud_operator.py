@@ -42,6 +42,22 @@ class CloudOperatorTests(unittest.TestCase):
         client.close.assert_called_once_with()
         self.assertEqual(json.loads(output.call_args.args[0])["result"], {"configured": False, "paused": True})
 
+    def test_resume_emits_a_durable_dispatch_wakeup_for_queued_work(self):
+        settings = unittest.mock.Mock(project="demo", dataset="pilot", bucket="bucket", namespace="pilot/artifacts")
+        client = unittest.mock.Mock()
+        ledger = unittest.mock.Mock()
+        operations = unittest.mock.Mock()
+        with patch("manga_worker.cloud_operator.CloudSettings.from_environment", return_value=settings), \
+                patch("manga_worker.cloud_operator._connect", return_value=(client, ledger)), \
+                patch("manga_worker.cloud_operations.FirestoreOperationStore", return_value=operations), \
+                patch("builtins.print") as output:
+            self.assertEqual(main(["resume", "--execute", "--actor", "dev", "--reason", "approved",
+                                  "--evidence", "approval:1"]), 0)
+        ledger.set_paused.assert_called_once_with("dev", "approved", paused=False, evidence="approval:1")
+        operations.repair_dispatch_signals.assert_called_once_with()
+        client.close.assert_called_once_with()
+        self.assertEqual(json.loads(output.call_args.args[0])["mode"], "executed")
+
     def test_settle_execute_validates_then_injects_operation_and_cloud_run_clients(self):
         settings = unittest.mock.Mock(project="demo", dataset="pilot", bucket="bucket",
                                       namespace="pilot/artifacts")

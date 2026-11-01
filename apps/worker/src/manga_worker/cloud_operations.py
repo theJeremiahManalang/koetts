@@ -653,6 +653,10 @@ class FirestoreOperationStore(_FirestoreHostedStore):
     def repair_dispatch_signals(self, now: float | None = None) -> int:
         """Reissue a bounded stage wake-up if queued work has no active stage slot."""
         now = time.time() if now is None else now
+        if self.budget is not None:
+            budget = self.budget.status()
+            if not isinstance(budget, dict) or budget.get("configured") is not True or budget.get("paused") is not False:
+                return 0
         from google.cloud.firestore_v1.base_query import FieldFilter
 
         rows = list(self._operations.where(filter=FieldFilter("status", "==", "queued"))
