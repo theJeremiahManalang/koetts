@@ -29,7 +29,8 @@ flowchart TB
 
         subgraph central["us-central1: new hosted backend"]
             api["Private Cloud Run service: koetts-api<br/>HTTP API and coordinator<br/>1 CPU / 512 MiB; min 0, max 1"]
-            dispatch["Cloud Scheduler: hosted-coordinator<br/>Every minute; initially paused"]
+            dispatch["Cloud Scheduler: hosted-coordinator<br/>Recovery and missed-signal repair; initially paused"]
+            eventarc["Eventarc: Firestore dispatch signals<br/>Authenticated delivery in us-central1"]
             magi["Cloud Run Job: koetts-magi<br/>CPU extraction / OCR<br/>4 CPU / 8 GiB"]
             pipeline["Cloud Run Job: koetts-pipeline<br/>Planning, synthesis and export<br/>2 CPU / 4 GiB"]
             gcSchedule["Cloud Scheduler: hosted-artifact-gc<br/>Daily 03:00 UTC; initially paused"]
@@ -49,6 +50,9 @@ flowchart TB
     api -->|"Revocation and user verification"| auth
     secrets -->|"Signing key: frontend only"| web
     dispatch -->|"OIDC: private coordinator endpoint"| api
+    firestore -->|"Transactional stage wake-up signals"| eventarc
+    eventarc -->|"Authenticated CloudEvent webhook"| api
+    web -->|"Authenticated operation status stream"| api
     api -->|"Dispatch and reconcile"| magi
     api -->|"Dispatch and reconcile"| pipeline
     api -->|"Metadata and transactions"| firestore
@@ -65,7 +69,7 @@ flowchart TB
     classDef existing fill:#e8f0fe,stroke:#3367d6,color:#172b4d;
     classDef planned fill:#e6f4ea,stroke:#188038,color:#173b24;
     class web,auth,firestore existing;
-    class api,dispatch,magi,pipeline,gcSchedule,gc,bucket,secrets planned;
+    class api,dispatch,eventarc,magi,pipeline,gcSchedule,gc,bucket,secrets planned;
 ```
 
 Blue nodes are existing services; green nodes are planned resources. Their arrows
@@ -78,6 +82,12 @@ frontend response to the browser. Every audio and range request checks the sessi
 and publication. There is no public bucket or shareable GCS signed download URL.
 Browser Firestore access is denied; backend SDK access uses IAM. Application
 quotas, ownership and admin checks still apply inside the API.
+
+Hosted operation status uses an API-authenticated SSE stream backed by Firestore
+changes. Eventarc delivers transactional dispatch signals; duplicate or unordered
+delivery wakes the API to inspect durable operation and slot state. The scheduled
+coordinator reconciles crashes and repairs missed signals; it does not dispatch
+the normal queue. Browser Firestore access remains denied.
 
 Each job has one task, parallelism one, zero platform retries and a 30-minute
 attempt timeout. The application allows at most three attempts and one global

@@ -243,10 +243,14 @@ class Store:
         self.candidates = []
         self.timeout_candidates = []
         self.recovered_unsubmitted = 0
+        self.signal_stage = "magi"
 
-    def claim_next(self):
+    def claim_next(self, stage=None):
         self.calls.append("claim")
         return None
+
+    def dispatch_signal_stage(self, _):
+        return self.signal_stage
 
     def begin_dispatch(self, claim):
         self.calls.append("begin")
@@ -328,14 +332,14 @@ class CloudJobDispatcherTests(unittest.TestCase):
         store = Store()
         pending_claims = [OperationClaim("op", 1)]
 
-        def claim_next():
+        def claim_next(stage=None):
             return pending_claims.pop(0) if pending_claims else None
 
         store.claim_next = claim_next
         fake = FakeJobs(start_error=True)
         dispatcher = CloudJobDispatcher(store, fake)
-        dispatcher.tick()
-        dispatcher.tick()
+        dispatcher.dispatch_available("magi")
+        dispatcher.dispatch_available("magi")
         self.assertEqual(fake.starts, 1)
         self.assertEqual(store.calls.count("begin"), 1)
         self.assertIn("uncertain", store.calls)
@@ -346,7 +350,9 @@ class CloudJobDispatcherTests(unittest.TestCase):
         fake = FakeJobs()
         dispatcher = CloudJobDispatcher(store, fake)
         dispatcher.tick()
-        dispatcher.tick()
+        self.assertEqual(fake.starts, 0, "recovery coordinator must not dispatch queued work")
+        store.claim_next = lambda stage=None: OperationClaim("op", 1)
+        dispatcher.dispatch_available("magi")
         self.assertEqual(fake.starts, 1)
         self.assertEqual(store.dispatch_state, "started")
 
@@ -374,7 +380,7 @@ class CloudJobDispatcherTests(unittest.TestCase):
         store = Store()
         pending_claims = [OperationClaim("op", 1)]
 
-        def claim_next():
+        def claim_next(stage=None):
             return pending_claims.pop(0) if pending_claims else None
 
         store.claim_next = claim_next
@@ -384,7 +390,7 @@ class CloudJobDispatcherTests(unittest.TestCase):
                 store.op = replace(store.op, status="complete")
                 raise TimeoutError("late response")
 
-        counts = CloudJobDispatcher(store, CompletedJobs()).tick()
+        counts = CloudJobDispatcher(store, CompletedJobs()).dispatch_available("magi")
         self.assertEqual(counts["uncertain"], 0)
         self.assertEqual(store.op.status, "complete")
         self.assertNotIn("uncertain", store.calls)
@@ -433,6 +439,22 @@ class CloudJobDispatcherTests(unittest.TestCase):
         )
         dispatcher.tick()
         self.assertIn("uncertain", store.calls)
+
+    def test_durable_signal_dispatches_only_its_stage(self):
+        store = Store()
+        pending_claims = [OperationClaim("op", 1)]
+        requested_stages = []
+
+        def claim_next(stage=None):
+            requested_stages.append(stage)
+            return pending_claims.pop() if pending_claims else None
+
+        store.claim_next = claim_next
+        fake = FakeJobs()
+        result = CloudJobDispatcher(store, fake).dispatch_signal("signal")
+        self.assertEqual(result["dispatched"], 1)
+        self.assertEqual(requested_stages, ["magi"])
+        self.assertEqual(fake.starts, 1)
         self.assertNotIn("worker_stopped", store.calls)
 
     def test_reconcile_unknown_execution_marks_uncertain(self):

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
 import tempfile
 from pathlib import Path
 import threading
@@ -191,6 +193,36 @@ def create_app(
 
             coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
         return coordinator_instance.tick()
+
+    @app.post("/internal/operation-events")
+    async def operation_event(request: Request):
+        boundary.authorize(request, "operation-event", user=False)
+        if config.mode != "cloud":
+            raise HTTPException(503, "Hosted event dispatch unavailable")
+        if request.headers.get("ce-type") != "google.cloud.firestore.document.v1.created":
+            raise HTTPException(400, "Unsupported operation event")
+        database = os.environ.get("FIRESTORE_DATABASE_ID", "")
+        expected_source = f"//firestore.googleapis.com/projects/{config.project_id}/databases/{database}"
+        if not database or request.headers.get("ce-source") != expected_source:
+            raise HTTPException(400, "Invalid operation event source")
+        match = re.fullmatch(
+            r"documents/hosted_workflow_v1/[A-Za-z0-9_-]{1,100}/dispatch_signals/([a-f0-9]{32})",
+            request.headers.get("ce-subject", ""),
+        )
+        if not match:
+            raise HTTPException(400, "Invalid dispatch signal reference")
+        await _body_bytes(request, limit=64 * 1024)
+        nonlocal coordinator_instance
+        if coordinator_instance is None:
+            from .cloud_coordinator import coordinator_from_environment
+
+            coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
+        try:
+            return coordinator_instance.dispatch_signal(match.group(1))
+        except CloudBudgetExceeded:
+            return {"dispatched": 0, "deferred": 1, "uncertain": 0}
+        except FileNotFoundError:
+            return {"dispatched": 0, "deferred": 0, "uncertain": 0}
 
     @app.get("/production/status")
     def production_status(request: Request):

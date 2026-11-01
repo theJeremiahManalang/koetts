@@ -1,6 +1,7 @@
 """Firestore operation coordination tests; emulator only, never a live project."""
 
 import os
+import time
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -147,7 +148,27 @@ class FirestoreOperationStoreTests(unittest.TestCase):
             self.store.heartbeat(type(claim)(claim.operation_id, claim.fence + 1))
         self.assertEqual(caught.exception.code, "stale_fence")
         self.store.complete(claim, {"ok": True})
+        signals = list(self.store.root.collection("dispatch_signals").stream())
+        self.assertEqual(len(signals), 4, "enqueue and capacity release each commit a wake-up signal")
+        self.assertTrue(all(signal.to_dict()["stage"] in {"magi", "pipeline"} for signal in signals))
         self.assertEqual(self.store.claim(blocked_stage.operation_id, now=11).fence, 1)
+
+    def test_dispatch_signal_stage_is_validated_and_ttl_bound(self):
+        self.enqueue("signal")
+        snapshot = next(iter(self.store.root.collection("dispatch_signals").stream()))
+        signal = snapshot.to_dict()
+        self.assertEqual(signal["stage"], "magi")
+        self.assertAlmostEqual(signal["expire_at"].timestamp() - signal["created_at"], 7 * 86400, delta=1)
+        self.assertEqual(self.store.dispatch_signal_stage(snapshot.id), "magi")
+        self.assertIsNone(self.store.dispatch_signal_stage("f" * 32))
+
+    def test_recovery_repairs_missing_signals_only_for_free_stages_and_is_rate_limited(self):
+        self.enqueue("repair-signal")
+        now = time.time()
+        self.assertEqual(self.store.repair_dispatch_signals(now), 1)
+        self.assertEqual(self.store.repair_dispatch_signals(now + 30), 0)
+        self.store._slot_ref("magi", 1).set({"operation_id": "active"})
+        self.assertEqual(self.store.repair_dispatch_signals(now + 61), 0)
 
     def test_dispatch_attempt_and_duplicate_execution_delivery(self):
         operation = self.enqueue("dispatch")

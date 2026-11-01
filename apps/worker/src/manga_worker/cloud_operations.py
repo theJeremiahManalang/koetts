@@ -9,6 +9,7 @@ import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import replace
+from datetime import UTC, datetime
 
 from manga_tts.operations import (
     Operation,
@@ -75,6 +76,21 @@ class FirestoreOperationStore(_FirestoreHostedStore):
     @property
     def _projects(self):
         return self.root.collection("operation_project_slots")
+
+    @property
+    def _dispatch_signals(self):
+        return self.root.collection("dispatch_signals")
+
+    def _signal_dispatch(self, tx, stage: str, reason: str, now: float) -> None:
+        if stage not in self.policy.stage_capacities or reason not in {"queued", "capacity_released"}:
+            raise ValueError("Invalid dispatch signal")
+        ref = self._dispatch_signals.document(uuid.uuid4().hex)
+        tx.create(ref, {
+            "stage": stage,
+            "reason": reason,
+            "created_at": now,
+            "expire_at": datetime.fromtimestamp(now + 7 * 24 * 60 * 60, tz=UTC),
+        })
 
     def _operation_ref(self, operation_id):
         return self._operations.document(_document_id(operation_id, "operation ID"))
@@ -396,6 +412,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 budget_writer()
             tx.create(ref, doc)
             tx.create(key_ref, {"operation_id": operation_id, "idempotency_key": idempotency_key})
+            self._signal_dispatch(tx, stage, "queued", now)
             return Operation(
                 **{k: v for k, v in doc.items() if k != "schema_version"}, worker_pid=None, worker_created_at=None
             ), bound
@@ -592,8 +609,10 @@ class FirestoreOperationStore(_FirestoreHostedStore):
 
         return self._run(operation, bind_if_missing=True)
 
-    def claim_next(self, now: float | None = None) -> OperationClaim | None:
+    def claim_next(self, now: float | None = None, stage: str | None = None) -> OperationClaim | None:
         now = time.time() if now is None else now
+        if stage is not None and stage not in self.policy.stage_capacities:
+            raise ValueError("Unsupported operation stage")
 
         # A bounded candidate page prevents unbounded transaction reads.
         def candidates(tx):
@@ -601,9 +620,11 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             from google.cloud.firestore_v1.base_query import FieldFilter
 
             query = self._operations.where(filter=FieldFilter("status", "==", "queued"))
+            if stage is not None:
+                query = query.where(filter=FieldFilter("stage", "==", stage))
             query = query.order_by("created_at").limit(100)
             rows = list(query.stream(transaction=tx))
-            return [row.id for row in rows], bound
+            return [row.id for row in rows if stage is None or row.to_dict().get("stage") == stage], bound
 
         ids = self._run(candidates)
         for operation_id in ids:
@@ -611,6 +632,51 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             if claim is not None:
                 return claim
         return None
+
+    def dispatch_signal_stage(self, signal_id: str) -> str | None:
+        if not isinstance(signal_id, str) or len(signal_id) != 32 or any(c not in "0123456789abcdef" for c in signal_id):
+            raise ValueError("Invalid dispatch signal identifier")
+        def operation(tx):
+            bound = self._binding(tx)
+            return self._dispatch_signals.document(signal_id).get(transaction=tx), bound
+
+        snapshot = self._run(operation)
+        if not snapshot.exists:
+            return None
+        signal = snapshot.to_dict()
+        stage = signal.get("stage") if isinstance(signal, dict) else None
+        expiry = signal.get("expire_at") if isinstance(signal, dict) else None
+        if stage not in self.policy.stage_capacities or not isinstance(expiry, datetime):
+            raise ValueError("Invalid dispatch signal record")
+        return stage if expiry.timestamp() > time.time() else None
+
+    def repair_dispatch_signals(self, now: float | None = None) -> int:
+        """Reissue a bounded stage wake-up if queued work has no active stage slot."""
+        now = time.time() if now is None else now
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        rows = list(self._operations.where(filter=FieldFilter("status", "==", "queued"))
+                    .order_by("created_at").limit(100).stream())
+        stages = {row.to_dict().get("stage") for row in rows}
+        emitted = 0
+        for stage in stages & self.policy.stage_capacities.keys():
+            if any(self._slot_ref(stage, number).get().exists
+                   for number in range(1, self.policy.stage_capacities[stage] + 1)):
+                continue
+            marker = self.root.collection("dispatch_recovery").document(stage)
+
+            def repair(tx):
+                current = marker.get(transaction=tx)
+                last = current.to_dict().get("signaled_at", 0) if current.exists else 0
+                if not _valid_time(last) or now - last < 60:
+                    return False
+                self._signal_dispatch(tx, stage, "queued", now)
+                tx.set(marker, {"signaled_at": now})
+                return True
+
+            if self._run(repair, bind_if_missing=True):
+                emitted += 1
+        return emitted
 
     def attempt(self, claim: OperationClaim) -> dict:
         def operation(tx):
@@ -843,6 +909,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             if release:
                 tx.delete(slot_ref)
                 tx.delete(project_ref)
+                self._signal_dispatch(tx, op.stage, "capacity_released", now)
             updated = replace(
                 op,
                 status=final,
@@ -962,6 +1029,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 tx.update(attempt_ref, {"state": "operator_retry", "ended_at": now})
             tx.delete(slot_ref)
             tx.delete(project_ref)
+            self._signal_dispatch(tx, op.stage, "capacity_released", now)
             return updated, bound
 
         return self._run(operation, bind_if_missing=True)
@@ -1103,6 +1171,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 tx.update(attempt_ref, {"state": "worker_stopped", "ended_at": now, "message": message})
                 tx.delete(slot_ref)
                 tx.delete(project_ref)
+                self._signal_dispatch(tx, op.stage, "capacity_released", now)
                 updated = replace(
                     op,
                     status=status,
@@ -1196,6 +1265,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             project_ref = self._project_ref(op.project_id)
             tx.delete(slot_ref)
             tx.delete(project_ref)
+            self._signal_dispatch(tx, op.stage, "capacity_released", now)
             return updated, bound
 
         return self._run(operation, bind_if_missing=True)

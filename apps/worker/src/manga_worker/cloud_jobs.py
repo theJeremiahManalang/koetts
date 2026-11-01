@@ -261,16 +261,42 @@ class CloudJobDispatcher:
         self.jobs = jobs
         self.recover_project = recover_project
 
-    def tick(self) -> dict[str, int]:
-        counts = {"dispatched": 0, "reconciled": 0, "uncertain": 0}
-        claim = self.store.claim_next()
-        if claim is not None:
+    def dispatch_available(self, stage: str, *, max_dispatches: int = 1) -> dict[str, int]:
+        if stage not in {"magi", "pipeline"} or max_dispatches < 1:
+            raise ValueError("A supported stage and positive dispatch bound are required")
+        counts = {"dispatched": 0, "deferred": 0, "uncertain": 0}
+        for _ in range(max_dispatches):
+            try:
+                claim = self.store.claim_next(stage=stage)
+            except Exception as exc:
+                from .cloud_budget import CloudBudgetExceeded
+
+                if isinstance(exc, CloudBudgetExceeded):
+                    counts["deferred"] += 1
+                    break
+                raise
+            if claim is None:
+                break
             try:
                 self._dispatch(claim)
                 counts["dispatched"] += 1
             except Exception as exc:
                 if self._uncertain(claim, f"Cloud Run dispatch outcome needs reconciliation: {type(exc).__name__}."):
                     counts["uncertain"] += 1
+                break
+        return counts
+
+    def dispatch_signal(self, signal_id: str) -> dict[str, int]:
+        stage = self.store.dispatch_signal_stage(signal_id)
+        if stage is None:
+            return {"dispatched": 0, "deferred": 0, "uncertain": 0}
+        return self.dispatch_available(stage)
+
+    def tick(self) -> dict[str, int]:
+        counts = {"dispatched": 0, "reconciled": 0, "uncertain": 0, "signals_repaired": 0}
+        repair_signals = getattr(self.store, "repair_dispatch_signals", None)
+        if callable(repair_signals):
+            counts["signals_repaired"] = repair_signals()
         timed_out_operations = self.store.timed_out()
         timed_out = {op.operation_id for op in timed_out_operations}
         uncertain = getattr(self.store, "reconciliation_required", lambda: [])()
@@ -320,9 +346,9 @@ class CloudJobDispatcher:
                     self._uncertain(claim, "Expired unsubmitted Cloud Run intent cannot be safely recovered.")
                 return True
             if not timed_out and operation.status == "running" and unsubmitted:
-                # The durable CAS has not begun, so jobs.run is proven not to have
-                # been invoked. Claim submitting before making the one safe call.
-                self._dispatch(claim)
+                # Prove no start was submitted, requeue transactionally, then let
+                # the durable dispatch signal wake the event-driven dispatcher.
+                self.store.recover_unsubmitted(claim)
                 return True
             names = self.jobs.find_executions(claim, operation.stage)
             if len(names) != 1:

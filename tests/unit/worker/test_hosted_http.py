@@ -2,7 +2,7 @@
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import httpx
 
@@ -26,14 +26,15 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.backend.operation_by_key.return_value = {"id": "original-operation"}
         self.config = BoundaryConfig("demo-hosted", "https://private.example", {
             "web": frozenset({"snapshot", "asset", "enqueue", "poll", "shared", "upload"}),
+            "events": frozenset({"operation-event"}),
         }, "cloud")
 
     def app(self, mode="cloud"):
         config = BoundaryConfig(self.config.project_id, self.config.audience, self.config.permissions, mode)
         def service(token):
-            if token != "service":
+            if token not in {"service", "event-service"}:
                 raise ValueError("forged service")
-            return {"sub": "web", "iss": "https://accounts.google.com", "aud": config.audience}
+            return {"sub": "events" if token == "event-service" else "web", "iss": "https://accounts.google.com", "aud": config.audience}
         def user(token, session):
             if token == "revoked":
                 raise ValueError("revoked")
@@ -59,6 +60,36 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
             self.backend.shared.assert_not_called()
             admin = await client.post("/shared", headers=self.headers("admin"), json={"action": "work"})
             self.assertEqual(admin.status_code, 200)
+
+    async def test_operation_event_requires_eventarc_identity_and_exact_firestore_signal(self):
+        headers = {
+            "Authorization": "Bearer event-service",
+            "ce-type": "google.cloud.firestore.document.v1.created",
+            "ce-source": "//firestore.googleapis.com/projects/demo-hosted/databases/koetts-default",
+            "ce-subject": "documents/hosted_workflow_v1/dataset/dispatch_signals/" + "a" * 32,
+        }
+        coordinator = Mock()
+        coordinator.dispatch_signal.return_value = {"dispatched": 1, "deferred": 0, "uncertain": 0}
+        config = BoundaryConfig(self.config.project_id, self.config.audience, self.config.permissions, "cloud")
+        def service(token):
+            subject = "events" if token == "event-service" else "web"
+            return {"sub": subject, "iss": "https://accounts.google.com", "aud": config.audience}
+        with patch.dict("os.environ", {"FIRESTORE_DATABASE_ID": "koetts-default"}):
+            app = create_app(config, service_verifier=service, user_verifier=lambda *_: {}, coordinator=coordinator)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="https://private.example") as client:
+                accepted = await client.post("/internal/operation-events", headers=headers, json={"ignored": True})
+                self.assertEqual(accepted.status_code, 200)
+                self.assertEqual(accepted.json()["dispatched"], 1)
+                self.assertEqual(coordinator.dispatch_signal.call_args.args[0], "a" * 32)
+                for mutation in (
+                    {"ce-source": "//firestore.googleapis.com/projects/other/databases/koetts-default"},
+                    {"ce-subject": "documents/hosted_workflow_v1/other/operations/" + "a" * 32},
+                    {"ce-type": "google.cloud.firestore.document.v1.updated"},
+                ):
+                    rejected = await client.post("/internal/operation-events", headers={**headers, **mutation}, json={})
+                    self.assertEqual(rejected.status_code, 400)
+                denied = await client.post("/internal/operation-events", headers={**headers, "Authorization": "Bearer service"}, json={})
+                self.assertEqual(denied.status_code, 403)
 
     async def test_published_ranges_require_fresh_valid_reader_credentials(self):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(self.app()), base_url="https://private.example") as client:

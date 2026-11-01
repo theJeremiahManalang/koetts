@@ -6,6 +6,7 @@ locals {
     "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "eventarc.googleapis.com",
     "firestore.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
@@ -17,10 +18,11 @@ locals {
   ])
 
   service_permissions = {
-    (data.google_service_account.frontend.unique_id) = ["identity", "readiness", "snapshot", "asset", "upload", "shared", "enqueue", "poll", "production-status", "production-control"]
-    (google_service_account.scheduler.unique_id)     = ["coordinate"]
-    (google_service_account.pubsub_push.unique_id)   = ["budget-report"]
-    (google_service_account.operator.unique_id)      = ["identity", "readiness", "production-status", "production-control"]
+    (data.google_service_account.frontend.unique_id)    = ["identity", "readiness", "snapshot", "asset", "upload", "shared", "enqueue", "poll", "production-status", "production-control"]
+    (google_service_account.scheduler.unique_id)        = ["coordinate"]
+    (google_service_account.pubsub_push.unique_id)      = ["budget-report"]
+    (google_service_account.operation_events.unique_id) = ["operation-event"]
+    (google_service_account.operator.unique_id)         = ["identity", "readiness", "production-status", "production-control"]
   }
 
   common_cloud_env = {
@@ -85,6 +87,12 @@ resource "google_service_account" "pubsub_push" {
   project      = var.project_id
   account_id   = "hosted-billing-push"
   display_name = "Hosted billing notification push caller"
+}
+
+resource "google_service_account" "operation_events" {
+  project      = var.project_id
+  account_id   = "hosted-operation-events"
+  display_name = "Hosted operation Eventarc callback"
 }
 
 resource "google_service_account" "operator" {
@@ -448,6 +456,20 @@ resource "google_cloud_run_v2_service_iam_member" "billing_push_invoker" {
   member   = "serviceAccount:${google_service_account.pubsub_push.email}"
 }
 
+resource "google_cloud_run_v2_service_iam_member" "operation_events_invoker" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.api.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.operation_events.email}"
+}
+
+resource "google_project_iam_member" "operation_events_receiver" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.operation_events.email}"
+}
+
 resource "google_cloud_run_v2_service_iam_member" "operator_invoker" {
   project  = var.project_id
   location = var.region
@@ -676,6 +698,51 @@ resource "google_cloud_scheduler_job" "coordinator" {
   depends_on = [google_cloud_run_v2_service_iam_member.scheduler_invoker]
 }
 
+resource "google_eventarc_trigger" "operation_dispatch" {
+  project                 = var.project_id
+  name                    = "hosted-operation-dispatch"
+  location                = var.region
+  service_account         = google_service_account.operation_events.email
+  event_data_content_type = "application/json"
+
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.firestore.document.v1.created"
+  }
+  matching_criteria {
+    attribute = "database"
+    value     = var.firestore_database_id
+  }
+  matching_criteria {
+    attribute = "document"
+    value     = "hosted_workflow_v1/${var.cloud_dataset}/dispatch_signals/{signal_id}"
+    operator  = "match-path-pattern"
+  }
+
+  destination {
+    cloud_run_service {
+      service = google_cloud_run_v2_service.api.name
+      region  = var.region
+      path    = "/internal/operation-events"
+    }
+  }
+
+  depends_on = [
+    google_project_service.enabled,
+    google_project_iam_member.operation_events_receiver,
+    google_cloud_run_v2_service_iam_member.operation_events_invoker,
+    google_service_account_iam_member.eventarc_token_creator,
+  ]
+}
+
+resource "google_firestore_field" "dispatch_signal_ttl" {
+  project    = var.project_id
+  database   = var.firestore_database_id
+  collection = "dispatch_signals"
+  field      = "expire_at"
+  ttl_config {}
+}
+
 resource "google_project_service_identity" "pubsub" {
   provider   = google-beta
   project    = var.project_id
@@ -683,10 +750,23 @@ resource "google_project_service_identity" "pubsub" {
   depends_on = [google_project_service.enabled]
 }
 
+resource "google_project_service_identity" "eventarc" {
+  provider   = google-beta
+  project    = var.project_id
+  service    = "eventarc.googleapis.com"
+  depends_on = [google_project_service.enabled]
+}
+
 resource "google_service_account_iam_member" "pubsub_token_creator" {
   service_account_id = google_service_account.pubsub_push.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = google_project_service_identity.pubsub.member
+}
+
+resource "google_service_account_iam_member" "eventarc_token_creator" {
+  service_account_id = google_service_account.operation_events.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = google_project_service_identity.eventarc.member
 }
 
 resource "google_pubsub_topic" "billing" {

@@ -108,7 +108,8 @@ class _FirestoreHostedStore:
 
     def _has_orphan_records(self) -> bool:
         for collection in ("projects", "artifact_references", "operations", "operation_idempotency_keys",
-                           "operation_stage_slots", "operation_project_slots", "uploads",
+                           "operation_stage_slots", "operation_project_slots", "dispatch_signals",
+                           "dispatch_recovery", "uploads",
                            "production_months", "production_admissions", "cloud_budget_v1", "maintenance", "gc_runs"):
             if list(self.root.collection(collection).limit(1).stream()):
                 return True
