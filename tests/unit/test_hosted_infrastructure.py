@@ -116,7 +116,7 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertNotIn('run.jobs.runWithOverrides', reader_role)
 
     def test_frontend_admin_permissions_and_operator_cli_iam_are_present(self):
-        frontend = MAIN.split('data.google_service_account.frontend.unique_id) = [', 1)[1].split(']', 1)[0]
+        frontend = re.search(r'data\.google_service_account\.frontend\.unique_id\)\s*=\s*\[([^]]+)\]', MAIN).group(1)
         self.assertIn('"production-status"', frontend)
         self.assertIn('"production-control"', frontend)
         self.assertIn('resource "google_project_iam_member" "operator_firestore"', MAIN)
@@ -133,7 +133,7 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertIn('resource "google_cloud_run_v2_job_iam_member" "coordinator_pipeline"', MAIN)
 
     def test_identities_invocation_and_scheduler_start_closed(self):
-        for account in ("api", "magi", "pipeline", "scheduler", "gc_scheduler", "pubsub_push", "gc", "operator"):
+        for account in ("api", "magi", "pipeline", "scheduler", "gc_scheduler", "pubsub_push", "operation_events", "gc", "operator"):
             self.assertIn(f'resource "google_service_account" "{account}"', MAIN)
         self.assertNotIn('member = "allUsers"', MAIN)
         self.assertIn('schedule    = "* * * * *"', MAIN)
@@ -142,6 +142,24 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertIn('"coordinate"', MAIN)
         self.assertIn('"budget-report"', MAIN)
         self.assertIn("data.google_service_account.frontend.unique_id", MAIN)
+
+    def test_eventarc_dispatch_uses_named_firestore_database_and_narrow_private_identity(self):
+        self.assertIn('"eventarc.googleapis.com"', MAIN)
+        self.assertIn('resource "google_eventarc_trigger" "operation_dispatch"', MAIN)
+        trigger = MAIN.split('resource "google_eventarc_trigger" "operation_dispatch"', 1)[1]
+        trigger = trigger.split('\nresource ', 1)[0]
+        self.assertIn('location                = var.region', trigger)
+        self.assertIn('database', trigger)
+        self.assertIn('hosted_workflow_v1/${var.cloud_dataset}/dispatch_signals/{signal_id}', trigger)
+        self.assertIn('/internal/operation-events', trigger)
+        self.assertRegex(trigger, r'service_account\s*=\s*google_service_account\.operation_events\.email')
+        self.assertIn('google_cloud_run_v2_service_iam_member.operation_events_invoker', trigger)
+        self.assertIn('resource "google_firestore_field" "dispatch_signal_ttl"', MAIN)
+        self.assertRegex(MAIN, r'collection\s*=\s*"dispatch_signals"')
+        self.assertRegex(MAIN, r'field\s*=\s*"expire_at"')
+        scheduler = MAIN.split('resource "google_cloud_scheduler_job" "coordinator"', 1)[1]
+        scheduler = scheduler.split('\nresource ', 1)[0]
+        self.assertIn('paused      = true', scheduler)
 
     def test_budget_is_project_filtered_and_alerts_at_target_thresholds(self):
         self.assertIn('units         = "20"', MAIN)
