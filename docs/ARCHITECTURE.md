@@ -18,8 +18,11 @@ contracts are in `apps/web/features/studio/types.ts`; Python commands are in `pa
 
 `apps/web/app/api/workflow/route.ts` persists each request with an idempotency key before
 returning an operation ID. `apps/web/lib/workflow.ts` claims queued work and starts finite
-local Python subprocesses. The browser polls operations and can recover a lost enqueue
-response by key. Python workers resolve pinned parameters from the operation store,
+local Python subprocesses. The local browser polls operations and can recover a lost
+enqueue response by key. Hosted dispatch uses Firestore transaction signals delivered by
+Eventarc to the private API; authenticated Studio status uses SSE. The scheduled
+coordinator reconciles uncertain or stopped workers and repairs missed dispatch signals.
+Python workers resolve pinned parameters from the operation store,
 then route production work through `PipelineRouter` in `packages/engine/src/manga_tts/router.py`; the CLI
 uses the same engine.
 The engine owns validated applied state, approval validity, takes, and export.

@@ -683,7 +683,7 @@ resource "google_cloud_scheduler_job" "coordinator" {
   project     = var.project_id
   name        = "hosted-coordinator"
   region      = var.region
-  description = "One-minute hosted operation dispatch and reconciliation."
+  description = "One-minute hosted operation reconciliation and missed-signal repair."
   schedule    = "* * * * *"
   time_zone   = "Etc/UTC"
   paused      = true

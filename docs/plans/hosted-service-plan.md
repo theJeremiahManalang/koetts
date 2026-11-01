@@ -41,11 +41,14 @@ findings, and record checks/findings in `CONTEXT.md` before beginning the next p
   representative CPU benchmark before enabling hosted extraction. If it misses
   quality, time, memory, or budget limits, block full hosted launch and revisit
   compute and budget explicitly; do not silently switch to GPU.
-- Use one-minute Cloud Scheduler dispatch and reconciliation. Set Cloud Run Job
-  task retries to zero; the durable operation service owns at most three total
-  attempts, with 30-minute attempt timeout, 15-second heartbeat, and 60-second
-  lease. Reconcile execution identity and checkpoints before releasing a lease.
-  An uncertain external outcome retains its slot until an explicit admin decision.
+- Use transactional Firestore dispatch signals and an authenticated Eventarc push
+  webhook for normal hosted queue dispatch. Use authenticated API SSE for hosted
+  operation status. Retain a one-minute Cloud Scheduler sweep only for missed-signal
+  repair and execution reconciliation. Set Cloud Run Job task retries to zero; the
+  durable operation service owns at most three total attempts, with 30-minute attempt
+  timeout, 15-second heartbeat, and 60-second lease. Reconcile execution identity and
+  checkpoints before releasing a lease. An uncertain external outcome retains its
+  slot until an explicit admin decision.
 - Keep the existing Firebase project and `koetts-default` Firestore database.
   Put new regional compute and artifact storage in `us-central1`. Keep the
   existing App Hosting frontend in `us-east4` initially, then migrate it to
@@ -102,10 +105,14 @@ materialization. Existing local persistence and publication tests still pass.
 
 Abstract the local SQLite operation contract and add a transactional Firestore
 implementation for idempotency, stage slots, fencing, attempt records, and dispatch
-intent. Add finite Cloud Run CPU jobs and a private, one-minute coordinator for
-dispatch and reconciliation. Keep one authoritative application retry ceiling and
-zero platform retries. Resume only from durable accepted checkpoints; reconcile
-uncertain provider outcomes before any retry.
+intent. Commit stage wake-up signals atomically with enqueue and capacity release,
+deliver them through an authenticated Eventarc webhook, and route them to bounded
+stage-specific claims. Add finite Cloud Run CPU jobs and a private coordinator; its
+one-minute schedule repairs missed signals and reconciles expired, timed-out, or
+uncertain attempts but does not dispatch normal queued work. Use API-authenticated
+SSE backed by Firestore operation changes for hosted Studio status. Keep one
+authoritative application retry ceiling and zero platform retries. Resume only from
+durable accepted checkpoints; reconcile uncertain provider outcomes before retry.
 
 Acceptance: emulator and fault-injection tests cover concurrent claims, duplicate
 delivery, quota reservations, stale workers, crashes around dispatch, job termination

@@ -254,7 +254,7 @@ class CloudRunJobs:
 
 
 class CloudJobDispatcher:
-    """Dispatch queued claims once and reconcile only from durable store intent."""
+    """Dispatch event-signaled claims and reconcile from durable store intent."""
 
     def __init__(self, store, jobs: CloudRunJobs, *, recover_project=None):
         self.store = store

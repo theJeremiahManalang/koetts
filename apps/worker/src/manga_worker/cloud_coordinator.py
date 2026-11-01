@@ -1,4 +1,4 @@
-"""Private scheduled dispatch and confirmed-stop project recovery."""
+"""Private scheduled reconciliation and missed-dispatch signal repair."""
 from __future__ import annotations
 
 import os
