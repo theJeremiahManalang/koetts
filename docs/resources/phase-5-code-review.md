@@ -80,7 +80,7 @@ build, Ruff, repository checks, and Terraform formatting. The full web suite pas
 99/100 on unsupported Node 24; the pre-existing multipart stream test fails with
 `ReadableStream is already closed`. HTTP acceptance setup could not download
 `google-cloud-core` because DNS was unavailable. Firestore integration tests are
-skipped without an emulator. Terraform schema validation is blocked because cached
-Google providers fail to start. No Terraform apply or live stream test was run;
+skipped without an emulator. Offline `terraform validate` passed. A remote Terraform plan, apply and live stream
+test were not run because managed-cloud status and network-policy readiness were unavailable;
 production and both schedulers remain paused. Apply requires a reviewed concrete
 plan and the user's authorization for the new Eventarc resources.
