@@ -1,5 +1,10 @@
 # Hosted manual validation evidence
 
+Use the [admin processing acceptance checklist](admin-processing-acceptance-checklist.md)
+to record expected and actual behavior separately for local and hosted passes.
+The prior manual pass and source-level findings are recorded in the
+[phase 5 manual acceptance review](phase-5-manual-acceptance-review.md).
+
 This guide records a human-run validation pass after an authorized deployment.
 The log collector is read-only: it runs `gcloud logging read` for one explicit
 UTC window and the `koetts-api`, `koetts-magi`, `koetts-pipeline`, and

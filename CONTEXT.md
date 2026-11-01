@@ -192,6 +192,21 @@ API-only update. Keep production/schedules/providercalls disabled.
 
 ## Goal continuation outcome
 
+Manual acceptance follow-up: user completed the checklist on revision
+`b411be03a2cd2842f3e597d25008df6aaed422eb` with Opera GX. Local Google sign-in is
+resolved; local upload/admin/request/approval pass. Standalone local creation is
+intended, but the UI lacked a mode label. Hosted login, dashboard, API diagnostic,
+upload and paused-denial pass; direct Studio after upload reported Create enabled.
+Source trace found stale selected-work eligibility across URL navigation; hosted
+server admission and production pause remain authoritative. Implemented URL-reactive
+selection, matching-ID gating, and explicit context labels. RCA:
+`docs/resources/phase-5-manual-acceptance-review.md`; updated checklist and docs
+pointers. Focused context/draft tests 10 pass; typecheck and build pass. Full web
+suite 89/90 under unsupported Node 24/npm 11; multipart stream test fails with a
+closed ReadableStream. Node 22.22.3 unavailable. No browser package; manual live
+retest pending. Production/schedulers remain paused; no paid calls. Review delta
+against `b411be0` next, then deploy only after review and request user manual retest.
+
 Commits109c539 deployment, cb970be Standards/fresh-checkout fixes,4b3b7a7 HTTP
 paused-error regression. Independent Standards and Spec follow-up reviews of
 109c539...4b3b7a7 both clear; original Standards smell resolved. Review record:

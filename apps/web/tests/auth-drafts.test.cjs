@@ -63,7 +63,7 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
     './script-workspace': { ScriptWorkspace: () => null },
     './loading-state': { LoadingState: () => null },
     'next/link': props => React.createElement('a', props),
-    'next/navigation': { useRouter: () => ({ replace() {} }), useSearchParams: () => new URLSearchParams() },
+    'next/navigation': { useRouter: () => ({ replace() {} }), useSearchParams: () => new URLSearchParams(window.location.search) },
   };
   const cache = new Map();
   const { AuthProvider } = load('../features/identity/auth-provider.tsx', mocks, cache);
