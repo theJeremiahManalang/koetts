@@ -743,6 +743,26 @@ resource "google_firestore_field" "dispatch_signal_ttl" {
   ttl_config {}
 }
 
+resource "google_firestore_index" "queued_operation_stage" {
+  project     = var.project_id
+  database    = var.firestore_database_id
+  collection  = "operations"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "status"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "stage"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "created_at"
+    order      = "ASCENDING"
+  }
+}
+
 resource "google_project_service_identity" "pubsub" {
   provider   = google-beta
   project    = var.project_id

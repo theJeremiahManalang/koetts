@@ -157,6 +157,8 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertIn('resource "google_firestore_field" "dispatch_signal_ttl"', MAIN)
         self.assertRegex(MAIN, r'collection\s*=\s*"dispatch_signals"')
         self.assertRegex(MAIN, r'field\s*=\s*"expire_at"')
+        self.assertIn('resource "google_firestore_index" "queued_operation_stage"', MAIN)
+        self.assertIn('field_path = "created_at"', MAIN)
         scheduler = MAIN.split('resource "google_cloud_scheduler_job" "coordinator"', 1)[1]
         scheduler = scheduler.split('\nresource ', 1)[0]
         self.assertIn('paused      = true', scheduler)

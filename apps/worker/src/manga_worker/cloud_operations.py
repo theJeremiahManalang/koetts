@@ -620,6 +620,8 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             from google.cloud.firestore_v1.base_query import FieldFilter
 
             query = self._operations.where(filter=FieldFilter("status", "==", "queued"))
+            if stage is not None:
+                query = query.where(filter=FieldFilter("stage", "==", stage))
             query = query.order_by("created_at").limit(100)
             rows = list(query.stream(transaction=tx))
             return [row.id for row in rows if stage is None or row.to_dict().get("stage") == stage], bound
