@@ -11,6 +11,10 @@ export function hostedIntentFingerprint(formFingerprint: string, action: string,
   return action === "create" ? JSON.stringify({ form: formFingerprint, work_id: workId }) : formFingerprint;
 }
 
+export function currentHostedWork<T extends { id: string }>(work: T | null, selectedWorkId?: string): T | null {
+  return work?.id === selectedWorkId ? work : null;
+}
+
 type SendFile = (name: string, file: File, uploadToken: string) => Promise<unknown>;
 
 function fileFrom(form: FormData, name: string): File | null {

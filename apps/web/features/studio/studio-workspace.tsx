@@ -21,7 +21,7 @@ import { RequireSignIn } from "../identity/require-sign-in";
 
 import { AdminNav } from "../identity/admin-nav";
 import { StudioRequestContext, type HostedWorkState } from "./studio-request-context";
-import { hostedIntentFingerprint, hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
+import { currentHostedWork, hostedIntentFingerprint, hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -143,7 +143,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
   const [bundleReady, setBundleReady] = useState(false);
   const [providerConfigured, setProviderConfigured] = useState(false);
   const [hostedWorkState, setHostedWorkState] = useState<HostedWorkState>(null);
-  const selectedHostedWork = hostedWorkState?.id === selectedWorkId ? hostedWorkState : null;
+  const selectedHostedWork = currentHostedWork(hostedWorkState, selectedWorkId);
   const [focusSource, setFocusSource] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);

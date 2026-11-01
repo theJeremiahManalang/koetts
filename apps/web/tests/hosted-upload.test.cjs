@@ -88,6 +88,13 @@ test("invalid work query values are ignored", () => {
   assert.equal(hostedUpload.hostedWorkId("?work=not-an-id"), undefined);
 });
 
+test("hosted create eligibility follows the current work selection", () => {
+  const approvedA = { id: "a".repeat(32), status: "approved" };
+  assert.equal(hostedUpload.currentHostedWork(approvedA, approvedA.id), approvedA);
+  assert.equal(hostedUpload.currentHostedWork(approvedA, "b".repeat(32)), null);
+  assert.equal(hostedUpload.currentHostedWork(approvedA, undefined), null);
+});
+
 test("the same idempotency intent maps to the same UUID32 upload token", () => {
   const key = "12345678-1234-4234-9234-123456789abc";
   assert.equal(hostedUpload.uploadTokenForIntent(key), "12345678123442349234123456789abc");

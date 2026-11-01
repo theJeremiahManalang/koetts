@@ -41,12 +41,13 @@ Opera GX, and local URL `127.0.0.0:3000`. Its date `01-02-2026` and timezone are
 ambiguous and were left as supplied. The checklist contains no hosted frontend
 revision or exact UTC test window, so no matching log capture is claimed here.
 
-Focused context/draft tests passed (10); TypeScript typecheck and production build
-passed. The full web suite passed 89 of 90 tests under Node `v24.18.0`/npm `11.16.0`;
+Focused upload/context/draft tests passed (18); TypeScript typecheck and production
+build passed. The full web suite passed 89 of 90 tests under Node `v24.18.0`/npm `11.16.0`;
 the remaining multipart stream test failed with `ReadableStream is already closed`.
 This checkout requires Node `22.22.3` and npm `10.x`; that runtime is unavailable
 in this shell. The failure is outside the changed files and needs rerun with the
-pinned runtime.
+pinned runtime. The HTTP acceptance setup also stopped before execution because DNS
+could not resolve the Python package host while downloading `h11`.
 
 The hosted page was not interactively retested after this change because no Browser
 plugin or Playwright package is available in this environment. Keep production and

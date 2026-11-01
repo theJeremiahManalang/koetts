@@ -95,5 +95,5 @@ test('request verification failure clears eligibility and hosted create UI stays
   const context = fs.readFileSync(path.resolve(__dirname, '../features/studio/studio-request-context.tsx'), 'utf8');
   assert.match(context, /\[workId, user\?\.uid/);
   assert.doesNotMatch(context, /window\.location\.search/);
-  assert.match(studio, /hostedWorkState\?\.id === selectedWorkId/);
+  assert.match(studio, /currentHostedWork\(hostedWorkState, selectedWorkId\)/);
 });
