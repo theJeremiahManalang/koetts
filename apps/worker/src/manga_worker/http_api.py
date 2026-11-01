@@ -198,7 +198,7 @@ def create_app(
 
     @app.post("/internal/operation-events")
     async def operation_event(request: Request):
-        boundary.authorize(request, "operation-event", user=False)
+        await run_in_threadpool(boundary.authorize, request, "operation-event", user=False)
         if config.mode != "cloud":
             raise HTTPException(503, "Hosted event dispatch unavailable")
         if request.headers.get("ce-type") != "google.cloud.firestore.document.v1.created":
@@ -214,17 +214,20 @@ def create_app(
         if not match:
             raise HTTPException(400, "Invalid dispatch signal reference")
         await _body_bytes(request, limit=64 * 1024)
-        nonlocal coordinator_instance
-        if coordinator_instance is None:
-            from .cloud_coordinator import coordinator_from_environment
+        def dispatch():
+            nonlocal coordinator_instance
+            if coordinator_instance is None:
+                from .cloud_coordinator import coordinator_from_environment
 
-            coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
-        try:
-            return coordinator_instance.dispatch_signal(match.group(1))
-        except CloudBudgetExceeded:
-            return {"dispatched": 0, "deferred": 1, "uncertain": 0}
-        except FileNotFoundError:
-            return {"dispatched": 0, "deferred": 0, "uncertain": 0}
+                coordinator_instance = coordinator_from_environment(expected_project=config.project_id)
+            try:
+                return coordinator_instance.dispatch_signal(match.group(1))
+            except CloudBudgetExceeded:
+                return {"dispatched": 0, "deferred": 1, "uncertain": 0}
+            except FileNotFoundError:
+                return {"dispatched": 0, "deferred": 0, "uncertain": 0}
+
+        return await run_in_threadpool(dispatch)
 
     @app.get("/production/status")
     def production_status(request: Request):

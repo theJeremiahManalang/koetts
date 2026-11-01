@@ -34,7 +34,7 @@ test('hosted job updates use SSE rather than recurring status requests', () => {
   assert.match(source, /if \(hosted\) return watchHosted\(job, operation\)/);
   assert.match(hostedWatch, /\/api\/workflow\/events\?job=/);
   assert.doesNotMatch(hostedWatch, /\/api\/workflow\?job=/);
-  assert.match(hostedWatch, /removePendingOperationKey/);
+  assert.match(hostedWatch, /finishOperation\(state, job, operation\)/);
 });
 
 for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection', 'hosted-stream']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : surface === 'hosted-stream' ? 'hosted Studio reconnects a saved operation by SSE without polling or resubmitting' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {

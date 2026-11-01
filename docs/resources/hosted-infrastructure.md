@@ -217,3 +217,7 @@ to eligible `us-central1`, but execution and storage volumes have no cumulative
 free-tier cap. The project-filtered USD 20 budget includes Gemini model spend and
 other project charges. See the dated [free-tier review](../research/hosted-free-tier-review.md)
 and [official-source notes](../research/hosted-free-tier-sources.md) before estimating costs.
+
+Eventarc uses `firestore_database_location` (default `nam5`) to match the existing
+Firestore database. Its Cloud Run destination still uses `region` (`us-central1`).
+Changing the compute region must not change the trigger source location.

@@ -233,6 +233,32 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     setSegments([]); setBundleReady(false);
     localStorage.setItem("manga-tts-project", id);
   }
+  async function finishOperation(state: Job, job: { id: string; project: string; idempotencyKey?: string }, operation: Operation): Promise<boolean | null> {
+    if (state.status === "reconciliation_required") {
+      toast.error("Operation needs reconciliation", {
+        id: operationToast,
+        description: `${state.message} Operation ${job.id}. Resolve ${hosted ? "" : "locally "}with web_workflow.py reconcile ${job.id} fail|retry.`,
+        duration: Infinity,
+      });
+      return false;
+    }
+    if (!["complete", "failed"].includes(state.status)) return null;
+    await refreshList();
+    if (state.status === "failed") {
+      localStorage.removeItem("manga-tts-job");
+      if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
+      // Preserve editable drafts on failure; explicit reload recovers partial audio.
+      failOperation(operation, new Error(state.message));
+      return false;
+    }
+    await loadProject(job.project);
+    localStorage.removeItem("manga-tts-job");
+    if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
+    if (state.result?.segments) setSegments(state.result.segments);
+    setErrorSection(null);
+    toast.success(operation.success, { id: operationToast, description: operation.detail, duration: 6500 });
+    return true;
+  }
   async function watch(job: { id: string; project: string; operation?: Operation; idempotencyKey?: string }) {
     const operation = job.operation ?? operationFor("resume");
     if (hosted) return watchHosted(job, operation);
@@ -244,33 +270,11 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
       while (mounted.current) {
         const state: Job = await api(`/api/workflow?job=${job.id}`);
         setBusy(state.message || operation.pending);
-        if (state.status === "reconciliation_required") {
-          toast.error("Operation needs reconciliation", {
-            id: operationToast,
-            description: `${state.message} Operation ${job.id}. Resolve locally with web_workflow.py reconcile ${job.id} fail|retry.`,
-            duration: Infinity,
-          });
-          return false;
-        }
-        if (!["complete", "failed"].includes(state.status) && state.message !== lastProgress) {
+        const finished = await finishOperation(state, job, operation);
+        if (finished !== null) return finished;
+        if (state.message !== lastProgress) {
           lastProgress = state.message;
           toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
-        }
-        if (["complete", "failed"].includes(state.status)) {
-          await refreshList();
-          if (state.status === "failed") {
-            localStorage.removeItem("manga-tts-job");
-            if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
-            // Preserve editable drafts on failure; explicit reload recovers partial audio.
-            throw new Error(state.message);
-          }
-          await loadProject(job.project);
-          localStorage.removeItem("manga-tts-job");
-          if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
-          if (state.result?.segments) setSegments(state.result.segments);
-          setErrorSection(null);
-          toast.success(operation.success, { id: operationToast, description: operation.detail, duration: 6500 });
-          return true;
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
@@ -296,9 +300,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = "";
-          let terminal = false;
-          let needsReconciliation = false;
-          while (mounted.current && !terminal) {
+          while (mounted.current) {
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
@@ -320,37 +322,11 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
               delay = 500;
               if (state.id !== job.id || state.project !== job.project) throw new Error("Operation stream identity changed.");
               setBusy(state.message || operation.pending);
-              if (state.status === "reconciliation_required") {
-                toast.error("Operation needs reconciliation", {
-                  id: operationToast,
-                  description: `${state.message} Operation ${job.id}. Resolve with web_workflow.py reconcile ${job.id} fail|retry.`,
-                  duration: Infinity,
-                });
-                needsReconciliation = true;
-                terminal = true;
-                break;
-              }
-              if (!["complete", "failed"].includes(state.status)) {
-                toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
-                continue;
-              }
-              await refreshList();
-              if (state.status === "failed") {
-                localStorage.removeItem("manga-tts-job");
-                if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
-                failOperation(operation, new Error(state.message));
-                return false;
-              }
-              await loadProject(job.project);
-              localStorage.removeItem("manga-tts-job");
-              if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
-              if (state.result?.segments) setSegments(state.result.segments);
-              setErrorSection(null);
-              toast.success(operation.success, { id: operationToast, description: operation.detail, duration: 6500 });
-              terminal = true;
+              const finished = await finishOperation(state, job, operation);
+              if (finished !== null) return finished;
+              toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
             }
           }
-          if (terminal) return !needsReconciliation;
           if (controller.signal.aborted && (!mounted.current || !getFirebaseAuth().currentUser)) return false;
           if (!receivedEvent) setBusy("Reconnecting to your operation…");
           delay = 1000;

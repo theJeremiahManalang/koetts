@@ -1,6 +1,7 @@
 """Hosted routes independently authenticate callers before touching cloud services."""
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import Mock, patch
 from datetime import UTC, datetime
@@ -69,10 +70,15 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
             "ce-source": "//firestore.googleapis.com/projects/demo-hosted/databases/koetts-default",
             "ce-subject": "documents/hosted_workflow_v1/dataset/dispatch_signals/" + "a" * 32,
         }
+        event_thread = threading.get_ident()
+        dispatch_threads = []
+        auth_threads = []
         coordinator = Mock()
+        coordinator.dispatch_signal.side_effect = lambda *_: (dispatch_threads.append(threading.get_ident()) or {"dispatched": 1, "deferred": 0, "uncertain": 0})
         coordinator.dispatch_signal.return_value = {"dispatched": 1, "deferred": 0, "uncertain": 0}
         config = BoundaryConfig(self.config.project_id, self.config.audience, self.config.permissions, "cloud")
         def service(token):
+            auth_threads.append(threading.get_ident())
             subject = "events" if token == "event-service" else "web"
             return {"sub": subject, "iss": "https://accounts.google.com", "aud": config.audience}
         with patch.dict("os.environ", {"FIRESTORE_DATABASE_ID": "koetts-default"}):
@@ -81,6 +87,10 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
                 accepted = await client.post("/internal/operation-events", headers=headers, json={"ignored": True})
                 self.assertEqual(accepted.status_code, 200)
                 self.assertEqual(accepted.json()["dispatched"], 1)
+                self.assertNotEqual(dispatch_threads, [])
+                self.assertTrue(all(thread != event_thread for thread in dispatch_threads))
+                self.assertTrue(auth_threads)
+                self.assertTrue(all(thread != event_thread for thread in auth_threads))
                 self.assertEqual(coordinator.dispatch_signal.call_args.args[0], "a" * 32)
                 for mutation in (
                     {"ce-source": "//firestore.googleapis.com/projects/other/databases/koetts-default"},

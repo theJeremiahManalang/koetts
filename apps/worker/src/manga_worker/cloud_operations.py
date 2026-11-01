@@ -453,12 +453,15 @@ class FirestoreOperationStore(_FirestoreHostedStore):
         def read(transaction):
             bound = self._binding(transaction)
             snapshot = ref.get(transaction=transaction)
-            return self._operation(snapshot), snapshot.update_time, bound
+            return (self._operation(snapshot), snapshot.update_time), bound
 
         initial, initial_version = self._run(read)
 
-        def changed(snapshot, changes, read_time):
+        def changed(snapshots, changes, read_time):
             try:
+                if len(snapshots) != 1:
+                    raise ValueError("Operation snapshot is missing")
+                snapshot = snapshots[0]
                 value = self._operation(snapshot).public()
             except Exception:
                 callback(None, None)

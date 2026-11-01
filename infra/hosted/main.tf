@@ -701,7 +701,7 @@ resource "google_cloud_scheduler_job" "coordinator" {
 resource "google_eventarc_trigger" "operation_dispatch" {
   project                 = var.project_id
   name                    = "hosted-operation-dispatch"
-  location                = var.region
+  location                = var.firestore_database_location
   service_account         = google_service_account.operation_events.email
   event_data_content_type = "application/json"
 

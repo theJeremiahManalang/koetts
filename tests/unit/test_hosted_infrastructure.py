@@ -148,7 +148,9 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertIn('resource "google_eventarc_trigger" "operation_dispatch"', MAIN)
         trigger = MAIN.split('resource "google_eventarc_trigger" "operation_dispatch"', 1)[1]
         trigger = trigger.split('\nresource ', 1)[0]
-        self.assertIn('location                = var.region', trigger)
+        self.assertIn('location                = var.firestore_database_location', trigger)
+        self.assertIn('default     = "nam5"', VARIABLES)
+        self.assertIn('region  = var.region', trigger)
         self.assertIn('database', trigger)
         self.assertIn('hosted_workflow_v1/${var.cloud_dataset}/dispatch_signals/{signal_id}', trigger)
         self.assertIn('/internal/operation-events', trigger)

@@ -26,6 +26,12 @@ variable "inference_location" {
   default     = "us"
 }
 
+variable "firestore_database_location" {
+  description = "Location of the existing Firestore database; Eventarc must use the same location."
+  type        = string
+  default     = "nam5"
+}
+
 variable "firestore_database_id" {
   description = "Existing named Firestore database ID. The database is referenced as runtime configuration only."
   type        = string

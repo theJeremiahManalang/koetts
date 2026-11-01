@@ -265,3 +265,55 @@ Refreshed the sanitized App Hosting source using the final reviewed phase-two co
 Eventarc/IAM/Firestore index and TTL resources are in Terraform, and offline
 `terraform validate` passes. Do not attempt plan/apply until managed-cloud status and
 network policy are available; no remote changes have occurred.
+
+## Review follow-up: 9def19c...639a3f8
+
+The user requested the code-review skill and explicitly selected baseline
+`9def19c`. Independent Standards and Spec reviews covered
+`git diff 9def19c...HEAD` at `639a3f8`. This review supersedes the earlier clear
+review conclusions for production readiness. Standards found one documented
+violation: the asynchronous Eventarc endpoint performs blocking authorization,
+adapter construction and cloud dispatch on the event loop, contrary to
+`docs/ARCHITECTURE.md:117`. One judgement-call smell is duplicated polling/SSE
+operation completion handling in Studio.
+
+Spec found three P1 blockers: `watch_public` returns a three-item transaction
+result although `_run` expects `(result, binding_exists)`; the Firestore watch
+callback receives a snapshot list but treats it as a single snapshot; Eventarc
+uses the compute region `us-central1` instead of the existing Firestore database
+location `nam5`. The first causes valid SSE subscriptions to return HTTP 400; the
+second breaks change delivery after the first is fixed; the third prevents the
+proposed trigger from deploying against the approved database. Separate Eventarc
+source location from the Cloud Run destination region.
+
+Evidence was source inspection, installed Firestore SDK watch implementation and
+official Eventarc documentation. No tests were run during this review. Only this
+handoff was changed; no runtime fixes, deployment, model calls or production
+resume occurred. Next action: remediate these findings and add regression coverage
+that exercises the actual store transaction and SDK callback contracts before
+repeating focused checks and review. Live acceptance remains outstanding.
+
+## Review remediation completed
+
+User authorized fixes and repeat review. Fixed transaction result shape, Firestore
+snapshot-list handling, and worker-thread execution of Eventarc authorization and
+dispatch. Extracted shared Studio terminal/reconciliation handling. Eventarc now
+uses `firestore_database_location` (default `nam5`), independently of destination
+`region`. Added store regression coverage and thread assertions; updated infra
+coverage and operational documentation. Runtime files, tests, Terraform and this
+handoff are the changed paths; no deployment or paid calls occurred.
+
+Checks: backend store regression 1 pass, hosted HTTP unit tests 8 pass, infra unit
+tests 11 pass, Ruff, repository checker, Terraform fmt and validate, web typecheck
+and production build pass. Terraform provider startup required sandbox escalation;
+validation then passed. Initial pytest invocation failed because pytest is not
+installed; infrastructure checks passed under unittest. Default uv cache is
+read-only; direct installed Python repository checker passed. Build retains the
+existing dynamic filesystem tracing warning. Web checks use unsupported Node24.
+Independent Standards and Spec re-reviews of `9def19c` through the working tree
+both found zero remaining findings. Full production HTTP acceptance and live
+Eventarc/SSE acceptance were not rerun. Production remains paused; next action is
+reviewed cloud plan/apply authorization and hosted acceptance under existing gates.
+Focused web checks: 10 tests passed with `--test-isolation=none`; default isolated
+runner failed without useful diagnostics. The existing source assertion was
+updated to follow shared terminal handling. No claim of a full-suite pass.
