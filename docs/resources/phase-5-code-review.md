@@ -60,3 +60,27 @@ image built by `ec6667fc-bf83-42d1-aa1b-3460dcb33e36` from commit `4b3b7a7`.
 The saved Terraform plan changed only the API image. Ready status, matching digest,
 paused ledger, zero provider allowance and both paused schedules were verified.
 Post-deployment manual notification-message verification remains pending.
+
+## Event-driven dispatch and status delivery
+
+Phase one (`9def19c...4188ae4`) adds transactionally committed dispatch signals,
+authenticated Eventarc delivery, stage-specific Cloud Run Job dispatch, TTL, the
+required Firestore stage index, and a recovery-only schedule. Standards and Spec
+reviews found no remaining findings. Review-time concerns about composite index
+starvation and wake-up retries while paused were fixed before the phase was cleared.
+
+Phase two (`4188ae4...7c3efd0`) adds private Firestore-backed SSE status delivery,
+Studio reconnect from saved operation state, and authorization rechecks. Standards
+and Spec reviews found no remaining findings. The mounted Studio test verifies
+reconnect without resubmission or recurring `?job=` requests; backend tests verify
+current/terminal updates and stream closure after admin revocation.
+
+Focused phase-two checks passed: 15 web tests, two backend SSE tests, typecheck,
+build, Ruff, repository checks, and Terraform formatting. The full web suite passed
+99/100 on unsupported Node 24; the pre-existing multipart stream test fails with
+`ReadableStream is already closed`. HTTP acceptance setup could not download
+`google-cloud-core` because DNS was unavailable. Firestore integration tests are
+skipped without an emulator. Terraform schema validation is blocked because cached
+Google providers fail to start. No Terraform apply or live stream test was run;
+production and both schedulers remain paused. Apply requires a reviewed concrete
+plan and the user's authorization for the new Eventarc resources.

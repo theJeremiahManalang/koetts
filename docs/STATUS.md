@@ -22,7 +22,7 @@ are deployed; manual acceptance remains pending.
 | API/region decisions | API default `koetts-api`; new compute/storage `us-central1`; initial frontend `us-east4`, later migration to `us-central1`; see infrastructure and rollout guides |
 | GCP Gemini migration | `d9eb6f1`, review fixes `821c02e`, evidence `40182c8`; ADC/project plus `us` inference endpoint; no API-key fallback; both reviews clear |
 | Hosted phase 5 | Backend provisioned; frontend `koetts-build-2026-10-31-004` serves 100% with new API URL and authenticated cloud admin UI. Manual production/identity/recovery/billing/playback acceptance remains pending |
-| Hosted asynchronous delivery | Eventarc dispatch and authenticated SSE are implemented offline on `feat/hosted-service`; review and live adapter verification are pending. Production stays paused; Eventarc has not been applied |
+| Hosted asynchronous delivery | Eventarc dispatch and authenticated SSE are implemented offline on `feat/hosted-service`; both phase reviews are clear. Terraform apply and live stream verification remain pending. Production stays paused |
 
 ## Latest verification
 

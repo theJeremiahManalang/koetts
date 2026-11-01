@@ -254,17 +254,8 @@ and network-policy snapshot remain unavailable; gcloud's config directory is
 read-only here. Next: user completes/validates `gcloud auth application-default login`
 in their local terminal, then restarts the dev server. Do not initiate Gemini calls.
 
-Hosted async delivery implementation checkpoint: phase one Eventarc dispatch was
-reviewed clear against `9def19c`; phase two adds API-authenticated SSE for hosted
-Studio, with the same current public operation shape, snapshot-on-connect, 30-second
-authorization checks and five-minute reconnect rotation. Local polling remains.
-Relevant verification: 13 focused web/React route/parser tests pass, two backend SSE
-and revocation tests pass, TypeScript/build, worker Ruff, infrastructure checks,
-repo check and Terraform formatting pass. Full web suite is 97/98 under unsupported
-Node24; the known multipart stream test fails with `ReadableStream is already closed`.
-`npm run test:http` could not install into its disposable checkout because DNS could
-not resolve `google-cloud-core`. Firestore emulator tests remain skipped because no
-loopback emulator is configured; Terraform schema validation remains unavailable
-because cached provider binaries fail to start. Production stays paused. Next: commit
-phase two, run independent Standards/Spec reviews against phase-one commit `4188ae4`,
-fix findings, then prepare Terraform plan and request apply authorization.
+Hosted async delivery implementation: phase one Eventarc dispatch and phase two SSE status delivery are committed and independently reviewed against `9def19c` and `4188ae4`; both Standards and Spec axes are clear. Phase one commits: 1354457, d05eec6, 46bf1a2, 0310348, 8c2f4af, eaaf30e, 4188ae4. Phase two commits: 49ed3bc, fe2405d, 37a9a4f, 7c3efd0. Studio reconnects from saved operation state, checks admin authorization on events and every 30 seconds while idle, rotates the stream after five minutes, and does not submit duplicate work. Local keeps polling.
+
+Checks: 15 focused web tests, two backend SSE tests, typecheck, production build, Ruff, repository links/boundaries, and Terraform formatting passed. Full web suite was 99/100 under unsupported Node24; the existing multipart stream test fails with `ReadableStream is already closed`. HTTP acceptance setup could not download `google-cloud-core` because DNS failed. Firestore emulator tests skipped because no loopback emulator is configured. Terraform schema validation did not run because cached Google provider binaries fail to start. No Terraform apply or live stream test was run. Production and schedulers remain paused; no paid calls occurred.
+
+Next: obtain current managed-cloud readiness, produce a valid Terraform plan for Eventarc, TTL and index, then request apply authorization. After apply, deploy frontend/API revisions and perform approved live SSE and delivery checks before production readiness. Preserve the user's recorded local admin/audio pass and request a hosted retest; do not resume production or run provider calls without authorization.
