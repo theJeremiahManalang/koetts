@@ -4,6 +4,7 @@ import os
 import time
 import unittest
 import uuid
+from unittest.mock import Mock
 from concurrent.futures import ThreadPoolExecutor
 
 from manga_tts.operations import OperationConflict, OperationPolicy
@@ -172,6 +173,9 @@ class FirestoreOperationStoreTests(unittest.TestCase):
     def test_recovery_repairs_missing_signals_only_for_free_stages_and_is_rate_limited(self):
         self.enqueue("repair-signal")
         now = time.time()
+        self.store.budget = Mock(status=Mock(return_value={"configured": True, "paused": True}))
+        self.assertEqual(self.store.repair_dispatch_signals(now), 0)
+        self.store.budget.status.return_value = {"configured": True, "paused": False}
         self.assertEqual(self.store.repair_dispatch_signals(now), 1)
         self.assertEqual(self.store.repair_dispatch_signals(now + 30), 0)
         self.store._slot_ref("magi", 1).set({"operation_id": "active"})
