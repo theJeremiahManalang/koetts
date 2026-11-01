@@ -84,3 +84,7 @@ skipped without an emulator. Offline `terraform validate` passed. A remote Terra
 test were not run because managed-cloud status and network-policy readiness were unavailable;
 production and both schedulers remain paused. Apply requires a reviewed concrete
 plan and the user's authorization for the new Eventarc resources.
+
+The final sanitized App Hosting source stage was refreshed from the SSE implementation
+at `/tmp/koetts-apphosting-async-49ed3bc`. Offline Terraform validation now passes;
+remote planning remains pending managed-cloud readiness and network policy.

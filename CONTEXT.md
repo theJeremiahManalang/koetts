@@ -259,3 +259,9 @@ Hosted async delivery implementation: phase one Eventarc dispatch and phase two 
 Checks: 15 focused web tests, two backend SSE tests, typecheck, production build, Ruff, repository links/boundaries, and Terraform formatting passed. Full web suite was 99/100 under unsupported Node24; the existing multipart stream test fails with `ReadableStream is already closed`. HTTP acceptance setup could not download `google-cloud-core` because DNS failed. Firestore emulator tests skipped because no loopback emulator is configured. Offline `terraform validate` passed. A remote Terraform plan, apply, and live stream test remain pending because managed-cloud status tooling is unavailable and the network-policy snapshot is missing. Production and schedulers remain paused; no paid calls occurred.
 
 Next: obtain current managed-cloud readiness, produce a valid Terraform plan for Eventarc, TTL and index, then request apply authorization. After apply, deploy frontend/API revisions and perform approved live SSE and delivery checks before production readiness. Preserve the user's recorded local admin/audio pass and request a hosted retest; do not resume production or run provider calls without authorization.
+
+Refreshed the sanitized App Hosting source using the final reviewed phase-two code at
+`/tmp/koetts-apphosting-async-49ed3bc`. The current worktree is clean at `e56f259`;
+Eventarc/IAM/Firestore index and TTL resources are in Terraform, and offline
+`terraform validate` passes. Do not attempt plan/apply until managed-cloud status and
+network policy are available; no remote changes have occurred.
