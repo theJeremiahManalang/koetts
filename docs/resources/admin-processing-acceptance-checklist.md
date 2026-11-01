@@ -42,8 +42,8 @@ MANGA_FRONTEND_ONLY=0 MANGA_EXECUTION_MODE=local npm run dev
 | Approve request          | Admin approval succeeds; approval alone starts no processing.                                                                                                  | Working as expected                                                                                                                                                        | Pass    |
 | Local standalone creation | Without a selected request, Create remains available and the UI labels the project standalone. With a request selected, show its title and status. | At baseline, no request was selected and Create was available, but the UI did not identify the project as standalone. | Fail |
 | Local CPU extraction     | If intentionally run, the operation reports progress and a terminal result; record duration, outcome, and output quality.                                      | Didn't run                                                                                                                                                                 | Not run |
-| Local Gemini stage       | User starts any paid call manually. Stay within the approved USD 5 Gemini allowance; record model, call count, result, and observed cost.                      | Didn't run                                                                                                                                                                 | Not run |
-| Result review            | Generated artifacts are attached to the intended project and can be reviewed; do not publish without the required human review and exact-export approval.      | Didn't run                                                                                                                                                                 | Not run |
+| Local Gemini stage       | User starts any paid call manually. Stay within the approved USD 5 Gemini allowance; record model, call count, result, and observed cost.                      | User reports local audio generation passed; model, call count, and observed cost were not recorded.                                                                        | Pass |
+| Result review            | Generated artifacts are attached to the intended project and can be reviewed; do not publish without the required human review and exact-export approval.      | Not separately recorded in this manual pass.                                                                                                                               | Not run |
 
 ## Hosted acceptance
 
@@ -60,6 +60,7 @@ below verifies that the guard blocks work.
 | Select approved work            | Create is enabled only after opening Studio from an approved request with eligible work selected. Direct Studio without a work selection keeps Create disabled. | Opened Studio directly; after uploading an image, Create appeared enabled. | Fail    |
 | Confirm production pause        | Admin-visible status reports production paused before attempting Create.                                                                                        | Working as expected                                                        | Pass    |
 | Attempt guarded Create          | UI reports **“Hosted production is paused”**; API returns the sanitized paused response; no job or operation starts.                                            | Confirmed by user: notification showed as expected; no job started.        | Pass    |
+| Operation status stream         | Hosted admin gets current/progress/terminal status by SSE, reconnects to current state, and makes no recurring `?job=` requests.                                 | Not deployed or manually checked in the recorded pass.                     | Not run |
 | Scheduler and provider boundary | Both hosted schedulers remain paused and provider allowance/call caps remain zero. Do not change configuration for this checklist.                              | Not checked in this manual pass.                                           | Not run |
 | Playback and session checks     | Record authenticated playback/range behavior, sign-out/session revocation, and denial after revocation when separately scheduled.                               | Pending.                                                                   | Not run |
 | Recovery checks                 | Record durable operation recovery/restart and rollback evidence when separately authorized.                                                                     | Pending.                                                                   | Not run |
@@ -87,8 +88,8 @@ actual spend separately in the GCP billing view.
 
 | Environment | Passed | Failed | Blocked | Not run | Reviewer notes                             |
 | ----------- | -----: | -----: | ------: | ------: | ------------------------------------------ |
-| Local       |      7 |      1 |       0 |       3 | Standalone mode needs clearer status text. |
-| Hosted      |      6 |      1 |       0 |       3 | Direct entry unexpectedly enables Create.  |
+| Local       |      8 |      1 |       0 |       2 | Standalone mode needs clearer status text. |
+| Hosted      |      6 |      1 |       0 |       4 | Direct entry/Create and SSE remain unverified after fixes. |
 
 ### Outstanding blockers and next actions
 

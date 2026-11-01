@@ -253,3 +253,18 @@ not validated or read and no Google API/model call was made. Managed-cloud statu
 and network-policy snapshot remain unavailable; gcloud's config directory is
 read-only here. Next: user completes/validates `gcloud auth application-default login`
 in their local terminal, then restarts the dev server. Do not initiate Gemini calls.
+
+Hosted async delivery implementation checkpoint: phase one Eventarc dispatch was
+reviewed clear against `9def19c`; phase two adds API-authenticated SSE for hosted
+Studio, with the same current public operation shape, snapshot-on-connect, 30-second
+authorization checks and five-minute reconnect rotation. Local polling remains.
+Relevant verification: 13 focused web/React route/parser tests pass, two backend SSE
+and revocation tests pass, TypeScript/build, worker Ruff, infrastructure checks,
+repo check and Terraform formatting pass. Full web suite is 97/98 under unsupported
+Node24; the known multipart stream test fails with `ReadableStream is already closed`.
+`npm run test:http` could not install into its disposable checkout because DNS could
+not resolve `google-cloud-core`. Firestore emulator tests remain skipped because no
+loopback emulator is configured; Terraform schema validation remains unavailable
+because cached provider binaries fail to start. Production stays paused. Next: commit
+phase two, run independent Standards/Spec reviews against phase-one commit `4188ae4`,
+fix findings, then prepare Terraform plan and request apply authorization.

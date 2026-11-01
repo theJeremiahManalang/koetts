@@ -504,6 +504,9 @@ class CloudApplication:
         except FileNotFoundError:
             return None
 
+    def watch_operation(self, operation_id: str, callback):
+        return self.operations.watch_public(self.identifier(operation_id), callback)
+
     def operation_by_key(self, key: str) -> dict | None:
         try:
             return self.operations.get_by_key(key).public()

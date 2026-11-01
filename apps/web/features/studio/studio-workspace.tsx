@@ -22,6 +22,7 @@ import { RequireSignIn } from "../identity/require-sign-in";
 import { AdminNav } from "../identity/admin-nav";
 import { StudioRequestContext, type HostedWorkState } from "./studio-request-context";
 import { currentHostedWork, hostedIntentFingerprint, hostedWorkId, prepareHostedUpload, uploadTokenForIntent } from "./hosted-upload";
+import { takeOperationEvents } from "./operation-events";
 
 type Tab = "cast" | "proposal" | "sources" | "script" | "audio";
 const tabs: [Tab, string][] = [["cast", "Cast"], ["proposal", "AI proposal"], ["sources", "Source & order"], ["script", "Script approval"], ["audio", "Audio & export"]];
@@ -149,6 +150,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
   const mounted = useRef(true);
   const initialized = useRef(false);
   const leaveDecision = useRef<Promise<boolean> | null>(null);
+  const hostedStream = useRef<AbortController | null>(null);
   const page = snapshot?.pages[pageIndex];
   const orderedPages = snapshot ? (draft?.page_order?.length ? draft.page_order.map(id => snapshot.pages.find(p => p.page_id === id)!).filter(Boolean) : snapshot.pages) : [];
   const pagePosition = page ? Math.max(0, orderedPages.findIndex(p => p.page_id === page.page_id)) : pageIndex;
@@ -196,7 +198,19 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
         if (readOnly) continue;
         throw new Error("Verify your account before continuing. Your draft is retained.");
       }
-      const r = await fetch(url, { ...options, headers }); const data = await r.json();
+      const r = await fetch(url, { ...options, headers });
+      if (headers.get("Accept") === "text/event-stream") {
+        if (!mounted.current || getFirebaseAuth().currentUser?.uid !== user.uid) throw new Error("Your account changed. Sign in again to resume this operation.");
+        if (!r.ok) {
+          const data = await r.json();
+          const error = new Error(data.error || "Request failed.") as Error & { code?: string; status?: number };
+          error.code = typeof data.code === "string" ? data.code : undefined;
+          error.status = r.status;
+          throw error;
+        }
+        return r;
+      }
+      const data = await r.json();
       if (!mounted.current || getFirebaseAuth().currentUser?.uid !== user.uid) throw new Error("Your account changed. Sign in again to resume this operation.");
       if (!r.ok) {
         const code = typeof data.code === "string" ? data.code : undefined;
@@ -221,6 +235,7 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
   }
   async function watch(job: { id: string; project: string; operation?: Operation; idempotencyKey?: string }) {
     const operation = job.operation ?? operationFor("resume");
+    if (hosted) return watchHosted(job, operation);
     operationSection.current = operation.section ?? null;
     startOperation(operation);
     let lastProgress = "";
@@ -263,9 +278,103 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
     finally { setBusy(""); }
     return false;
   }
+  async function watchHosted(job: { id: string; project: string; operation?: Operation; idempotencyKey?: string }, operation: Operation) {
+    operationSection.current = operation.section ?? null;
+    startOperation(operation);
+    localStorage.setItem("manga-tts-job", JSON.stringify(job));
+    let delay = 500;
+    try {
+      while (mounted.current) {
+        const controller = new AbortController();
+        hostedStream.current = controller;
+        let receivedEvent = false;
+        try {
+          const response = await api(`/api/workflow/events?job=${encodeURIComponent(job.id)}`, {
+            headers: { Accept: "text/event-stream" }, signal: controller.signal,
+          }) as Response;
+          if (!response.body) throw new Error("Operation event stream is unavailable.");
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let terminal = false;
+          let needsReconciliation = false;
+          while (mounted.current && !terminal) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parsed = takeOperationEvents(buffer);
+            buffer = parsed.remainder;
+            if (parsed.controls.includes("auth-expired")) {
+              const error = new Error("Admin access changed. Sign in again to resume this operation.") as Error & { status: number };
+              error.status = 401;
+              throw error;
+            }
+            if (parsed.controls.includes("stream-error")) throw new Error("Operation status stream failed.");
+            if (parsed.controls.includes("reconnect")) break;
+            for (const state of parsed.events) {
+              receivedEvent = true;
+              delay = 500;
+              if (state.id !== job.id || state.project !== job.project) throw new Error("Operation stream identity changed.");
+              setBusy(state.message || operation.pending);
+              if (state.status === "reconciliation_required") {
+                toast.error("Operation needs reconciliation", {
+                  id: operationToast,
+                  description: `${state.message} Operation ${job.id}. Resolve with web_workflow.py reconcile ${job.id} fail|retry.`,
+                  duration: Infinity,
+                });
+                needsReconciliation = true;
+                terminal = true;
+                break;
+              }
+              if (!["complete", "failed"].includes(state.status)) {
+                toast.loading(operation.pending, { id: operationToast, description: state.message || "Waiting for processing to begin…" });
+                continue;
+              }
+              await refreshList();
+              if (state.status === "failed") {
+                localStorage.removeItem("manga-tts-job");
+                if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
+                throw new Error(state.message);
+              }
+              await loadProject(job.project);
+              localStorage.removeItem("manga-tts-job");
+              if (job.idempotencyKey) removePendingOperationKey(job.idempotencyKey);
+              if (state.result?.segments) setSegments(state.result.segments);
+              setErrorSection(null);
+              toast.success(operation.success, { id: operationToast, description: operation.detail, duration: 6500 });
+              terminal = true;
+            }
+          }
+          if (terminal) return !needsReconciliation;
+          if (controller.signal.aborted && (!mounted.current || !getFirebaseAuth().currentUser)) return false;
+          if (!receivedEvent) setBusy("Reconnecting to your operation…");
+          delay = Math.max(delay, 5000);
+        } catch (error) {
+          const status = (error as Error & { status?: number }).status;
+          if (status === 401 || status === 403) throw error;
+          if (!mounted.current || !getFirebaseAuth().currentUser) return false;
+          if (!authorization.current.ready) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            continue;
+          }
+          setBusy("Reconnecting to your operation…");
+        } finally {
+          if (hostedStream.current === controller) hostedStream.current = null;
+        }
+        if (!mounted.current) return false;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay = Math.min(30000, delay * 2);
+      }
+    } catch (error) {
+      failOperation(operation, error);
+    } finally {
+      setBusy("");
+    }
+    return false;
+  }
   useEffect(() => {
     mounted.current = true;
-    if (initialized.current) return () => { mounted.current = false; };
+    if (initialized.current) return () => { mounted.current = false; hostedStream.current?.abort(); };
     initialized.current = true;
     void (async () => {
       try {
@@ -296,8 +405,11 @@ function StudioWorkspaceClient({ hosted }: { hosted: boolean }) {
       } catch (e) { toast.error("Saved projects could not be loaded", { description: e instanceof Error ? e.message : "Check the server connection and reload the page.", duration: Infinity }); }
       finally { setInitialLoading(false); }
     })();
-    return () => { mounted.current = false; };
+    return () => { mounted.current = false; hostedStream.current?.abort(); };
   }, []);
+  useEffect(() => {
+    if (!signedInUser || !authorizationReady) hostedStream.current?.abort();
+  }, [signedInUser?.uid, authorizationReady]);
   useEffect(() => {
     const urls = previewUrls.current;
     for (const [file, url] of urls) if (!files.includes(file)) { URL.revokeObjectURL(url); urls.delete(file); }

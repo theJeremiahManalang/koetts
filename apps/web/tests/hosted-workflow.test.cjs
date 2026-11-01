@@ -21,6 +21,7 @@ function load(file, { denied = null } = {}) {
       hostedMode: () => true,
       PrivateApiError,
       privateJson: async (request, endpoint, init) => { calls.push({ request, endpoint, init }); return { id: 'operation', status: 'queued' }; },
+      privateApi: async (request, endpoint, init) => { calls.push({ request, endpoint, init }); return new Response('event: operation\ndata: {}\n\n', { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'private, no-store' } }); },
       proxyPrivate: async (request, endpoint) => { calls.push({ request, endpoint }); return new Response('image', { status: 206, headers: { 'Content-Type': 'image/png' } }); },
     };
     if (name.endsWith('/workflow')) return {
@@ -68,6 +69,23 @@ test('hosted polling, key recovery, and snapshots use private APIs', async () =>
     assert.equal((await api.GET(new Request('https://studio.example/api/workflow?' + query))).status, 200);
     assert.equal(api.calls.at(-1).endpoint, endpoint);
   }
+});
+
+test('hosted operation stream is admin-only and proxies the private event stream', async () => {
+  const api = load('../app/api/workflow/events/route.ts');
+  const id = 'a'.repeat(32);
+  const request = new Request(`https://studio.example/api/workflow/events?job=${id}`);
+  const result = await api.GET(request);
+  assert.equal(result.status, 200);
+  assert.equal(result.headers.get('content-type'), 'text/event-stream');
+  assert.equal(await result.text(), 'event: operation\ndata: {}\n\n');
+  assert.equal(api.calls[0].request, request);
+  assert.equal(api.calls[0].endpoint, `/operations/${id}/events`);
+  assert.equal(new Headers(api.calls[0].init.headers).get('accept'), 'text/event-stream');
+  const denied = load('../app/api/workflow/events/route.ts', { denied: 403 });
+  assert.equal((await denied.GET(request)).status, 403);
+  assert.equal(denied.calls.length, 0);
+  assert.equal((await api.GET(new Request('https://studio.example/api/workflow/events?job=bad'))).status, 400);
 });
 
 test('hosted upload is one bounded binary object and never writes local staging', async () => {

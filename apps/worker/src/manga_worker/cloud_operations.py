@@ -445,6 +445,28 @@ class FirestoreOperationStore(_FirestoreHostedStore):
 
         return self._run(operation)
 
+    def watch_public(self, operation_id: str, callback):
+        """Return the current public status and subscribe to validated status changes."""
+        operation_id = _document_id(operation_id, "operation ID")
+        ref = self._operation_ref(operation_id)
+
+        def read(transaction):
+            bound = self._binding(transaction)
+            snapshot = ref.get(transaction=transaction)
+            return self._operation(snapshot), snapshot.update_time, bound
+
+        initial, initial_version = self._run(read)
+
+        def changed(snapshot, changes, read_time):
+            try:
+                value = self._operation(snapshot).public()
+            except Exception:
+                callback(None, None)
+                return
+            callback(value, snapshot.update_time)
+
+        return initial.public(), initial_version, ref.on_snapshot(changed)
+
     def get_by_key(self, idempotency_key: str) -> Operation:
         if (
             not isinstance(idempotency_key, str)

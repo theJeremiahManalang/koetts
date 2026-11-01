@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from datetime import UTC, datetime
 
 import httpx
 
@@ -90,6 +91,57 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(rejected.status_code, 400)
                 denied = await client.post("/internal/operation-events", headers={**headers, "Authorization": "Bearer service"}, json={})
                 self.assertEqual(denied.status_code, 403)
+
+    async def test_operation_status_stream_sends_current_and_terminal_state(self):
+        watcher = Mock()
+        initial = {"id": "a" * 32, "project": "b" * 32, "status": "running", "message": "Working"}
+        terminal = {**initial, "status": "complete", "message": "Ready"}
+        def watch_operation(operation_id, callback):
+            self.assertEqual(operation_id, initial["id"])
+            callback(terminal, datetime(2026, 11, 2, 0, 0, 1, tzinfo=UTC))
+            return initial, datetime(2026, 11, 2, 0, 0, 0, tzinfo=UTC), watcher
+        self.backend.watch_operation.side_effect = watch_operation
+        async def inline(function, *args, **kwargs):
+            return function(*args, **kwargs)
+        with patch("manga_worker.http_api.run_in_threadpool", new=inline):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(self.app()), base_url="https://private.example") as client:
+                response = await client.get(f"/operations/{initial['id']}/events", headers=self.headers("admin"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"].split(";")[0], "text/event-stream")
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertIn('"status":"running"', response.text)
+        self.assertIn('"status":"complete"', response.text)
+        watcher.unsubscribe.assert_called_once_with()
+
+    async def test_operation_stream_closes_when_admin_is_revoked_midstream(self):
+        watcher = Mock()
+        initial = {"id": "a" * 32, "project": "b" * 32, "status": "running", "message": "Working"}
+        terminal = {**initial, "status": "complete", "message": "Ready"}
+        def watch_operation(_, callback):
+            callback(terminal, datetime(2026, 11, 2, 0, 0, 1, tzinfo=UTC))
+            return initial, datetime(2026, 11, 2, 0, 0, 0, tzinfo=UTC), watcher
+        self.backend.watch_operation.side_effect = watch_operation
+        checks = 0
+        def verify_user(*_):
+            nonlocal checks
+            checks += 1
+            if checks >= 3:
+                raise ValueError("revoked")
+            return {"sub": "admin", "admin": True, "aud": "demo-hosted",
+                    "iss": "https://securetoken.google.com/demo-hosted"}
+        config = BoundaryConfig(self.config.project_id, self.config.audience, self.config.permissions, "cloud")
+        def verify_service(_):
+            return {"sub": "web", "iss": "https://accounts.google.com", "aud": config.audience}
+        app = create_app(config, hosted=self.backend, service_verifier=verify_service, user_verifier=verify_user)
+        async def inline(function, *args, **kwargs):
+            return function(*args, **kwargs)
+        with patch("manga_worker.http_api.run_in_threadpool", new=inline):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="https://private.example") as client:
+                response = await client.get(f"/operations/{initial['id']}/events", headers=self.headers("admin"))
+        self.assertIn('"status":"running"', response.text)
+        self.assertIn("event: auth-expired", response.text)
+        self.assertNotIn('"status":"complete"', response.text)
+        watcher.unsubscribe.assert_called_once_with()
 
     async def test_published_ranges_require_fresh_valid_reader_credentials(self):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(self.app()), base_url="https://private.example") as client:

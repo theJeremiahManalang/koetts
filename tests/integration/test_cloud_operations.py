@@ -1,6 +1,7 @@
 """Firestore operation coordination tests; emulator only, never a live project."""
 
 import os
+import threading
 import time
 import unittest
 import uuid
@@ -160,6 +161,25 @@ class FirestoreOperationStoreTests(unittest.TestCase):
         claim = self.store.claim_next(stage="pipeline")
         self.assertEqual(claim.operation_id, pipeline.operation_id)
         self.assertEqual(self.store.get(magi.operation_id).status, "queued")
+
+    def test_watch_public_delivers_initial_and_changed_operation_state(self):
+        operation = self.enqueue("status-stream")
+        received = []
+        ready = threading.Event()
+        def changed(value, version):
+            received.append((value, version))
+            ready.set()
+        initial, initial_version, watcher = self.store.watch_public(operation.operation_id, changed)
+        self.addCleanup(watcher.unsubscribe)
+        self.assertEqual(initial["status"], "queued")
+        self.assertTrue(ready.wait(5), "Firestore listener must send its initial snapshot")
+        claim = self.store.claim(operation.operation_id)
+        self.store.heartbeat(claim, progress={"message": "Rendering"})
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not any(value and value["message"] == "Rendering" for value, _ in received):
+            time.sleep(0.01)
+        self.assertTrue(any(value and value["message"] == "Rendering" for value, _ in received))
+        self.assertTrue(all(version >= initial_version for _, version in received))
 
     def test_dispatch_signal_stage_is_validated_and_ttl_bound(self):
         self.enqueue("signal")

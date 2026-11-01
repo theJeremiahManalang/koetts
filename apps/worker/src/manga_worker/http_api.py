@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 import threading
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
@@ -376,5 +378,82 @@ def create_app(
         if result is None:
             raise HTTPException(404, "Operation not found")
         return result
+
+    @app.get("/operations/{operation_id}/events")
+    async def operation_events(operation_id: str, request: Request):
+        await run_in_threadpool(boundary.authorize, request, "poll")
+        backend = await run_in_threadpool(workflow_application)
+        loop = asyncio.get_running_loop()
+        updates: asyncio.Queue = asyncio.Queue(maxsize=1)
+
+        def publish(value, update_time):
+            def enqueue():
+                if updates.full():
+                    try:
+                        updates.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                updates.put_nowait((value, update_time))
+            loop.call_soon_threadsafe(enqueue)
+
+        try:
+            initial, version, watcher = await run_in_threadpool(backend.watch_operation, operation_id, publish)
+        except FileNotFoundError:
+            raise HTTPException(404, "Operation not found") from None
+
+        async def stream():
+            last_version = version
+            last_authorized = time.monotonic()
+            expires = last_authorized + 300
+            try:
+                while time.monotonic() < expires:
+                    try:
+                        await run_in_threadpool(boundary.authorize, request, "poll")
+                    except HTTPException:
+                        yield "event: auth-expired\ndata: {}\n\n"
+                        return
+                    last_authorized = time.monotonic()
+                    payload = json.dumps(initial, separators=(",", ":"), allow_nan=False)
+                    yield f"id: {version.isoformat()}\nevent: operation\ndata: {payload}\n\n"
+                    if initial["status"] in {"complete", "failed", "reconciliation_required"}:
+                        return
+                    break
+                while time.monotonic() < expires:
+                    try:
+                        value, update_time = await asyncio.wait_for(updates.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        if time.monotonic() - last_authorized >= 30:
+                            try:
+                                await run_in_threadpool(boundary.authorize, request, "poll")
+                            except HTTPException:
+                                yield "event: auth-expired\ndata: {}\n\n"
+                                return
+                            last_authorized = time.monotonic()
+                        yield ": keepalive\n\n"
+                        continue
+                    if value is None or update_time is None:
+                        yield "event: stream-error\ndata: {}\n\n"
+                        return
+                    if update_time <= last_version:
+                        continue
+                    try:
+                        await run_in_threadpool(boundary.authorize, request, "poll")
+                    except HTTPException:
+                        yield "event: auth-expired\ndata: {}\n\n"
+                        return
+                    last_authorized = time.monotonic()
+                    last_version = update_time
+                    payload = json.dumps(value, separators=(",", ":"), allow_nan=False)
+                    yield f"id: {update_time.isoformat()}\nevent: operation\ndata: {payload}\n\n"
+                    if value["status"] in {"complete", "failed", "reconciliation_required"}:
+                        return
+                yield "event: reconnect\ndata: {}\n\n"
+            finally:
+                watcher.unsubscribe()
+
+        return StreamingResponse(
+            stream(), media_type="text/event-stream",
+            headers={**PRIVATE_HEADERS, "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+        )
 
     return app

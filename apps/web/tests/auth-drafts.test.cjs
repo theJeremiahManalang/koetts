@@ -25,6 +25,18 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
+test('hosted job updates use SSE rather than recurring status requests', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../features/studio/studio-workspace.tsx'), 'utf8');
+  const start = source.indexOf('async function watchHosted(');
+  const end = source.indexOf('\n  useEffect(', start);
+  assert.notEqual(start, -1);
+  const hostedWatch = source.slice(start, end);
+  assert.match(source, /if \(hosted\) return watchHosted\(job, operation\)/);
+  assert.match(hostedWatch, /\/api\/workflow\/events\?job=/);
+  assert.doesNotMatch(hostedWatch, /\/api\/workflow\?job=/);
+  assert.match(hostedWatch, /removePendingOperationKey/);
+});
+
 for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
   const initialWork = 'a'.repeat(32);
   const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${initialWork}&create=1` : surface === 'hosted-selection' ? `http://localhost/?work=${initialWork}` : 'http://localhost/request' });
