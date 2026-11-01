@@ -244,3 +244,12 @@ Remote deployment was not attempted because managed-cloud readiness tooling and 
 network policy snapshot were unavailable. After cloud runtime readiness is available,
 deploy the frontend under existing authorization and request the hosted retest. Keep
 production and schedulers paused; no paid calls or publication.
+
+Local Gemini configuration follow-up: user requested explicit project + ADC or a
+configured client. Added `GOOGLE_CLOUD_PROJECT=koetts-9bf7f` and
+`GOOGLE_CLOUD_LOCATION=us` to ignored `apps/web/.env.local` without changing other
+settings. ADC credential file exists at gcloud's standard path, but credentials were
+not validated or read and no Google API/model call was made. Managed-cloud status
+and network-policy snapshot remain unavailable; gcloud's config directory is
+read-only here. Next: user completes/validates `gcloud auth application-default login`
+in their local terminal, then restarts the dev server. Do not initiate Gemini calls.
