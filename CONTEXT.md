@@ -230,3 +230,17 @@ restart/rollback and finalcost evidence remain pending, with processing intentio
 disabled. This goal turn made progress (commits/reviews/regression/deployment), not
 a blocked/no-progress turn. Continue independent acceptance work if available;
 never run paid models or override the production pause.
+
+Latest manual-acceptance remediation: commits `50ea875`, `4b6abed`, and `4ec5db3`.
+Final Standards and Spec reviews against `b411be0` found no remaining findings.
+Mounted Studio navigation test covers approved work, removing the query, switching
+to another work with delayed verification, and button enablement only after the new
+work verifies. The user-reported hosted Create failure remains pending manual retest.
+Local standalone creation is preserved and labeled. Typecheck, production build,
+19 focused UI/upload/context tests, repo check and diff check passed. Full web suite
+was 89/90 under unsupported Node24; HTTP acceptance setup hit DNS failure downloading
+`h11`. Sanitized App Hosting source staged at `/tmp/koetts-apphosting-acceptance-50ea875`.
+Remote deployment was not attempted because managed-cloud readiness tooling and the
+network policy snapshot were unavailable. After cloud runtime readiness is available,
+deploy the frontend under existing authorization and request the hosted retest. Keep
+production and schedulers paused; no paid calls or publication.

@@ -57,3 +57,18 @@ schedulers paused. User retest of direct hosted entry, local standalone labeling
 and current-work navigation is still required. CPU/Gemini generation, authenticated
 playback, session revocation, recovery, rollback, and final cost review remain
 unaccepted.
+
+## Code review and rollout checkpoint
+
+The final review against `b411be0` found no remaining Standards or Spec findings.
+The first Spec pass requested a mounted Studio navigation regression; commit
+`4ec5db3` adds it, then both final review axes cleared. Remediation commits are
+`50ea875`, `4b6abed`, and `4ec5db3`.
+
+The sanitized source stage was prepared at
+`/tmp/koetts-apphosting-acceptance-50ea875` with the pinned Node/npm declarations.
+Deployment was not attempted: the managed-cloud status tool was unavailable and
+`/etc/codex/network-policy.json` was absent, so cloud identity and egress readiness
+could not be established. Production remains paused. Deploy the reviewed frontend
+after cloud runtime readiness is available, then have the user repeat hosted direct
+entry and verify the pause denial.
