@@ -98,7 +98,6 @@ test("hosted create eligibility follows the current work selection", () => {
 test("the same idempotency intent maps to the same UUID32 upload token", () => {
   const key = "12345678-1234-4234-9234-123456789abc";
   assert.equal(hostedUpload.uploadTokenForIntent(key), "12345678123442349234123456789abc");
-  assert.equal(hostedUpload.uploadTokenForIntent(key), hostedUpload.uploadTokenForIntent(key));
 });
 
 test("hosted create idempotency fingerprint includes work identity while retrying same work remains stable", () => {

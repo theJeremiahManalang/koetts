@@ -25,19 +25,9 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
-test('hosted job updates use SSE rather than recurring status requests', () => {
-  const source = fs.readFileSync(path.resolve(__dirname, '../features/studio/studio-workspace.tsx'), 'utf8');
-  const start = source.indexOf('async function watchHosted(');
-  const end = source.indexOf('\n  useEffect(', start);
-  assert.notEqual(start, -1);
-  const hostedWatch = source.slice(start, end);
-  assert.match(source, /if \(hosted\) return watchHosted\(job, operation\)/);
-  assert.match(hostedWatch, /\/api\/workflow\/events\?job=/);
-  assert.doesNotMatch(hostedWatch, /\/api\/workflow\?job=/);
-  assert.match(hostedWatch, /finishOperation\(state, job, operation\)/);
-});
-
 for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection', 'hosted-stream']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : surface === 'hosted-stream' ? 'hosted Studio reconnects a saved operation by SSE without polling or resubmitting' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const advance = async milliseconds => act(async () => { t.mock.timers.tick(milliseconds); });
   const initialWork = 'a'.repeat(32);
   const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${initialWork}&create=1` : ['hosted-selection', 'hosted-stream'].includes(surface) ? `http://localhost/?work=${initialWork}` : 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -53,7 +43,8 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
   let polls = 0;
   let jobStatus = 'running';
   let observedReconciliation = false;
-  let delayWorkResponse = false;
+  let pendingWorkResponse;
+  let releaseWork;
   let eventStreams = 0;
   let enqueuePosts = 0;
   const requestedUrls = [];
@@ -62,7 +53,7 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
     if (String(url) === '/api/workflow' && options.method === 'POST') enqueuePosts++;
     if (String(url).startsWith('/api/shared/admin?work_id=')) {
       const id = new URL(String(url), 'http://localhost').searchParams.get('work_id');
-      if (delayWorkResponse) await new Promise(resolve => setTimeout(resolve, 25));
+      if (pendingWorkResponse) await pendingWorkResponse;
       return { ok: true, json: async () => ({ work: [{ id, title: id === initialWork ? 'Requested story' : 'Second request', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
     }
     if (surface === 'hosted-stream' && String(url).startsWith('/api/workflow/events?job=')) {
@@ -96,7 +87,7 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
   const Page = load(surface === 'request' ? '../features/requests/request-page.tsx' : '../features/studio/studio-workspace.tsx', mocks, cache).default;
   const { createRoot } = require('react-dom/client');
   const root = createRoot(document.getElementById('root'));
-  t.after(async () => { await act(async () => root.unmount()); if (surface === 'polling') await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); }); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  t.after(async () => { await act(async () => root.unmount()); await advance(1000); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
   const app = () => React.createElement(AuthProvider, null, React.createElement(Page, ['hosted-selection', 'hosted-stream'].includes(surface) ? { hosted: true } : {}));
   await act(async () => root.render(app()));
   const emit = user => { firebaseAuth.currentUser = user; return observer(user); };
@@ -109,7 +100,6 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
   if (surface === 'work-prepare') localStorage.setItem('manga-tts-project', 'unrelated-saved-project');
   await act(async () => emit(user('alice')));
   if (surface === 'hosted-selection') {
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     const images = document.querySelector('input[aria-label="Upload manga images"]');
     await act(async () => {
       Object.defineProperty(images, 'files', { configurable: true, value: [new dom.window.File(['page'], 'page.png', { type: 'image/png' })] });
@@ -122,26 +112,22 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
     assert.equal(create().disabled, true, 'removing the work query disables creation immediately');
     assert.match(document.body.textContent, /No chapter work selected/);
     window.history.pushState(null, '', `/?work=${'b'.repeat(32)}`);
-    delayWorkResponse = true;
+    pendingWorkResponse = new Promise(resolve => { releaseWork = resolve; });
     await act(async () => root.render(app()));
     assert.equal(create().disabled, true, 'a different unverified work never inherits prior eligibility');
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     assert.equal(create().disabled, true, 'creation stays disabled while the new work is still loading');
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
-    delayWorkResponse = false;
+    await act(async () => releaseWork());
+    pendingWorkResponse = null;
     assert.equal(create().disabled, false, 'the newly verified current work enables creation');
     assert.match(document.body.textContent, /Second request · Chapter 3/);
     return;
   }
   if (surface === 'hosted-stream') {
-    await act(async () => {
-      for (let elapsed = 0; elapsed < 3000 && eventStreams < 2; elapsed += 25) await new Promise(resolve => setTimeout(resolve, 25));
-    });
+    await advance(1000);
     assert.equal(eventStreams, 2, 'a disconnected stream reconnects to current operation state');
     assert.equal(requestedUrls.some(url => url.startsWith('/api/workflow?job=')), false);
     assert.equal(localStorage.getItem('manga-tts-job'), null);
     assert.equal(enqueuePosts, 0, 'reconnecting status must not enqueue another operation');
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     return;
   }
   if (surface === 'work-prepare') {
@@ -159,20 +145,20 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-s
     pending = new Promise(resolve => { release = resolve; });
     let refresh;
     await act(async () => { refresh = emit(user('alice')); });
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    await advance(1100);
     fail = true;
     await act(async () => { release(); await refresh; });
     const pausedPolls = polls;
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    await advance(1100);
     assert.equal(polls, pausedPolls, 'verification failure must pause protected requests');
     pending = null;
     fail = false;
     await act(async () => emit(user('alice')));
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    await advance(1100);
     assert.ok(polls > pausedPolls, 'reauthentication must resume the existing operation without reload');
     assert.ok(localStorage.getItem('manga-tts-job'), 'running operation recovery record must remain');
     jobStatus = 'reconciliation_required';
-    await act(async () => { for (let elapsed = 0; elapsed < 2000 && !observedReconciliation; elapsed += 50) await new Promise(resolve => setTimeout(resolve, 50)); });
+    await advance(1100);
     assert.ok(observedReconciliation, 'worker reconciliation state must be observed before checking retained intent');
     assert.ok(localStorage.getItem('manga-tts-pending-operation')?.includes('retained-intent'), 'uncertain outcome must retain its idempotency lookup key');
     return;

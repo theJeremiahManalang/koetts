@@ -615,12 +615,23 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_cold_start_initializes_firebase_once(self):
         import asyncio
         import threading
-        import time
         from unittest.mock import patch
 
         from manga_worker.http_auth import CredentialBoundary
 
         initialized = []
+        second_lock_attempt = threading.Event()
+        lock = threading.Lock()
+        attempts = 0
+        class ObservedLock:
+            def __enter__(self):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 2:
+                    second_lock_attempt.set()
+                lock.acquire()
+            def __exit__(self, *args):
+                lock.release()
         start = threading.Barrier(2)
         app = object()
 
@@ -630,7 +641,7 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             return app
 
         def initialize_app(**kwargs):
-            time.sleep(0.03)
+            self.assertTrue(second_lock_attempt.wait(2), "Second verifier must contend during initialization")
             if initialized:
                 raise ValueError("Already exists")
             initialized.append(kwargs)
@@ -641,7 +652,7 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             boundary = CredentialBoundary(BoundaryConfig("test-project", "https://api", {}))
             return boundary._verify_user("token", False)
 
-        with patch("firebase_admin.get_app", side_effect=get_app), patch(
+        with patch("manga_worker.http_auth._FIREBASE_APP_LOCK", ObservedLock()), patch("firebase_admin.get_app", side_effect=get_app), patch(
             "firebase_admin.initialize_app", side_effect=initialize_app
         ), patch("firebase_admin.auth.verify_id_token", return_value={"sub": "reader"}):
             results = await asyncio.gather(asyncio.to_thread(verify), asyncio.to_thread(verify))

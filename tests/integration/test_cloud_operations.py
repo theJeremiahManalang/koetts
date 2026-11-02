@@ -165,20 +165,28 @@ class FirestoreOperationStoreTests(unittest.TestCase):
     def test_watch_public_delivers_initial_and_changed_operation_state(self):
         operation = self.enqueue("status-stream")
         received = []
-        ready = threading.Event()
+        changed_condition = threading.Condition()
         def changed(value, version):
-            received.append((value, version))
-            ready.set()
+            with changed_condition:
+                received.append((value, version))
+                changed_condition.notify_all()
+        def wait_for(predicate):
+            with changed_condition:
+                self.assertTrue(changed_condition.wait_for(
+                    lambda: any(predicate(value) for value, _ in received if value), timeout=5,
+                ), f"Firestore listener did not deliver expected state: {received}")
         initial, initial_version, watcher = self.store.watch_public(operation.operation_id, changed)
         self.addCleanup(watcher.unsubscribe)
+        self.assertEqual(initial["id"], operation.operation_id)
         self.assertEqual(initial["status"], "queued")
-        self.assertTrue(ready.wait(5), "Firestore listener must send its initial snapshot")
+        wait_for(lambda value: value["status"] == "queued")
         claim = self.store.claim(operation.operation_id)
         self.store.heartbeat(claim, progress={"message": "Rendering"})
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and not any(value and value["message"] == "Rendering" for value, _ in received):
-            time.sleep(0.01)
-        self.assertTrue(any(value and value["message"] == "Rendering" for value, _ in received))
+        wait_for(lambda value: value["message"] == "Rendering")
+        self.store.complete(claim, {"segments": ["segment-1"]})
+        wait_for(lambda value: value["status"] == "complete")
+        terminal = next(value for value, _ in received if value and value["status"] == "complete")
+        self.assertEqual(terminal["result"], {"segments": ["segment-1"]})
         self.assertTrue(all(version >= initial_version for _, version in received))
 
     def test_dispatch_signal_stage_is_validated_and_ttl_bound(self):

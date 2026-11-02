@@ -3,10 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const ts = require('typescript');
 
-function load(file, { denied = null } = {}) {
+function load(file, { denied = null, hosted = true, failure } = {}) {
   const calls = [];
   const api = {};
-  class PrivateApiError extends Error {}
+  class PrivateApiError extends Error {
+    constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+  }
   const principal = { kind: 'firebase', uid: 'admin', project_id: 'demo-hosted' };
   const compiled = ts.transpileModule(fs.readFileSync(require.resolve(file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -18,10 +20,10 @@ function load(file, { denied = null } = {}) {
       trustedSessionRequest: request => request.headers.get('origin') === 'https://studio.example',
     };
     if (name.endsWith('/private-api')) return {
-      hostedMode: () => true,
+      hostedMode: () => hosted,
       PrivateApiError,
       privateJson: async (request, endpoint, init) => { calls.push({ request, endpoint, init }); return { id: 'operation', status: 'queued' }; },
-      privateApi: async (request, endpoint, init) => { calls.push({ request, endpoint, init }); return new Response('event: operation\ndata: {}\n\n', { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'private, no-store' } }); },
+      privateApi: async (request, endpoint, init) => { calls.push({ request, endpoint, init }); if (failure) throw new PrivateApiError(failure.status, failure.code, failure.message); return new Response('event: operation\ndata: {}\n\n', { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'private, no-store' } }); },
       proxyPrivate: async (request, endpoint) => { calls.push({ request, endpoint }); return new Response('image', { status: 206, headers: { 'Content-Type': 'image/png' } }); },
     };
     if (name.endsWith('/workflow')) return {
@@ -110,4 +112,43 @@ test('hosted assets stream through private service after admin authorization', a
   const denied = load('../app/api/asset/route.ts', { denied: 403 });
   assert.equal((await denied.GET(new Request(url))).status, 403);
   assert.equal(denied.calls.length, 0);
+});
+
+for (const status of [401, 403]) test(`processing endpoints reject HTTP ${status} before parsing or backend work`, async () => {
+  for (const [file, method] of [
+    ['workflow', 'GET'], ['workflow', 'POST'], ['asset', 'GET'],
+    ['workflow/events', 'GET'], ['workflow/upload', 'PUT'],
+  ]) {
+    const api = load(`../app/api/${file}/route.ts`, { denied: status });
+    const response = await api[method](new Request(`https://studio.example/api/${file}`, { method }));
+    assert.equal(response.status, status, `${method} ${file}`);
+    assert.equal(api.calls.length, 0, `${method} ${file} must not contact the backend`);
+  }
+});
+
+test('operation stream rejects absent or malformed identifiers without contacting backend', async () => {
+  for (const query of ['', '?job=bad', '?job=' + 'A'.repeat(32), '?job=' + 'a'.repeat(33)]) {
+    const api = load('../app/api/workflow/events/route.ts');
+    const response = await api.GET(new Request('https://studio.example/api/workflow/events' + query));
+    assert.equal(response.status, 400);
+    assert.equal(api.calls.length, 0);
+  }
+  const local = load('../app/api/workflow/events/route.ts', { hosted: false });
+  assert.equal((await local.GET(new Request('https://studio.example/api/workflow/events?job=' + 'a'.repeat(32)))).status, 503);
+  assert.equal(local.calls.length, 0);
+});
+
+test('operation stream preserves typed backend errors and forwards cancellation', async () => {
+  const request = new Request('https://studio.example/api/workflow/events?job=' + 'a'.repeat(32));
+  const failure = { status: 429, code: 'production_paused', message: 'Hosted production is paused' };
+  const failed = load('../app/api/workflow/events/route.ts', { failure });
+  const response = await failed.GET(request);
+  assert.equal(response.status, failure.status);
+  assert.deepEqual(await response.json(), { error: failure.message, code: failure.code });
+  const controller = new AbortController();
+  const incoming = new Request(request, { signal: controller.signal });
+  const api = load('../app/api/workflow/events/route.ts');
+  await api.GET(incoming);
+  controller.abort();
+  assert.equal(api.calls[0].init.signal.aborted, true, 'browser disconnect reaches the private request');
 });

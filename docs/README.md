@@ -54,6 +54,7 @@ initial and final regional placement.
 | Understand implemented boundaries | [Architecture](ARCHITECTURE.md) |
 | Review accepted product/persistence contracts | [Target design](TARGET_DESIGN.md) |
 | Understand durable cloud-job rationale | [ADR 0001](adr/0001-hosted-execution.md) |
+| Review test quality and CI audit evidence | [Test/CI audit](resources/test-ci-audit.md) |
 | Follow contribution and code-review conventions | [Contributing](../CONTRIBUTING.md) |
 | Understand earlier S0–S5 scope definitions | [Architecture alignment plan](plans/architecture-alignment-plan.md), [scope assignment prompt](plans/architecture-alignment-prompt.md) |
 | Evaluate optional ADK/managed-agent adoption | [Gemini agent research](research/gemini-agent-gcp-research.md) |

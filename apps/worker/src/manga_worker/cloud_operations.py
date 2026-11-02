@@ -695,13 +695,14 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             marker = self.root.collection("dispatch_recovery").document(stage)
 
             def repair(tx):
+                bound = self._binding(tx)
                 current = marker.get(transaction=tx)
                 last = current.to_dict().get("signaled_at", 0) if current.exists else 0
                 if not _valid_time(last) or now - last < 60:
-                    return False
+                    return False, bound
                 self._signal_dispatch(tx, stage, "queued", now)
                 tx.set(marker, {"signaled_at": now})
-                return True
+                return True, bound
 
             if self._run(repair, bind_if_missing=True):
                 emitted += 1

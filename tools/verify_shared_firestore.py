@@ -66,6 +66,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument("--repeat", type=int, choices=range(1, 11), default=1)
+    parser.add_argument("--log-file", type=Path, help="Retain emulator output outside the disposable runtime")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     if not shutil.which("java"):
@@ -75,7 +76,8 @@ def main(argv=None):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     with tempfile.TemporaryDirectory(prefix="manga-firestore-") as directory:
-        log = Path(directory) / "emulator.log"
+        log = args.log_file.resolve() if args.log_file else Path(directory) / "emulator.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("w") as output:
             emulator = subprocess.Popen(["java", "-jar", str(jar), "--host=127.0.0.1", f"--port={port}"],
                                         cwd=directory, stdout=output, stderr=subprocess.STDOUT)

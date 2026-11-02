@@ -9,14 +9,14 @@ function compile() {
   }).outputText;
 }
 
-function loadRoute({ key = "caller-intent", apiFailure } = {}) {
+function loadRoute({ key = "caller-intent", apiFailure, denied } = {}) {
   const route = {};
   const calls = [];
   class PrivateApiError extends Error {
     constructor(status, code, message) { super(message); this.status = status; this.code = code; }
   }
   new Function("exports", "require", compile())(route, name => {
-    if (name.endsWith("/require-admin")) return { requireAdmin: async () => null, trustedSessionRequest: () => true };
+    if (name.endsWith("/require-admin")) return { requireAdmin: async () => denied ? new Response(null, { status: denied }) : null, trustedSessionRequest: () => true };
     if (name.endsWith("/workflow")) return {
       id: () => assert.fail("Projectless OCR must not allocate a random identity on retry"),
       validId: value => { if (!/^[a-f0-9]{32}$/.test(value)) throw new Error("Invalid identifier"); return value; },
@@ -102,4 +102,11 @@ test("hosted extraction bounds actual multipart bytes and forwards only sanitize
   const response = await failing.route.POST(request());
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "Private service unavailable.", code: "private_api_unavailable" });
+});
+
+for (const status of [401, 403]) test(`extraction rejects HTTP ${status} before consuming uploads`, async () => {
+  const { route, calls } = loadRoute({ denied: status });
+  const response = await route.POST(new Request('https://app.example/api/extract', { method: 'POST', body: 'not multipart' }));
+  assert.equal(response.status, status);
+  assert.equal(calls.length, 0);
 });

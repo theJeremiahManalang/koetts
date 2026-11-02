@@ -317,3 +317,37 @@ reviewed cloud plan/apply authorization and hosted acceptance under existing gat
 Focused web checks: 10 tests passed with `--test-isolation=none`; default isolated
 runner failed without useful diagnostics. The existing source assertion was
 updated to follow shared terminal handling. No claim of a full-suite pass.
+
+## Approved test/CI audit and remediation (2026-11-02)
+
+User approved audit, workflow/test refactoring, contract additions and local
+verification against baseline `7e9e908`. Inventory: one workflow, 55 Python files
+under tests including helpers, 25 web test files; no other tracked test trees.
+Report: docs/resources/test-ci-audit.md, linked from docs/README.md.
+
+Changed .github/workflows/ci.yml: fast preflight, parallel five-suite acceptance
+matrix, preserved final check gate, PR concurrency cancellation, existing npm/uv
+caches, emulator jar cache, explicit Java21 and retained failure logs. The existing
+checksum-pinned disposable emulator supplies backing service; container omitted to
+avoid duplicating readiness/lifecycle. tools/verify_shared_firestore.py accepts
+--log-file to preserve diagnostics. Web tests remove redundant source-text checks
+and tautology, use fake timers/deferred responses, and add parameterized endpoint
+and SSE authorization/validation/error/cancellation contracts. Python tests use
+condition notifications and explicit contention signals, extend real listener
+terminal-result coverage, add SSE denial/missing/error/cleanup contracts, and remove
+dead mock setup. Legitimate optional skips and bounded condition polling remain.
+
+Emulator execution exposed real bare-bool transaction result in
+cloud_operations.repair_dispatch_signals. Both branches now return (result,bound).
+Existing integration test covers repair and rate limiting; no duplicate added.
+Independent Standards review of CI/tools/web and Spec review of tests plus
+follow-up CI/runtime review found zero remaining findings.
+
+Final pinned Node22.22.3/npm10.9.8 checks: npm run check PASS (347 Python/97
+prerequisite skips,104 web,lint,typecheck,build); test:http PASS; test:firestore
+PASS all108 after initial failure/fix; verify_fresh_checkout.py PASS. Existing
+Next dynamic filesystem tracing warning remains. Logs /tmp/manga-audit-final-check.log,
+/tmp/manga-audit-http.log, /tmp/manga-audit-firestore-final.log,
+/tmp/manga-audit-onboarding.log. Sandbox loopback/uv cache limits required escalated
+local runs; no cloud/provider calls, production resume or deployment occurred.
+No GitHub-hosted run performed; next action is user review/commit/push and remote CI.

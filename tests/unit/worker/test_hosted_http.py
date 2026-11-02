@@ -75,7 +75,6 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
         auth_threads = []
         coordinator = Mock()
         coordinator.dispatch_signal.side_effect = lambda *_: (dispatch_threads.append(threading.get_ident()) or {"dispatched": 1, "deferred": 0, "uncertain": 0})
-        coordinator.dispatch_signal.return_value = {"dispatched": 1, "deferred": 0, "uncertain": 0}
         config = BoundaryConfig(self.config.project_id, self.config.audience, self.config.permissions, "cloud")
         def service(token):
             auth_threads.append(threading.get_ident())
@@ -125,6 +124,32 @@ class HostedHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"status":"complete"', response.text)
         watcher.unsubscribe.assert_called_once_with()
         self.assertEqual(invalid.status_code, 400)
+
+    async def test_operation_stream_authentication_and_missing_operation_contracts(self):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(self.app()), base_url="https://private.example") as client:
+            for headers, status in (({}, 401), (self.headers(), 403), (self.headers("revoked"), 401)):
+                with self.subTest(status=status, headers=headers):
+                    response = await client.get("/operations/" + "a" * 32 + "/events", headers=headers)
+                    self.assertEqual(response.status_code, status)
+                    self.backend.watch_operation.assert_not_called()
+            self.backend.watch_operation.side_effect = FileNotFoundError("missing")
+            missing = await client.get("/operations/" + "a" * 32 + "/events", headers=self.headers("admin"))
+            self.assertEqual(missing.status_code, 404)
+            self.assertIn("no-store", missing.headers["cache-control"])
+
+    async def test_invalid_listener_update_emits_control_event_and_unsubscribes(self):
+        watcher = Mock()
+        initial = {"id": "a" * 32, "project": "b" * 32, "status": "running", "message": "Working"}
+        def watch_operation(_, callback):
+            callback(None, None)
+            return initial, datetime(2026, 11, 2, tzinfo=UTC), watcher
+        self.backend.watch_operation.side_effect = watch_operation
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(self.app()), base_url="https://private.example") as client:
+            response = await client.get(f"/operations/{initial['id']}/events", headers=self.headers("admin"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: stream-error\ndata: {}\n\n", response.text)
+        self.assertNotIn('"status":"complete"', response.text)
+        watcher.unsubscribe.assert_called_once_with()
 
     async def test_operation_stream_closes_when_admin_is_revoked_midstream(self):
         watcher = Mock()
