@@ -150,6 +150,12 @@ variable "billing_account_id" {
   }
 }
 
+variable "coordinator_paused" {
+  description = "Keep reconciliation paused until explicitly enabled for hosted acceptance."
+  type        = bool
+  default     = true
+}
+
 variable "budget_name" {
   description = "New Cloud Billing budget display name and stable notification budget ID."
   type        = string

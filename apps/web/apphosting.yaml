@@ -4,7 +4,7 @@ runConfig:
   cpu: 1
   memoryMiB: 512
   minInstances: 0
-  maxInstances: 2
+  maxInstances: 1
   concurrency: 40
 env:
   - variable: MANGA_EXECUTION_MODE
@@ -15,6 +15,9 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: MANGA_MAINTENANCE_MODE
+    value: "0"
+    availability: [RUNTIME]
   - variable: FIREBASE_PROJECT_ID
     value: koetts-9bf7f
     availability: [RUNTIME]

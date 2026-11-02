@@ -85,6 +85,65 @@ class CloudOperatorTests(unittest.TestCase):
         client.close.assert_called_once_with()
         self.assertEqual(json.loads(output.call_args.args[0])["mode"], "executed")
 
+    def test_resolve_operation_plans_cloud_resolution_without_connecting(self):
+        environment = {"MANGA_CLOUD_REGION": "us-central1", "MANGA_MAGI_JOB": "koetts-magi",
+                       "MANGA_PIPELINE_JOB": "koetts-pipeline"}
+        with patch.dict("os.environ", environment, clear=False), \
+                patch("manga_worker.cloud_operator._connect") as connect, \
+                patch("builtins.print") as output:
+            self.assertEqual(main(["resolve-operation", "--operation-id", "a" * 32,
+                                   "--resolution", "retry", "--actor", "dev",
+                                   "--reason", "approved", "--evidence", "record:1"]), 0)
+        connect.assert_not_called()
+        plan = json.loads(output.call_args.args[0])
+        self.assertEqual(plan["action"], "resolve-operation")
+        self.assertTrue(plan["changes_cloud_state"])
+        self.assertEqual(plan["arguments"]["resolution"], "retry")
+
+    def test_resolve_operation_rejects_bad_id_before_cloud_access(self):
+        with patch("manga_worker.cloud_operator.CloudSettings.from_environment") as config, \
+                patch("manga_worker.cloud_operator._connect") as connect, \
+                patch("builtins.print") as output:
+            self.assertEqual(main(["resolve-operation", "--operation-id", "bad",
+                                   "--resolution", "retry", "--actor", "dev",
+                                   "--reason", "approved", "--evidence", "record:1",
+                                   "--execute"]), 2)
+        config.assert_not_called()
+        connect.assert_not_called()
+        self.assertIn("Invalid hosted operation ID", json.loads(output.call_args.args[0])["error"])
+
+    def test_resolve_operation_execute_uses_hosted_dispatch_reconciler(self):
+        settings = unittest.mock.Mock(project="demo", dataset="pilot", bucket="bucket",
+                                      namespace="pilot/artifacts")
+        client = unittest.mock.Mock()
+        ledger = unittest.mock.Mock()
+        operations = unittest.mock.Mock()
+        jobs = unittest.mock.Mock()
+        operation = unittest.mock.Mock()
+        operation.public.return_value = {"status": "queued"}
+        dispatcher = unittest.mock.Mock()
+        dispatcher.resolve_absent_dispatch.return_value = operation
+        environment = {"MANGA_CLOUD_REGION": "us-central1", "MANGA_MAGI_JOB": "koetts-magi",
+                       "MANGA_PIPELINE_JOB": "koetts-pipeline"}
+        with patch.dict("os.environ", environment, clear=False), \
+                patch("manga_worker.cloud_operator.CloudSettings.from_environment", return_value=settings), \
+                patch("manga_worker.cloud_operator._connect", return_value=(client, ledger)), \
+                patch("manga_worker.cloud_operations.FirestoreOperationStore", return_value=operations), \
+                patch("manga_worker.cloud_jobs.CloudRunJobs", return_value=jobs) as jobs_factory, \
+                patch("manga_worker.cloud_jobs.CloudJobDispatcher", return_value=dispatcher) as dispatcher_factory, \
+                patch("builtins.print") as output:
+            self.assertEqual(main(["resolve-operation", "--operation-id", "a" * 32,
+                                   "--resolution", "retry", "--actor", "dev",
+                                   "--reason", "approved", "--evidence", "record:1",
+                                   "--execute"]), 0)
+        jobs_factory.assert_called_once_with("demo", "us-central1", {
+            "magi": "koetts-magi", "pipeline": "koetts-pipeline",
+        })
+        dispatcher_factory.assert_called_once_with(operations, jobs)
+        dispatcher.resolve_absent_dispatch.assert_called_once_with("a" * 32, "retry")
+        client.close.assert_called_once_with()
+        self.assertEqual(json.loads(output.call_args.args[0])["result"]["operation"], {"status": "queued"})
+
     def test_invalid_settlement_job_names_reject_before_any_cloud_client(self):
         settings = unittest.mock.Mock()
         environment = {"MANGA_CLOUD_REGION": "us-east4", "MANGA_MAGI_JOB": "bad/job",

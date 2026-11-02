@@ -76,7 +76,10 @@ class CredentialBoundary:
         from google.oauth2 import id_token
 
         return id_token.verify_oauth2_token(
-            token, GoogleRequest(), audience=self.config.audience
+            token, GoogleRequest(), audience=[
+                self.config.audience,
+                self.config.audience.rstrip("/") + "/internal/operation-events",
+            ]
         )
 
     def _verify_user(self, token, session):
@@ -104,12 +107,16 @@ class CredentialBoundary:
         try:
             claims = self.service_verifier(token)
             subject = claims.get("sub")
+            audiences = {self.config.audience}
+            # Eventarc's managed push subscription signs for the full destination URL.
+            if action == "operation-event":
+                audiences.add(self.config.audience.rstrip("/") + "/internal/operation-events")
             if (
                 not isinstance(subject, str)
                 or not subject
                 or claims.get("iss")
                 not in {"accounts.google.com", "https://accounts.google.com"}
-                or claims.get("aud") != self.config.audience
+                or claims.get("aud") not in audiences
             ):
                 raise ValueError("Invalid service claims")
         except Exception:  # noqa: BLE001 - Credential SDK errors must fail closed without leaking details.

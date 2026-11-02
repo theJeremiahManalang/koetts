@@ -127,6 +127,17 @@ operator supplied ticket, billing export, invoice, or execution review reference
 The CLI does not run Cloud Run jobs, change IAM, alter Billing budgets, or deploy
 services.
 
+For an interactive cap editor, run `uv run --locked python
+tools/manage_hosted_budget.py --actor ACCOUNT --reason REASON --evidence RECORD`
+from the repository root. Enter amounts in USD; the tool validates stage
+relationships, writes a mode-600 caps file under `results/hosted-budget/`, and
+prints the existing operator CLI plan. This default mode does not change Firestore.
+Review the plan and saved caps file. Apply that reviewed file with the existing
+operator CLI by adding `--execute`, or rerun the wizard using `--stage-caps FILE`
+to reuse the reviewed file and adding `--execute`. The wizard never starts jobs
+or resumes production. Provider allowance and stage call caps remain distinct;
+the combined per-stage operation caps must fit within the overall allowance.
+
 Use a dedicated human operator identity and custom IAM role. Grant Firestore
 entity `get`, `list`, `create`, and `update` only as needed for ledger reads and
 audited writes, plus `run.executions.get` for settlement checks. Do not grant
@@ -165,8 +176,17 @@ and paused schedules contained admission, with provider allowance and call caps 
 then explicitly paused production. A real October billing interval was subsequently
 recorded. Its preliminary reported zero is not a final cost reconciliation.
 
-Both stages currently hold USD 5 infrastructure caps with no provider calls enabled.
-These are blocked setup reservations, not measured operating estimates. Do not resume
-production using these setup caps. Replace them with measured operation/call bounds
-and explicitly configure the user-controlled provider allowance before manual hosted
-generation. Never infer paid-call authorization from billing initialization.
+At deployment, both stages held USD 5 infrastructure caps with provider calls
+disabled. Those were setup reservations, not measured operating estimates.
+
+## Manual hosted acceptance — 2026-11-02
+
+The authorized acceptance configuration keeps the USD 5 overall provider allowance
+and sets the pipeline operation cap and per-call cap to USD 1, with one provider
+call per operation. Magi and pipeline infrastructure reservations are USD 1 per
+operation. The prior Magi operation completed and has an immutable settlement; its
+USD 5 infrastructure reservation remains held until billing reports reconcile.
+The ledger is active. The user initiates paid calls manually; do not start Gemini
+calls as part of service checks.
+These limits apply to the small manual test only and do not establish final charges
+or production operating limits.

@@ -125,3 +125,27 @@ The reviewed error fix is deployed as `koetts-api-00003-fx8`, built from commit
 changed only the API image. Ready status and digest were verified afterward;
 the ledger remains paused with provider allowance zero and both schedules PAUSED.
 See the [phase 5 review record](resources/phase-5-code-review.md).
+
+## Hosted manual test readiness — 2026-11-02
+
+The user authorized the agent to enable services and prepare limits; the user
+will test the UI and run paid Gemini calls manually. Firestore reconciliation
+indexes are `READY`; the coordinator IAM role includes `run.jobs.run`; the
+coordinator scheduler is enabled and returned HTTP 200. Artifact GC remains
+paused. API revision `koetts-api-00003-v4r` is healthy at 100% traffic and the
+Firebase App Hosting URL returned HTTP 200.
+
+The ledger is active with a USD 5 provider allowance, USD 1 pipeline operation and
+per-call caps, and one provider call per operation. Each pipeline and Magi
+operation reserves USD 1 infrastructure. Provider used/reserved is zero. After an
+exhaustive empty execution lookup, the user-authorized retry completed on Magi
+execution `koetts-magi-jjqts`; operation `4978815938fa413e8e8307015b11dbb6` is
+complete at attempt 2 and settled. Its USD 5 infrastructure reservation remains
+held for delayed billing reconciliation. No Gemini call was made. The generated
+project is `3cd0b8bab57f452a90a6df1265a73733`, revision
+`46e2b60533144cf4aaa4ca49530d49b7`. Private logs are under
+`results/hosted-test-enable-20261102/logs-20261102T114930Z`. Manual project review,
+planning, script/cast review, synthesis, and playback remain pending. The
+maintenance page is implemented in source but not deployed; the hosted frontend
+remains available for testing. The legacy `koetts-s3-api` service also remains
+live in `us-east4`; the decommission guide includes it after checking for clients.

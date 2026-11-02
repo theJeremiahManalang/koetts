@@ -68,6 +68,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 350px; overflo
 @media (max-width: 480px) { .site-header { padding: 18px; min-height: 84px; } .brand-icon { display: none; } .brand-title { font-size: 20px; } main { padding: 26px 16px; } .reader-heading { flex-wrap: wrap; gap: 16px; } .reader-heading p { line-height: 1.7; } .art-card { padding: 15px; } .art-stage { min-height: 330px; } .reader-footer { flex-direction: column; gap: 5px; } }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 
+.maintenance-page { min-height: 100svh; display: grid; place-items: center; padding: 24px; }
+.maintenance-card { width: min(100%, 560px); padding: clamp(28px, 6vw, 56px); border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.maintenance-card h1 { margin-top: 24px; }
+.maintenance-card p { color: var(--muted); line-height: 1.8; }
+
 /* Compact shared header and independently sized reader cards. */
 .site-header { min-height: 64px; padding-block: 10px; }
 .brand-icon { width: 36px; height: 36px; font-size: 27px; }

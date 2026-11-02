@@ -270,6 +270,22 @@ class FirestoreOperationStoreTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, "retry_limit")
                 self.assertEqual(self.store.resolve_uncertain(operation.operation_id, "fail").status, "failed")
 
+    def test_absent_cloud_run_start_can_be_resolved_only_from_submitting_uncertain_attempt(self):
+        operation = self.enqueue("absent-dispatch")
+        claim = self.store.claim(operation.operation_id, now=10)
+        self.assertTrue(self.store.begin_dispatch(claim))
+        self.store.mark_uncertain(claim, "Cloud Run start returned HTTPError")
+
+        resolved = self.store.resolve_dispatch_absent(operation.operation_id, "retry")
+        attempt = self.store.attempt(claim)
+
+        self.assertEqual(resolved.status, "queued")
+        self.assertEqual(attempt["state"], "operator_retry")
+        self.assertEqual(attempt["dispatch_state"], "not_submitted")
+        self.assertTrue(attempt["execution_stopped_confirmed"])
+        self.assertIsNone(attempt["execution_name"])
+        self.assertIsNone(self.store._slot_ref(operation.stage, 1).get().to_dict())
+
     def test_payload_is_bounded_before_enqueue(self):
         with self.assertRaises(ValueError):
             self.enqueue("large", payload={"data": "x" * (710 * 1024)})

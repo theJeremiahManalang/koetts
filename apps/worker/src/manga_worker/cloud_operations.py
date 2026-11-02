@@ -306,7 +306,8 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                 value["worker_registered"] and (value["execution_name"] is None or value["dispatch_state"] != "started")
             )
             or (value["dispatch_state"] == "started" and not value["worker_registered"])
-            or (value["execution_stopped_confirmed"] and value["execution_name"] is None)
+            or (value["execution_stopped_confirmed"] and value["execution_name"] is None
+                and value["dispatch_state"] != "not_submitted")
             or (operation.status == "running" and value["state"] != "running")
             or (operation.status == "reconciliation_required" and value["state"] != "uncertain")
             or (operation.status == "complete" and value["state"] != "complete")
@@ -994,6 +995,13 @@ class FirestoreOperationStore(_FirestoreHostedStore):
         return self._run(operation, bind_if_missing=True)
 
     def resolve_uncertain(self, operation_id, action):
+        return self._resolve_uncertain(operation_id, action, absent_execution=False)
+
+    def resolve_dispatch_absent(self, operation_id, action):
+        """Resolve a lost start only after Cloud Run execution absence was checked."""
+        return self._resolve_uncertain(operation_id, action, absent_execution=True)
+
+    def _resolve_uncertain(self, operation_id, action, *, absent_execution):
         if action not in {"fail", "retry"}:
             raise ValueError("Choose fail or retry")
         now = time.time()
@@ -1012,7 +1020,16 @@ class FirestoreOperationStore(_FirestoreHostedStore):
             attempt_ref = ref.collection("attempts").document(str(op.fence))
             attempt_snap = attempt_ref.get(transaction=tx)
             attempt = self._attempt(attempt_snap, active, claim)
-            if attempt.get("execution_stopped_confirmed") is not True:
+            if absent_execution:
+                if (attempt["execution_name"] is not None
+                        or attempt["dispatch_state"] != "submitting"
+                        or attempt["worker_registered"]
+                        or attempt["execution_stopped_confirmed"]
+                        or op.provider_outcome_pending):
+                    raise OperationConflict(
+                        "execution_live", "Attempt is not an unresolved, unregistered Cloud Run start."
+                    )
+            elif attempt.get("execution_stopped_confirmed") is not True:
                 raise OperationConflict(
                     "execution_live", "Cloud Run execution must be confirmed stopped before reconciliation."
                 )
@@ -1034,7 +1051,7 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                         "updated_at": now,
                     },
                 )
-                tx.update(attempt_ref, {"state": "operator_failed", "ended_at": now})
+                attempt_updates = {"state": "operator_failed", "ended_at": now}
             else:
                 updated = replace(
                     op,
@@ -1056,7 +1073,13 @@ class FirestoreOperationStore(_FirestoreHostedStore):
                         "updated_at": now,
                     },
                 )
-                tx.update(attempt_ref, {"state": "operator_retry", "ended_at": now})
+                attempt_updates = {"state": "operator_retry", "ended_at": now}
+            if absent_execution:
+                attempt_updates.update({
+                    "dispatch_state": "not_submitted",
+                    "execution_stopped_confirmed": True,
+                })
+            tx.update(attempt_ref, attempt_updates)
             tx.delete(slot_ref)
             tx.delete(project_ref)
             self._signal_dispatch(tx, op.stage, "capacity_released", now)

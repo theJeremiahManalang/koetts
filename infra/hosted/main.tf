@@ -201,6 +201,7 @@ resource "google_project_iam_custom_role" "coordinator" {
     "run.executions.get",
     "run.executions.list",
     "run.jobs.get",
+    "run.jobs.run",
     "run.jobs.runWithOverrides",
   ]
 }
@@ -368,6 +369,10 @@ resource "google_cloud_run_v2_service" "api" {
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = true
+
+  scaling {
+    max_instance_count = 1
+  }
 
   template {
     service_account                  = google_service_account.api.email
@@ -686,7 +691,7 @@ resource "google_cloud_scheduler_job" "coordinator" {
   description = "One-minute hosted operation reconciliation and missed-signal repair."
   schedule    = "* * * * *"
   time_zone   = "Etc/UTC"
-  paused      = true
+  paused      = var.coordinator_paused
   http_target {
     uri         = "${var.canonical_api_url}/internal/coordinator"
     http_method = "POST"
@@ -703,7 +708,7 @@ resource "google_eventarc_trigger" "operation_dispatch" {
   name                    = "hosted-operation-dispatch"
   location                = var.firestore_database_location
   service_account         = google_service_account.operation_events.email
-  event_data_content_type = "application/json"
+  event_data_content_type = "application/protobuf"
 
   matching_criteria {
     attribute = "type"
@@ -759,6 +764,40 @@ resource "google_firestore_index" "queued_operation_stage" {
   }
   fields {
     field_path = "created_at"
+    order      = "ASCENDING"
+  }
+}
+
+resource "google_firestore_index" "queued_operation_recovery" {
+  project     = var.project_id
+  database    = var.firestore_database_id
+  collection  = "operations"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "status"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = "created_at"
+    order      = "ASCENDING"
+  }
+}
+
+resource "google_firestore_index" "operation_reconciliation" {
+  for_each = toset(["attempt_started_at", "lease_expires_at", "updated_at"])
+
+  project     = var.project_id
+  database    = var.firestore_database_id
+  collection  = "operations"
+  query_scope = "COLLECTION"
+
+  fields {
+    field_path = "status"
+    order      = "ASCENDING"
+  }
+  fields {
+    field_path = each.value
     order      = "ASCENDING"
   }
 }

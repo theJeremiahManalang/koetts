@@ -14,6 +14,7 @@ from urllib.parse import quote
 from manga_tts.operations import Operation, OperationClaim
 
 CloudExecutionStatus = Literal["active", "succeeded", "failed", "cancelled", "unknown"]
+DISPATCH_ABSENCE_GRACE_SECONDS = 300
 
 
 class CloudJobError(RuntimeError):
@@ -231,7 +232,8 @@ class CloudRunJobs:
             if token:
                 params["pageToken"] = token
             value = self._json(self._http().get(url, params=params, timeout=15))
-            executions = value.get("executions")
+            # Cloud Run omits empty repeated fields from protobuf JSON responses.
+            executions = value.get("executions", [])
             if not isinstance(executions, list):
                 raise CloudJobError("Cloud Run execution list response is incomplete")
             for execution in executions:
@@ -310,6 +312,33 @@ class CloudJobDispatcher:
                 if self._uncertain(claim, f"Cloud Run execution outcome needs reconciliation: {type(exc).__name__}."):
                     counts["uncertain"] += 1
         return counts
+
+    def resolve_absent_dispatch(self, operation_id: str, action: str, *, now=None):
+        """Resolve an old lost start only after an exhaustive empty execution lookup."""
+        if action not in {"fail", "retry"}:
+            raise ValueError("Choose fail or retry")
+        operation = self.store.get(operation_id)
+        if operation.status != "reconciliation_required" or operation.provider_outcome_pending:
+            raise CloudJobError("Operation is not safe for dispatch-only reconciliation")
+        current_time = time.time() if now is None else now
+        if current_time - operation.updated_at < DISPATCH_ABSENCE_GRACE_SECONDS:
+            raise CloudJobError("Wait before treating an absent execution as final")
+        claim = OperationClaim(operation.operation_id, operation.fence)
+        attempt = self.store.attempt(claim)
+        if (
+            attempt.get("state") != "uncertain"
+            or attempt.get("dispatch_state") != "submitting"
+            or attempt.get("execution_name") is not None
+            or attempt.get("worker_registered")
+            or attempt.get("execution_stopped_confirmed")
+        ):
+            raise CloudJobError("Attempt does not have an unresolved, unregistered start")
+        if self.jobs.find_executions(claim, operation.stage):
+            raise CloudJobError("A matching Cloud Run execution exists; resolution refused")
+        resolve_absent = getattr(self.store, "resolve_dispatch_absent", None)
+        if not callable(resolve_absent):
+            raise CloudJobError("Operation store does not support absent-execution resolution")
+        return resolve_absent(operation_id, action)
 
     def _dispatch(self, claim: OperationClaim) -> None:
         if not self.store.begin_dispatch(claim):

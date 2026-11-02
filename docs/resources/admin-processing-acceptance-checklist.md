@@ -99,3 +99,35 @@ actual spend separately in the GCP billing view.
   explicit decision and measured limits before any hosted processing trial.
 - Session revocation, authenticated playback, recovery, rollback, and final cost
   reconciliation remain outstanding acceptance evidence.
+
+## Authorized hosted processing follow-up — 2026-11-02
+
+The pass summary above is historical and records the earlier access-only test.
+This section records the next, separately authorized processing test.
+
+The prior uncertain operation `4978815938fa413e8e8307015b11dbb6` was retried after
+an exhaustive lookup found no matching execution. Magi execution
+`koetts-magi-jjqts` succeeded; operation attempt 2 is complete and settled. Its
+USD 5 infrastructure reservation remains held for delayed billing reconciliation.
+The project is `3cd0b8bab57f452a90a6df1265a73733`, revision
+`46e2b60533144cf4aaa4ca49530d49b7`. Logs are in the private
+`results/hosted-test-enable-20261102/logs-20261102T114930Z`. The hosted UI is at
+<https://koetts--koetts-9bf7f.us-east4.hosted.app>.
+
+Current admission limits: USD 5 overall provider allowance, USD 1 per pipeline
+operation, USD 1 per provider call, and at most one provider call per operation.
+The user initiates paid Gemini calls. The coordinator is enabled; artifact GC is
+paused. Capture a new test window, actual timestamps, operation IDs, and the
+matching API/Magi/Pipeline logs using the [hosted validation guide](hosted-manual-validation.md).
+
+| Check | Expected behavior | Actual behavior and timestamp | Result |
+| --- | --- | --- | --- |
+| Hosted sign-in and admin access | Approved administrator opens Studio and request dashboard. |  | Not run |
+| Project creation and retry safety | The original upload stays attached to one operation; no duplicate operation is created. | Operation retried after no matching execution was found; attempt 2 completed. | Pass |
+| CPU extraction | One Magi execution reaches a terminal result for the four-page sample and commits a project revision. | `koetts-magi-jjqts` succeeded; revision `46e2b60533144cf4aaa4ca49530d49b7` recorded. | Pass |
+| Visual project review | User confirms extracted panels and project data look correct in Studio. |  | Not run |
+| Planning | User starts one Gemini planning action; at most one provider call, charged within the USD 1 cap. |  | Not run |
+| Script/cast review | User reviews and records any cast/script decisions before synthesis. |  | Not run |
+| Short synthesis | User starts one short synthesis action; at most one provider call, charged within the USD 1 cap. |  | Not run |
+| Playback and retained output | Generated audio plays for the authenticated user and remains attached to the intended project. |  | Not run |
+| Publication | Publish only after the human review and explicit publication decision are recorded. |  | Not run |

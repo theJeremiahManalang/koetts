@@ -111,3 +111,28 @@ Phase 5 is not complete. Use the [hosted plan](hosted-service-plan.md),
 [infrastructure guide](../resources/hosted-infrastructure.md),
 [cost controls](../resources/hosted-cost-controls.md) and
 [rollout runbook](../resources/hosted-rollout.md) for implementation and recovery.
+
+## Manual acceptance setup update — 2026-11-02
+
+The user authorized the agent to enable hosted services; the user performs the
+manual UI test and initiates any paid Gemini calls. The three operation
+reconciliation indexes reached `READY`, and the API coordinator role now includes
+`run.jobs.run` with its existing override permission. The enabled coordinator
+returned HTTP 200 after the indexes became ready. The artifact-GC scheduler remains
+paused. A fresh Terraform plan showed no remaining drift.
+
+The ledger is active with a USD 5 provider allowance. Pipeline operation and
+per-call caps are USD 1, maximum one provider call per operation; Magi and pipeline
+infrastructure reservations are USD 1 per operation. Current provider use and
+reservations are zero. The prior uncertain upload was retried only after an
+exhaustive execution lookup returned none and the dispatch role was fixed. Magi
+execution `koetts-magi-jjqts` succeeded; the operation is complete at attempt 2,
+and its settlement is recorded. Its USD 5 infrastructure reservation remains
+held for delayed billing reconciliation. No Gemini call was made.
+
+The frontend remains at
+https://koetts--koetts-9bf7f.us-east4.hosted.app with maintenance mode off. API
+revision `koetts-api-00003-v4r` serves 100%. The frontend returned HTTP 200. These
+checks and Magi result establish CPU extraction success, not full manual user-flow
+acceptance. The user still needs to inspect the project and perform planning,
+script/cast review, short synthesis, and playback checks.

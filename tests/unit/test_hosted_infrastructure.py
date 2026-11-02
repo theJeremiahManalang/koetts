@@ -125,6 +125,8 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertIn('"run.jobs.runWithOverrides"', MAIN)
         coordinator = MAIN.split('resource "google_project_iam_custom_role" "coordinator"', 1)[1]
         coordinator = coordinator.split('\nresource ', 1)[0]
+        self.assertIn('"run.jobs.run"', coordinator)
+        self.assertIn('"run.jobs.runWithOverrides"', coordinator)
         self.assertIn('"run.executions.list"', coordinator)
         self.assertIn('"run.executions.cancel"', coordinator)
         self.assertNotIn('"run.jobs.list"', coordinator)
@@ -137,7 +139,7 @@ class HostedInfrastructureTests(unittest.TestCase):
             self.assertIn(f'resource "google_service_account" "{account}"', MAIN)
         self.assertNotIn('member = "allUsers"', MAIN)
         self.assertIn('schedule    = "* * * * *"', MAIN)
-        self.assertIn("paused      = true", MAIN)
+        self.assertIn("paused      = var.coordinator_paused", MAIN)
         self.assertIn('run.jobs.runWithOverrides', MAIN)
         self.assertIn('"coordinate"', MAIN)
         self.assertIn('"budget-report"', MAIN)
@@ -148,6 +150,7 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertIn('resource "google_eventarc_trigger" "operation_dispatch"', MAIN)
         trigger = MAIN.split('resource "google_eventarc_trigger" "operation_dispatch"', 1)[1]
         trigger = trigger.split('\nresource ', 1)[0]
+        self.assertIn('event_data_content_type = "application/protobuf"', trigger)
         self.assertIn('location                = var.firestore_database_location', trigger)
         self.assertIn('default     = "nam5"', VARIABLES)
         self.assertIn('region  = var.region', trigger)
@@ -161,9 +164,22 @@ class HostedInfrastructureTests(unittest.TestCase):
         self.assertRegex(MAIN, r'field\s*=\s*"expire_at"')
         self.assertIn('resource "google_firestore_index" "queued_operation_stage"', MAIN)
         self.assertIn('field_path = "created_at"', MAIN)
+        recovery_index = MAIN.split('resource "google_firestore_index" "queued_operation_recovery"', 1)[1]
+        recovery_index = recovery_index.split('\nresource ', 1)[0]
+        self.assertIn('field_path = "status"', recovery_index)
+        self.assertIn('field_path = "created_at"', recovery_index)
+        reconciliation = MAIN.split('resource "google_firestore_index" "operation_reconciliation"', 1)[1]
+        reconciliation = reconciliation.split('\nresource ', 1)[0]
+        self.assertIn('field_path = "status"', reconciliation)
+        self.assertIn('field_path = each.value', reconciliation)
+        for field in ("attempt_started_at", "lease_expires_at", "updated_at"):
+            self.assertIn(f'"{field}"', reconciliation)
         scheduler = MAIN.split('resource "google_cloud_scheduler_job" "coordinator"', 1)[1]
         scheduler = scheduler.split('\nresource ', 1)[0]
-        self.assertIn('paused      = true', scheduler)
+        self.assertIn('paused      = var.coordinator_paused', scheduler)
+        coordinator_pause = VARIABLES.split('variable "coordinator_paused"', 1)[1]
+        coordinator_pause = coordinator_pause.split('\nvariable ', 1)[0]
+        self.assertIn('default     = true', coordinator_pause)
 
     def test_budget_is_project_filtered_and_alerts_at_target_thresholds(self):
         self.assertIn('units         = "20"', MAIN)

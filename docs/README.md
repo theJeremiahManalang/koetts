@@ -23,6 +23,7 @@ the repository's separate [resources directory](../resources/README.md).
 | Task | Guide |
 | --- | --- |
 | Install tooling, configure ADC and run locally | [Developer setup](../resources/DEVELOPMENT.md) |
+| Find custom CLI commands and their `--help` usage | [CLI tools](../resources/CLI_TOOLS.md) |
 | Configure Firebase sign-in and trusted admins | [Authentication](../resources/FIREBASE_AUTH.md) |
 | Review cast/sources/scripts, render, export and recover | [Audio workflow](../resources/AUDIO_WORKFLOW.md) |
 | Install optional extraction models and select CPU/CUDA | [Models](../resources/MODELS.md) |
@@ -38,7 +39,9 @@ initial and final regional placement.
 | --- | --- |
 | Review accepted scope, limits and phase 5 authorization | [Hosted plan](plans/hosted-service-plan.md) |
 | Configure Terraform inputs, identities, resources and secrets | [Hosted infrastructure](resources/hosted-infrastructure.md) |
+| Retire backend compute and retain the Firebase frontend/data | [Backend decommission guide](resources/hosted-backend-decommission.md) |
 | Configure or migrate the frontend | [Firebase App Hosting](../resources/APP_HOSTING.md) |
+| Manually redeploy and capture acceptance | [Deployment guide](resources/manual-production-deployment.md), [deployment checklist](resources/production-deployment-checklist.md) |
 | Prepare rollout evidence, replace the API, migrate frontend and roll back | [Hosted rollout](resources/hosted-rollout.md) |
 | Inspect phase 5 checkpoint review and fixes | [Code review](resources/phase-5-code-review.md) |
 | Run manual admin acceptance and capture hosted logs | [Manual validation](resources/hosted-manual-validation.md), [acceptance checklist](resources/admin-processing-acceptance-checklist.md), [acceptance review](resources/phase-5-manual-acceptance-review.md) |

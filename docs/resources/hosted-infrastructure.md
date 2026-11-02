@@ -1,11 +1,12 @@
 # Hosted infrastructure configuration
 
-`infra/hosted` describes GCP resources for the hosted pilot. Authorized phase 5
-provisioning on 2026-11-01 created the new backend resources and completed the
-guarded frontend cutover; full live acceptance remains pending. No agent-initiated paid model calls were
-made. See the [phase 5 record](../plans/phase-5-authorization.md) for current
-evidence and remaining gates, and [rollout preparation](hosted-rollout.md) for
-historical observations and recovery requirements.
+`infra/hosted` describes the GCP backend for the hosted pilot. The Eventarc
+Firestore trigger now uses the required protobuf payload and is present in local
+Terraform state. As of 2026-11-02, the three reconciliation indexes are READY,
+the coordinator IAM role includes job start permission, and the coordinator is
+enabled for manual acceptance. End-to-end acceptance remains pending. See the
+[phase 5 record](../plans/phase-5-authorization.md) for live evidence and the
+[rollout guide](hosted-rollout.md) for recovery requirements.
 This configuration does not create or manage the existing project `koetts-9bf7f`,
 App Hosting backend `koetts`, or named Firestore database `koetts-default`.
 
@@ -21,11 +22,13 @@ separately verified frontend migration to `us-central1`. Terraform does not mana
 or move that App Hosting backend. The existing Firestore database `koetts-default`
 remains in `nam5`.
 
-The configuration references the existing named Firestore database as a runtime
-setting and creates a clean collection dataset inside it. Choose `cloud_dataset`, a
-new globally unique artifact bucket, and a stable `artifact_namespace` explicitly
-after authorized live preflight. The configuration has no Firestore database
-resource and does not import or migrate local state. Firestore IAM is project policy
+The Eventarc Firestore trigger uses `application/protobuf`, required for direct
+Firestore events. Its HTTP handler uses CloudEvent headers to find the signal
+document and does not parse the event payload. The configuration references the
+existing named Firestore database `koetts-default` and uses collection dataset
+`hosted_pilot_20261101`, bucket `koetts-9bf7f-hosted-artifacts-us-central1`, and
+artifact namespace `hosted/pilot_20261101`. The configuration has no Firestore
+database resource and does not import or migrate local state. Firestore IAM is project policy
 with a resource-name condition for the exact configured database; collection
 dataset scoping is not claimed or encoded as an IAM capability. Google documents
 resource-name IAM conditions for individual databases, including that the Cloud
@@ -38,7 +41,9 @@ Run invocation. The two finite CPU jobs each use one task, one concurrent task, 
 platform retries, and a 30-minute per-attempt timeout. The `magi` job has a 4 CPU /
 8 GiB ceiling; `pipeline` has 2 CPU / 4 GiB. Neither job requests a GPU. These
 configured caps do not establish measured throughput or a monthly spending limit.
-The Scheduler starts paused and must stay paused until the rollout gates pass.
+The coordinator defaults paused and must be enabled for authorized hosted
+acceptance. The artifact-GC Scheduler stays paused unless cleanup is separately
+approved.
 
 The configuration creates separate API, inference-job, pipeline-job, scheduler,
 Pub/Sub push, GC scheduler, artifact collector, and operator service accounts.
@@ -52,7 +57,7 @@ live references. Firestore IAM cannot restrict those operations to collections,
 so IAM scope is the named database and the collector enforces the collection-level
 contract in code. API Firebase Auth access is limited to the user lookup permission
 used for revoked-token checks. The API coordinator gets a custom Cloud Run role
-with run-with-overrides and execution inspection/list/cancel permissions, bound
+with job start, run-with-overrides and execution inspection/list/cancel permissions, bound
 separately to the `magi` and `pipeline` jobs. A separate one-permission project
 role allows polling the Cloud Run long-running operation returned by job start. No
 Owner or Editor grant exists. Cloud Run service invoker grants name only the
@@ -221,3 +226,25 @@ and [official-source notes](../research/hosted-free-tier-sources.md) before esti
 Eventarc uses `firestore_database_location` (default `nam5`) to match the existing
 Firestore database. Its Cloud Run destination still uses `region` (`us-central1`).
 Changing the compute region must not change the trigger source location.
+
+## Reconciliation indexes and activation
+
+The coordinator requires composite indexes on the `operations` collection for
+`status` plus each of `attempt_started_at`, `lease_expires_at`, and `updated_at`,
+in addition to the queued-operation indexes. Terraform manages these through
+`google_firestore_index.operation_reconciliation`. Wait for READY before checking
+coordinator health; missing indexes produce HTTP 500 even when no matching work
+exists.
+
+`coordinator_paused` defaults to true. Set it to false in private Terraform inputs
+when explicitly enabling reconciliation, so a later apply preserves that decision.
+This does not change the separately paused garbage-collection scheduler. A healthy
+coordinator does not automatically retry an execution whose submission outcome
+cannot be established.
+
+## Decommission after hosted acceptance
+
+Use the [backend decommission guide](hosted-backend-decommission.md) to retire
+backend compute while retaining the Firebase frontend, Auth, billing alerts,
+Firestore project records, and artifact data. It is a future procedure; do not
+run it during hosted acceptance.

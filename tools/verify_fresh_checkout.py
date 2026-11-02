@@ -1,5 +1,6 @@
 """Exercise documented frozen onboarding in a disposable copy without secrets or results."""
 from pathlib import Path
+import argparse
 import os
 import shutil
 import subprocess
@@ -20,7 +21,8 @@ def ignore_checkout_artifacts(directory, names):
     }
 
 
-def main():
+def main(argv=None):
+    argparse.ArgumentParser(description=__doc__).parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="manga-onboarding-") as directory:
         checkout = Path(directory)

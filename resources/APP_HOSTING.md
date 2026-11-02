@@ -38,7 +38,7 @@ and [monorepo guide](https://firebase.google.com/docs/app-hosting/monorepos).
 - `firebase.json` targets the Next.js app in `apps/web/` with backend ID
   `koetts` for KoeTTS. Change this ID if using a differently named backend.
 - `apps/web/apphosting.yaml` configures the website runtime: 1 CPU, 512 MiB RAM,
-  zero minimum instances, two maximum instances, and concurrency of 40.
+  zero minimum instances, one maximum instance, and concurrency of 40.
 - Local dependencies, generated output, project data, model weights, assistant
   settings, and environment files are excluded from source uploads.
 - No credentials or provider secrets are included. `.firebaserc` records the
@@ -59,8 +59,25 @@ also references `hosted-audio-signing-key@1` at runtime only.
 The admin-access follow-up configures `MANGA_FRONTEND_ONLY=0` and
 `MANGA_EXECUTION_MODE=cloud` so verified admins can reach the studio and request
 dashboard for manual acceptance. Processing still occurs only through the private
-backend; the frontend does not run Python or call Gemini. Production remains
-paused with provider calls disabled until test limits and activation are ready.
+backend; the frontend does not run Python or call Gemini. Production admission and
+provider use are controlled by the hosted ledger, separately from frontend mode.
+
+`MANGA_MAINTENANCE_MODE=1` rewrites website routes to a static maintenance page
+while leaving API routes and static assets untouched. The checked-in value is
+`0`, so the hosted acceptance UI stays available. For a later backend retirement,
+set both `MANGA_MAINTENANCE_MODE` and `MANGA_FRONTEND_ONLY` to `1`, then deploy the
+Firebase App Hosting backend. The maintenance mode does not pause Cloud Run jobs;
+use the [backend decommission guide](../docs/resources/hosted-backend-decommission.md)
+for the full shutdown sequence.
+
+## Current hosted acceptance setup — 2026-11-02
+
+The hosted UI remains in cloud mode with maintenance mode off. The coordinator
+Scheduler is enabled for acceptance; the artifact-GC Scheduler remains paused.
+The production ledger has a USD 5 provider allowance. Pipeline operations and
+individual provider calls are capped at USD 1, with at most one provider call per
+operation. The user initiates all paid Gemini calls manually. These are temporary
+acceptance settings, not measured production limits.
 
 ## Initialize a different Firebase project
 

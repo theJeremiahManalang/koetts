@@ -7,6 +7,8 @@ distinguishes implemented offline behavior from live acceptance.
 
 - [Infrastructure configuration](hosted-infrastructure.md): Terraform inputs,
   dedicated identities, regional placement, ADC and signing-secret ownership.
+- [Backend decommission](hosted-backend-decommission.md): maintenance mode,
+  backend teardown order, retained project/audio data and Terraform safety gates.
 - [Rollout and rollback](hosted-rollout.md): evidence, API replacement, staged
   frontend migration, compatibility gates and dated preflight observations.
 - [Cost controls](hosted-cost-controls.md): allowances, production pause,

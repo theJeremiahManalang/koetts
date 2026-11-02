@@ -47,6 +47,15 @@ Enabling navigation does not authorize or enable paid generation.
    Extraction/generation require separately configured measured test limits and
    explicit activation; they remain blocked during this first access pass.
 
+The steps above describe the completed access-only pass. The user later authorized
+a separate processing test. For that pass, use the dated follow-up in the
+[acceptance checklist](admin-processing-acceptance-checklist.md): the ledger is
+active with a USD 5 provider allowance and USD 1 per pipeline operation/call, with
+one provider call per operation. The user initiates each paid Gemini call. The old
+uncertain upload was retried safely after an exhaustive empty execution lookup and
+the Magi operation completed. Continue manual review of that project; do not create
+a duplicate upload for the same sample.
+
 Locally, use the existing configured environment and pinned tooling:
 
 ```bash

@@ -612,6 +612,61 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(project=project, audience=audience), self.assertRaises(ValueError):
                 create_app(BoundaryConfig(project, audience, {}))
 
+    async def test_eventarc_endpoint_audience_is_scoped_to_dispatch(self):
+        from fastapi import HTTPException
+        from starlette.requests import Request
+        from manga_worker.http_auth import CredentialBoundary
+
+        config = BoundaryConfig("test-project", "https://api", {
+            "events": frozenset({"operation-event", "coordinate"}),
+            "other": frozenset({"coordinate"}),
+        })
+        request = Request({"type": "http", "headers": [(b"authorization", b"Bearer signed-token")]})
+        for subject, audience, action, expected in (
+            ("events", "https://api/internal/operation-events", "operation-event", None),
+            ("events", "https://api", "operation-event", None),
+            ("events", "https://api/internal/operation-events", "coordinate", 401),
+            ("events", "https://other/internal/operation-events", "operation-event", 401),
+            ("other", "https://api/internal/operation-events", "operation-event", 403),
+        ):
+            with self.subTest(subject=subject, audience=audience, action=action):
+                boundary = CredentialBoundary(config, service_verifier=lambda token: {
+                    "sub": subject, "aud": audience, "iss": "https://accounts.google.com",
+                })
+                if expected is None:
+                    self.assertIsNone(boundary.authorize(request, action, user=False))
+                else:
+                    with self.assertRaises(HTTPException) as error:
+                        boundary.authorize(request, action, user=False)
+                    self.assertEqual(error.exception.status_code, expected)
+
+    async def test_signed_service_tokens_accept_only_configured_audiences(self):
+        import time
+        from unittest.mock import patch
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from google.auth import crypt, jwt
+        from manga_worker.http_auth import CredentialBoundary
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                    serialization.NoEncryption())
+        public = key.public_key().public_bytes(serialization.Encoding.PEM,
+                                              serialization.PublicFormat.SubjectPublicKeyInfo)
+        signer = crypt.RSASigner.from_string(private, key_id="test-key")
+        boundary = CredentialBoundary(BoundaryConfig("test-project", "https://api", {}))
+        with patch("google.oauth2.id_token._fetch_certs", return_value={"test-key": public}):
+            for audience in ("https://api", "https://api/internal/operation-events", "https://other"):
+                token = jwt.encode(signer, {"iss": "https://accounts.google.com", "sub": "events",
+                                           "aud": audience, "iat": int(time.time()),
+                                           "exp": int(time.time()) + 60}).decode()
+                with self.subTest(audience=audience):
+                    if audience == "https://other":
+                        with self.assertRaises(ValueError):
+                            boundary._verify_service(token)
+                    else:
+                        self.assertEqual(boundary._verify_service(token)["aud"], audience)
+
     async def test_concurrent_cold_start_initializes_firebase_once(self):
         import asyncio
         import threading

@@ -183,6 +183,10 @@ class CloudRunJobsTests(unittest.TestCase):
         with self.assertRaisesRegex(CloudJobError, "absence is unproven"):
             jobs(session, max_pages=1).find_executions(OperationClaim("op", 1), "magi")
 
+    def test_find_executions_accepts_cloud_run_empty_response(self):
+        session = Session(get=[Response({})])
+        self.assertEqual(jobs(session).find_executions(OperationClaim("op", 1), "magi"), [])
+
     def test_find_executions_does_not_assume_unpublished_nested_template_shape(self):
         execution = {
             "name": EXEC,
@@ -244,6 +248,7 @@ class Store:
         self.timeout_candidates = []
         self.recovered_unsubmitted = 0
         self.signal_stage = "magi"
+        self.execution_stopped_confirmed = False
 
     def claim_next(self, stage=None):
         self.calls.append("claim")
@@ -267,6 +272,8 @@ class Store:
             "dispatch_state": self.dispatch_state,
             "execution_name": self.execution,
             "worker_registered": self.worker_registered,
+            "execution_stopped_confirmed": self.execution_stopped_confirmed,
+            "state": "uncertain" if self.op.status == "reconciliation_required" else "running",
         }
 
     def record_execution(self, _, name):
@@ -299,6 +306,12 @@ class Store:
     def recover_unsubmitted(self, _):
         self.recovered_unsubmitted += 1
 
+    def resolve_dispatch_absent(self, _, action):
+        self.calls.append("resolve_absent:" + action)
+        status = "queued" if action == "retry" else "failed"
+        self.op = replace(self.op, status=status)
+        return self.op
+
 
 class FakeJobs:
     def __init__(self, *, start_error=False, state="active", found=None, states=None):
@@ -328,6 +341,38 @@ class FakeJobs:
 
 
 class CloudJobDispatcherTests(unittest.TestCase):
+    def test_resolve_absent_dispatch_retries_only_old_uncertain_unregistered_start(self):
+        store = Store(dispatch_operation=replace(
+            operation(status="reconciliation_required"), updated_at=400,
+        ))
+        store.dispatch_state = "submitting"
+        fake = FakeJobs(found=[])
+
+        resolved = CloudJobDispatcher(store, fake).resolve_absent_dispatch("op", "retry", now=1_000)
+
+        self.assertEqual(resolved.status, "queued")
+        self.assertEqual(fake.find_calls, 1)
+        self.assertIn("resolve_absent:retry", store.calls)
+
+    def test_resolve_absent_dispatch_refuses_recent_attempt_or_matching_execution(self):
+        recent = Store(dispatch_operation=replace(
+            operation(status="reconciliation_required"), updated_at=900,
+        ))
+        recent.dispatch_state = "submitting"
+        dispatcher = CloudJobDispatcher(recent, FakeJobs(found=[]))
+        with self.assertRaisesRegex(CloudJobError, "Wait before"):
+            dispatcher.resolve_absent_dispatch("op", "retry", now=1_000)
+        self.assertNotIn("resolve_absent:retry", recent.calls)
+
+        matched = Store(dispatch_operation=replace(
+            operation(status="reconciliation_required"), updated_at=400,
+        ))
+        matched.dispatch_state = "submitting"
+        dispatcher = CloudJobDispatcher(matched, FakeJobs(found=[EXEC]))
+        with self.assertRaisesRegex(CloudJobError, "matching Cloud Run execution"):
+            dispatcher.resolve_absent_dispatch("op", "retry", now=1_000)
+        self.assertNotIn("resolve_absent:retry", matched.calls)
+
     def test_dispatch_intent_cas_prevents_duplicate_start_after_uncertain_response(self):
         store = Store()
         pending_claims = [OperationClaim("op", 1)]

@@ -7,6 +7,7 @@ operational references, research and historical evidence.
 | Task | Resource |
 | --- | --- |
 | Install tooling, configure GCP ADC and run locally | [Development](DEVELOPMENT.md) |
+| Discover custom repository and package CLIs | [CLI tools](CLI_TOOLS.md) |
 | Configure Firebase authentication and trusted admins | [Firebase Auth](FIREBASE_AUTH.md) |
 | Review, synthesize, export and recover audio | [Audio workflow](AUDIO_WORKFLOW.md) |
 | Install optional vision models and select CPU/CUDA | [Models](MODELS.md) |

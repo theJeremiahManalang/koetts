@@ -45,6 +45,9 @@ def _parser():
     reconcile.add_argument("--provider-reserved-micro", required=True, type=int)
     reconcile.add_argument("--provider-used-micro", required=True, type=int)
     reconcile.add_argument("--billing-period", required=True, help="Closed infrastructure billing month (YYYY-MM)")
+    resolve_operation = common("resolve-operation", mutation=True)
+    resolve_operation.add_argument("--operation-id", required=True)
+    resolve_operation.add_argument("--resolution", choices=("fail", "retry"), required=True)
     return parser
 
 
@@ -57,7 +60,7 @@ def _read_caps(path: Path) -> dict:
 
 
 def _validate(args):
-    if args.command in {"configure", "pause", "resume", "settle", "reconcile"}:
+    if args.command in {"configure", "pause", "resume", "settle", "reconcile", "resolve-operation"}:
         _operator(args.actor, args.reason)
         _key(args.evidence, "evidence reference")
     if args.command == "configure":
@@ -70,7 +73,10 @@ def _validate(args):
         for field in ("infrastructure_reported_micro", "infrastructure_reserved_micro",
                       "provider_reserved_micro", "provider_used_micro"):
             _money(getattr(args, field), field)
-    if args.command == "settle":
+    if args.command == "resolve-operation":
+        if not re.fullmatch(r"[a-f0-9]{32}", args.operation_id):
+            raise ValueError("Invalid hosted operation ID")
+    if args.command in {"settle", "resolve-operation"}:
         args.region = os.environ.get("MANGA_CLOUD_REGION", "")
         args.job_names = {"magi": os.environ.get("MANGA_MAGI_JOB", ""),
                           "pipeline": os.environ.get("MANGA_PIPELINE_JOB", "")}
@@ -100,7 +106,7 @@ def _plan(args):
         values["stages"] = args.stage_caps_value
     values["stage_caps"] = values.pop("stage_caps", None)
     return {"mode": "plan", "action": args.command, "changes_cloud_state": args.command in {
-        "configure", "pause", "resume", "settle", "reconcile"}, "arguments": values}
+        "configure", "pause", "resume", "settle", "reconcile", "resolve-operation"}, "arguments": values}
 
 
 def _execute(args):
@@ -133,6 +139,23 @@ def _execute(args):
             jobs = CloudRunJobs(settings.project, args.region, args.job_names)
             result = ledger.settle(args.actor, args.reason, args.operation_key, evidence=args.evidence,
                                    operation_store=operations, execution_status=jobs.status)
+        elif args.command == "resolve-operation":
+            from .cloud_jobs import CloudJobDispatcher, CloudRunJobs
+            from .cloud_operations import FirestoreOperationStore
+
+            identity = artifact_store_identity(settings.bucket, settings.namespace)
+            operations = FirestoreOperationStore(client, settings.dataset, identity, budget=ledger)
+            jobs = CloudRunJobs(settings.project, args.region, args.job_names)
+            operation = CloudJobDispatcher(operations, jobs).resolve_absent_dispatch(
+                args.operation_id, args.resolution
+            )
+            result = {
+                "operation": operation.public(),
+                "actor": args.actor,
+                "reason": args.reason,
+                "evidence": args.evidence,
+                "matching_execution_count": 0,
+            }
         elif args.command == "reconcile":
             ledger.reconcile(args.actor, args.reason, evidence=args.evidence,
                              billing_period=args.billing_period,
