@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import array
 import hashlib
+import io
 import math
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ from .config import (
     CACHE_REVISION,
     MAX_SILENCE_SEC,
     NARRATOR,
+    SPEECH_BACKEND_VERSION,
     SAMPLE_RATE,
     TEXT_POLICY_VERSION,
     PathLike,
@@ -110,7 +112,8 @@ def compile_segments(p: dict[str, Any], scene: dict[str, Any]) -> list[dict[str,
         seg["scene_id"] = scene["scene_id"]
         seg["source_ids"] = [sid for t in seg["turns"] for sid in t["source_ids"]]
         seg["request"] = None if seg["silence_sec"] else build_request(p, scene, seg["turns"])
-        seg["signature"] = digest({"cache_revision": CACHE_REVISION, "text_policy": TEXT_POLICY_VERSION, "request": seg["request"], "silence": seg["silence_sec"],
+        seg["signature"] = digest({"cache_revision": CACHE_REVISION, "backend_version": SPEECH_BACKEND_VERSION,
+                                    "text_policy": TEXT_POLICY_VERSION, "request": seg["request"], "silence": seg["silence_sec"],
                                     "model": p["settings"]["tts_model"], "sample_rate": SAMPLE_RATE})
     return segments
 
@@ -147,7 +150,16 @@ def wav_info(path: PathLike) -> tuple[dict[str, Any], bytes]:
 
     Metadata includes frame count, duration and clipping. Raises ValueError for
     unexpected format; wave/IO errors propagate. No project mutation."""
-    with wave.open(str(path), "rb") as wav:
+    return _wav_info(str(path))
+
+
+def wav_bytes_info(data: bytes) -> tuple[dict[str, Any], bytes]:
+    """Validate provider WAV bytes using the same format policy as persisted takes."""
+    return _wav_info(io.BytesIO(data))
+
+
+def _wav_info(source) -> tuple[dict[str, Any], bytes]:
+    with wave.open(source, "rb") as wav:
         if (wav.getframerate(), wav.getnchannels(), wav.getsampwidth(), wav.getcomptype()) != (SAMPLE_RATE, 1, 2, "NONE"):
             raise ValueError("Expected mono 24 kHz 16-bit PCM WAV")
         frames = wav.getnframes()

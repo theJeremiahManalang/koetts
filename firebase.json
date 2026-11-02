@@ -35,7 +35,13 @@
         "**/.env",
         "**/.env.*",
         "**/firebase-debug.log",
-        "**/firebase-debug.*.log"
+        "**/firebase-debug.*.log",
+        "infra/**",
+        "**/.terraform/**",
+        "**/*.tfstate",
+        "**/*.tfstate.*",
+        "**/*.tfvars",
+        "**/*.tfvars.json"
       ]
     }
   ]

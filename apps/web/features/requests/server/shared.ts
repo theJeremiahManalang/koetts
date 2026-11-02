@@ -1,5 +1,6 @@
 import "server-only";
 import { pythonJSON } from "../../../lib/python";
+import { hostedMode, privateJson } from "../../../lib/private-api";
 
 export const validSharedId = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{32}$/.test(value);
 export const validRevision = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -11,7 +12,15 @@ export function localSharedOnly(): Response | null {
     : null;
 }
 
-export async function sharedCall<T = unknown>(payload: Record<string, unknown>): Promise<T> {
+export async function sharedCall<T = unknown>(payload: Record<string, unknown>, request?: Request): Promise<T> {
+  if (hostedMode()) {
+    if (!request) throw new Error("Verified user request is required.");
+    return privateJson<T>(request, "/shared", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
   const result = await pythonJSON("manga_worker.shared", payload);
   if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true || !("result" in result)) {
     throw new Error("Shared request is unavailable or has changed.");

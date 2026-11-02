@@ -503,6 +503,26 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("private database", response.text)
                 self.assertNotIn("credential", response.text if expected == 500 else "")
 
+    async def test_enqueue_preserves_sanitized_cloud_budget_denial(self):
+        from manga_worker.cloud_budget import CloudBudgetExceeded
+
+        class PausedBackend:
+            def enqueue_operation(self, payload, key):
+                raise CloudBudgetExceeded("private ledger path and remaining allowance")
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app(PausedBackend())),
+            base_url="http://test",
+        ) as client:
+            response = await client.post(
+                "/operations", headers=self.headers,
+                json={"action": "create", "mode": "images"},
+            )
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()["error"]["code"], "production_paused")
+        self.assertNotIn("private ledger", response.text)
+        self.assertNotIn("remaining allowance", response.text)
+
     async def test_enqueue_rejects_ambiguous_or_non_json_inputs_before_persistence(self):
         class Backend:
             def __init__(self):
@@ -592,15 +612,81 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(project=project, audience=audience), self.assertRaises(ValueError):
                 create_app(BoundaryConfig(project, audience, {}))
 
+    async def test_eventarc_endpoint_audience_is_scoped_to_dispatch(self):
+        from fastapi import HTTPException
+        from starlette.requests import Request
+        from manga_worker.http_auth import CredentialBoundary
+
+        config = BoundaryConfig("test-project", "https://api", {
+            "events": frozenset({"operation-event", "coordinate"}),
+            "other": frozenset({"coordinate"}),
+        })
+        request = Request({"type": "http", "headers": [(b"authorization", b"Bearer signed-token")]})
+        for subject, audience, action, expected in (
+            ("events", "https://api/internal/operation-events", "operation-event", None),
+            ("events", "https://api", "operation-event", None),
+            ("events", "https://api/internal/operation-events", "coordinate", 401),
+            ("events", "https://other/internal/operation-events", "operation-event", 401),
+            ("other", "https://api/internal/operation-events", "operation-event", 403),
+        ):
+            with self.subTest(subject=subject, audience=audience, action=action):
+                boundary = CredentialBoundary(config, service_verifier=lambda token: {
+                    "sub": subject, "aud": audience, "iss": "https://accounts.google.com",
+                })
+                if expected is None:
+                    self.assertIsNone(boundary.authorize(request, action, user=False))
+                else:
+                    with self.assertRaises(HTTPException) as error:
+                        boundary.authorize(request, action, user=False)
+                    self.assertEqual(error.exception.status_code, expected)
+
+    async def test_signed_service_tokens_accept_only_configured_audiences(self):
+        import time
+        from unittest.mock import patch
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from google.auth import crypt, jwt
+        from manga_worker.http_auth import CredentialBoundary
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                    serialization.NoEncryption())
+        public = key.public_key().public_bytes(serialization.Encoding.PEM,
+                                              serialization.PublicFormat.SubjectPublicKeyInfo)
+        signer = crypt.RSASigner.from_string(private, key_id="test-key")
+        boundary = CredentialBoundary(BoundaryConfig("test-project", "https://api", {}))
+        with patch("google.oauth2.id_token._fetch_certs", return_value={"test-key": public}):
+            for audience in ("https://api", "https://api/internal/operation-events", "https://other"):
+                token = jwt.encode(signer, {"iss": "https://accounts.google.com", "sub": "events",
+                                           "aud": audience, "iat": int(time.time()),
+                                           "exp": int(time.time()) + 60}).decode()
+                with self.subTest(audience=audience):
+                    if audience == "https://other":
+                        with self.assertRaises(ValueError):
+                            boundary._verify_service(token)
+                    else:
+                        self.assertEqual(boundary._verify_service(token)["aud"], audience)
+
     async def test_concurrent_cold_start_initializes_firebase_once(self):
         import asyncio
         import threading
-        import time
         from unittest.mock import patch
 
         from manga_worker.http_auth import CredentialBoundary
 
         initialized = []
+        second_lock_attempt = threading.Event()
+        lock = threading.Lock()
+        attempts = 0
+        class ObservedLock:
+            def __enter__(self):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 2:
+                    second_lock_attempt.set()
+                lock.acquire()
+            def __exit__(self, *args):
+                lock.release()
         start = threading.Barrier(2)
         app = object()
 
@@ -610,7 +696,7 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             return app
 
         def initialize_app(**kwargs):
-            time.sleep(0.03)
+            self.assertTrue(second_lock_attempt.wait(2), "Second verifier must contend during initialization")
             if initialized:
                 raise ValueError("Already exists")
             initialized.append(kwargs)
@@ -621,7 +707,7 @@ class HttpHardeningTests(unittest.IsolatedAsyncioTestCase):
             boundary = CredentialBoundary(BoundaryConfig("test-project", "https://api", {}))
             return boundary._verify_user("token", False)
 
-        with patch("firebase_admin.get_app", side_effect=get_app), patch(
+        with patch("manga_worker.http_auth._FIREBASE_APP_LOCK", ObservedLock()), patch("firebase_admin.get_app", side_effect=get_app), patch(
             "firebase_admin.initialize_app", side_effect=initialize_app
         ), patch("firebase_admin.auth.verify_id_token", return_value={"sub": "reader"}):
             results = await asyncio.gather(asyncio.to_thread(verify), asyncio.to_thread(verify))

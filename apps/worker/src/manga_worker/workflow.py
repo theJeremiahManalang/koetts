@@ -19,6 +19,7 @@ from typing import Any, cast
 import psutil
 
 from manga_tts import PipelineConfig, PipelineRouter, schemas, tts
+from manga_tts.config import provider_configured
 from manga_tts.cli import recover_operation_lock, workspace_lock
 from manga_tts.config import VOICES
 from manga_tts.extraction import extract_chapter
@@ -28,6 +29,7 @@ from manga_tts.operations import (
     OperationClaim,
     OperationConflict,
     OperationStage,
+    OperationStore,
     ReconciliationAction,
     SQLiteOperationStore,
     process_identity,
@@ -49,6 +51,8 @@ class WorkflowExecution:
     upload: Path
     operation: Operation | None
     before_provider: Callable[[], None] | None
+    store: OperationStore | None = None
+    data_root: Path = ROOT
 
     @property
     def command(self) -> dict[str, Any]:
@@ -153,7 +157,7 @@ def _render_segments(context: WorkflowExecution) -> dict[str, Any]:
     command = schemas.RenderCommand.model_validate(context.command)
     if context.operation is not None:
         operation = context.operation
-        store = operation_store()
+        store = context.store if context.store is not None else operation_store()
         claim = OperationClaim(operation.operation_id, operation.fence)
         checkpoint = dict(operation.checkpoint or {})
         data = schemas.dump(context.router.project)
@@ -190,7 +194,7 @@ def _export_audio(context: WorkflowExecution) -> None:
 
 
 def _bundle_project(context: WorkflowExecution) -> None:
-    context.router.bundle_project(ROOT / "downloads" / (context.request["project"] + ".zip"))
+    context.router.bundle_project(context.data_root / "downloads" / (context.request["project"] + ".zip"))
 
 
 def _record_source_review(context: WorkflowExecution) -> None:
@@ -241,13 +245,43 @@ def _source_file_hash(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
-def operation_source_fingerprint(request: dict[str, Any]) -> str:
+def _manifest_checksums(manifest):
+    return None if manifest is None else {
+        relative: entry.artifact.sha256 for relative, entry in manifest.entries.items()
+    }
+
+
+def _artifact_checksum(path: Path, root: Path, checksums: dict[str, str] | None) -> str | None:
+    if checksums is None:
+        return _source_file_hash(path)
+    try:
+        return checksums.get(path.relative_to(root).as_posix())
+    except ValueError:
+        return None
+
+
+def _artifact_exists(path: Path, root: Path, checksums: dict[str, str] | None) -> bool:
+    return path.is_file() if checksums is None else _artifact_checksum(path, root, checksums) is not None
+
+
+def operation_source_fingerprint(request: dict[str, Any], *, root: Path | None = None,
+                                 source_checksums: dict[str, str] | None = None,
+                                 project_data: dict[str, Any] | None = None) -> str:
     """Fingerprint staged upload bytes and project visual evidence used by queued work."""
+    root = ROOT if root is None else root
+    metadata_only = source_checksums is not None
+
+    def checksum(path: Path) -> str | None:
+        return _artifact_checksum(path, root, source_checksums)
+
+    def exists(path: Path) -> bool:
+        return checksum(path) is not None
+
     upload_token = request.get("upload_token")
     expected_hashes = request.get("source_hashes", [])
     actual_hashes = []
     if upload_token is not None:
-        upload = ROOT / "uploads" / identifier(upload_token)
+        upload = root / "uploads" / identifier(upload_token)
         action = request.get("action")
         if action == "create" and request.get("mode") == "images":
             names = list(request.get("images", []))
@@ -255,13 +289,15 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
             names = ["chapter.zip"]
         elif action == "cast-import":
             names = ["cast.zip"]
+        elif action == "ocr":
+            names = ["panel.png"]
         else:
             raise ValueError("Unexpected upload for this workflow action")
-        if action == "create" and (upload / "cast.zip").is_file():
+        if action == "create" and (exists(upload / "cast.zip") if metadata_only else (upload / "cast.zip").is_file()):
             names.append("cast.zip")
         for name in names:
             source = asset(upload, name)
-            source_hash = _source_file_hash(source)
+            source_hash = checksum(source)
             if source_hash is None:
                 raise ValueError("A staged source file is missing")
             actual_hashes.append(source_hash)
@@ -270,16 +306,19 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
     elif expected_hashes:
         raise ValueError("Source fingerprints require staged upload files")
 
-    workspace = ROOT / "projects" / identifier(request["project"])
+    workspace = root / "projects" / identifier(request["project"])
     project_path = workspace / "project.json"
     evidence = []
     action = request.get("action")
-    if project_path.is_file() and action in {"plan", "cast", "cast-create"}:
-        project = read_json(project_path)
+    if (project_data is not None or not metadata_only and project_path.is_file()) and action in {"plan", "cast", "cast-create"}:
+        project = project_data if project_data is not None else read_json(project_path)
         if action == "plan":
             for page in project.get("chapter", {}).get("pages", []):
                 try:
-                    source, _ = page_image(project, workspace, page)
+                    source, _ = page_image(
+                        project, workspace, page,
+                        exists=(lambda path: checksum(path) is not None) if metadata_only else None,
+                    )
                 except ValueError:
                     evidence.append({"page_id": page.get("page_id"), "missing": True})
                 else:
@@ -287,7 +326,7 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
                         {
                             "page_id": page.get("page_id"),
                             "path": str(source.relative_to(workspace)),
-                            "sha256": _source_file_hash(source),
+                            "sha256": checksum(source),
                         }
                     )
             for speaker_id in sorted(project.get("cast", {})):
@@ -297,7 +336,7 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
                         {
                             "speaker_id": speaker_id,
                             "path": reference,
-                            "sha256": _source_file_hash(source),
+                            "sha256": checksum(source),
                         }
                     )
             appearance_ids = [item["char_id"] for item in project.get("appearances", [])]
@@ -321,15 +360,15 @@ def operation_source_fingerprint(request: dict[str, Any]) -> str:
                 {
                     "char_id": char_id,
                     "path": relative,
-                    "sha256": _source_file_hash(source),
+                    "sha256": checksum(source),
                 }
             )
     return digest({"uploads": actual_hashes, "project_evidence": evidence})
 
 
-def verify_operation_sources(operation: Operation, request: dict[str, Any]) -> None:
+def verify_operation_sources(operation: Operation, request: dict[str, Any], *, root: Path | None = None) -> None:
     try:
-        current_fingerprint = operation_source_fingerprint(request)
+        current_fingerprint = operation_source_fingerprint(request, root=root)
     except (OSError, ValueError):
         current_fingerprint = None
     if current_fingerprint != operation.source_fingerprint:
@@ -499,6 +538,9 @@ def link_shared_project(store, work_id, project_id, actor):
         return store.link_project(work_id, project_id, actor)
 
 
+EXPORT_REVIEW_FILES = ("chapter_narration.wav", "timeline.json", "cast.json", "approved_script.json", "render_manifest.json")
+
+
 def _export_snapshot(workspace, expected_revision, *, work_id, link):
     """Resolve current export metadata and files while the workspace lock is held."""
     router = PipelineRouter(operation_pipeline_config(workspace))
@@ -510,7 +552,7 @@ def _export_snapshot(workspace, expected_revision, *, work_id, link):
     export_id = data.get("web_export_id")
     if not export_id or not workflow_status(data, workspace)["exported_scenes"]:
         raise ValueError("Current export is unavailable; export the reviewed project first")
-    names = ["chapter_narration.wav", "timeline.json", "cast.json", "approved_script.json", "render_manifest.json"]
+    names = list(EXPORT_REVIEW_FILES)
     if (workspace / "exports" / "chapter_narration.mp3").is_file():
         names.append("chapter_narration.mp3")
     artifacts = {}
@@ -561,7 +603,12 @@ def source_signature(data):
     return digest({key: data.get(key) for key in ("sources", "page_order", "panel_order")})
 
 
-def workflow_status(data, root):
+def workflow_status(data, root, manifest=None):
+    checksums = _manifest_checksums(manifest)
+
+    def file_checksum(path: Path) -> str | None:
+        return _artifact_checksum(path, root, checksums)
+
     ready = []
     for scene in data["scenes"]:
         try:
@@ -571,29 +618,42 @@ def workflow_status(data, root):
             for segment in segments:
                 selected = data["selected_takes"].get(tts.selection_key(segment))
                 take = next((t for t in data["takes"].get(segment["signature"], []) if t["take_id"] == selected), None)
-                if not take or hashlib.sha256(asset(root, take["path"]).read_bytes()).hexdigest() != take["audio_sha256"]:
+                if not take or file_checksum(asset(root, take["path"])) != take["audio_sha256"]:
                     break
             else:
                 ready.append(scene["scene_id"])
         except (ValueError, OSError):
             continue
-    exported = data.get("web_export_scenes", []) if data.get("web_export_signature") == export_signature(data) and (root / "exports/chapter_narration.wav").is_file() else []
+    export_path = root / "exports/chapter_narration.wav"
+    has_export = (file_checksum(export_path) is not None) if checksums is not None else export_path.is_file()
+    exported = data.get("web_export_scenes", []) if data.get("web_export_signature") == export_signature(data) and has_export else []
     return {"sources_reviewed": bool(data["sources"]) and data.get("source_review_signature") == source_signature(data),
             "proposal_applied": bool(data["proposal"]) and data.get("proposal_applied_signature") == digest(data["proposal"]),
             "audio_ready_scenes": ready, "exported_scenes": exported}
 
 
-def snapshot(router):
+def snapshot(router, manifest=None):
     data = schemas.dump(router.project)
+    checksums = _manifest_checksums(manifest)
+
+    def exists(path: Path) -> bool:
+        return _artifact_exists(path, router.root, checksums)
+
     pages = []
     for page in data["chapter"]["pages"]:
-        candidates = [f"originals/{page.get('image_filename', '')}", f"input/{page.get('image_filename', '')}"]
-        original = next((p for p in candidates if asset(router.root, p).is_file()), None)
+        try:
+            visual, evidence_kind = page_image(data, router.root, page, exists=exists)
+        except ValueError:
+            visual = None
+        original = str(visual.relative_to(router.root.resolve())) if visual is not None and evidence_kind != "annotated preview" else None
         annotated = f"input/previews/page_{page['page_index']:03d}_annotated.jpg"
-        annotated = annotated if asset(router.root, annotated).is_file() else None
-        pages.append({**page, "preview_path": original or annotated,
+        annotated = annotated if exists(asset(router.root, annotated)) else None
+        preview = original or annotated
+        pages.append({**page, "preview_path": preview,
                       "original_path": original, "annotated_path": annotated})
-    exports = [p.name for p in (router.root / "exports").glob("*") if p.is_file() and p.suffix in {".wav", ".mp3", ".json"}]
+    exports = ([Path(path).name for path in checksums if Path(path).parent.as_posix() == "exports" and Path(path).suffix in {".wav", ".mp3", ".json"}]
+               if checksums is not None else
+               [p.name for p in (router.root / "exports").glob("*") if p.is_file() and p.suffix in {".wav", ".mp3", ".json"}])
     order = data.get("page_order") or [p["page_id"] for p in pages]
     pages.sort(key=lambda page: order.index(page["page_id"]) if page["page_id"] in order else len(order))
     for page in pages:
@@ -603,16 +663,18 @@ def snapshot(router):
     return {"project": data, "revision": digest(data), "pages": pages, "voices": VOICES,
             "cast_approved": data["cast_approval"] == cast_signature(data),
             "approved_scenes": [s["scene_id"] for s in data["scenes"] if data["approvals"].get(s["scene_id"]) == scene_signature(data, s)],
-            "workflow_status": workflow_status(data, router.root), "exports": exports, "has_api_key": bool(os.environ.get("GEMINI_API_KEY"))}
+            "workflow_status": workflow_status(data, router.root, manifest), "exports": exports, "provider_configured": provider_configured()}
 
 
-def perform(router, request, progress, *, operation: Operation | None = None, before_provider=None):
+def perform(router, request, progress, *, operation: Operation | None = None, before_provider=None,
+            store: OperationStore | None = None, root: Path | None = None):
     action = request["action"]
     handler = WORKFLOW_ACTIONS.get(action)
     if handler is None:
         raise ValueError("Unknown workflow action")
-    upload = ROOT / "uploads" / identifier(request["job"])
-    context = WorkflowExecution(router, request, progress, upload, operation, before_provider)
+    root = ROOT if root is None else root
+    upload = root / "uploads" / identifier(request["job"])
+    context = WorkflowExecution(router, request, progress, upload, operation, before_provider, store, root)
     if action != "create":
         router.load_project()
         current_revision = digest(schemas.dump(router.project))

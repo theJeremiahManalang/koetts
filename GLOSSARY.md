@@ -48,6 +48,16 @@ One requested production action with pinned inputs and an observable outcome. An
 operation may require more than one worker attempt.
 _Avoid_: Attempt, worker process
 
+**Dispatch signal**:
+A durable notification that asks the hosted dispatcher to check queued work for a
+stage. It does not claim an operation or establish its status.
+_Avoid_: Operation, attempt
+
+**Operation status stream**:
+An authenticated delivery of current hosted operation status while work is active.
+Durable operation state remains authoritative.
+_Avoid_: Operation, dispatch signal
+
 **Attempt**:
 One finite worker execution for an operation.
 _Avoid_: Operation

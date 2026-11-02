@@ -1,4 +1,4 @@
-> Historical walkthrough of the original OCR proof of concept. For the current studio workflow, see [AUDIO_WORKFLOW.md](../AUDIO_WORKFLOW.md).
+> Historical walkthrough of the original OCR proof of concept. For the current studio workflow, see [AUDIO_WORKFLOW.md](../../resources/AUDIO_WORKFLOW.md).
 
 # Manga text: file guide and request walkthrough
 

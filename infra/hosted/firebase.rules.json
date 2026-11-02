@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "koetts-default",
+      "rules": "firestore.rules"
+    }
+  ]
+}

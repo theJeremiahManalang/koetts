@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const work = new URL(request.url).searchParams.get("work");
   if (!validSharedId(work)) return Response.json({ error: "Invalid chapter." }, { status: 400 });
   try {
-    const publication = await sharedCall<{ publication_id: string }>({ action: "published", work_id: work });
+    const publication = await sharedCall<{ publication_id: string }>({ action: "published", work_id: work }, request);
     if (!validSharedId(publication.publication_id)) throw new Error();
     const token = issueAudioToken(await audioKey(), principal, work, publication.publication_id);
     return Response.json({ url: `/api/shared/audio?token=${encodeURIComponent(token)}`, expires_in: 300 }, { headers: { "Cache-Control": "no-store" } });

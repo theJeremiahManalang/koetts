@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .cleaner import normalize_planning_data, normalize_text
-from .config import CACHE_REVISION, DEFAULT_MAX_RETRIES, TEXT_POLICY_VERSION, PathLike
+from .config import CACHE_REVISION, DEFAULT_MAX_RETRIES, PLANNING_BACKEND_VERSION, TEXT_POLICY_VERSION, PathLike
 from .gemini import LOGGER, retry_api
 from .schemas import Project, validate_contract
 from .script import apply_proposal
@@ -63,14 +63,17 @@ Use delivery speech/thought/shout/whisper/narration. Output matches the supplied
 """
 
 
-def page_image(p: dict[str, Any], root: PathLike, page: dict[str, Any]) -> tuple[Path, str]:
+def page_image(p: dict[str, Any], root: PathLike, page: dict[str, Any], *,
+               exists: Callable[[Path], bool] | None = None) -> tuple[Path, str]:
     """Return (Path, evidence_kind) for a page, preferring originals over previews.
 
-    Reads file existence under root; raises ValueError if no visual evidence is available."""
+    Reads file existence under root, or consults the supplied metadata callback;
+    raises ValueError if no visual evidence is available."""
+    is_file = exists or (lambda path: path.is_file())
     for rel in (f"originals/{page['image_filename']}", f"input/{page['image_filename']}",
                 f"input/previews/page_{page['page_index']:03d}_annotated.jpg"):
         path = asset(root, rel)
-        if path.is_file():
+        if is_file(path):
             return path, "annotated preview" if "/previews/" in rel else "original"
     raise ValueError(f"No visual evidence for {page['page_id']}")
 
@@ -104,7 +107,8 @@ def propose_plan(p: dict[str, Any], root: PathLike, client: Any, progress: Calla
     evidence = evidence_signature(p, root)
     validate_contract(p, Project, "project")
     data = normalize_planning_data({"sources": p["sources"], "cast": p["cast"], "appearances": p["appearances"], "chapter": p["chapter"]})
-    key = digest({"cache_revision": CACHE_REVISION, "text_policy": TEXT_POLICY_VERSION, "prompt": PLAN_PROMPT, "schema": PLAN_SCHEMA, "model": p["settings"]["planning_model"],
+    key = digest({"cache_revision": CACHE_REVISION, "backend_version": PLANNING_BACKEND_VERSION,
+                  "text_policy": TEXT_POLICY_VERSION, "prompt": PLAN_PROMPT, "schema": PLAN_SCHEMA, "model": p["settings"]["planning_model"],
                   "data": data, "evidence": evidence})
     path = Path(root) / "planning_cache" / f"{key}.json"
     if path.exists():

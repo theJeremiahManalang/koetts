@@ -73,6 +73,109 @@ class SharedRequestsContract:
 
 
 class SharedRequestsTest(SharedRequestsContract, unittest.TestCase):
+    def test_pending_limit_allows_request_for_approved_work_but_rejects_sixth_pending_work(self):
+        from manga_tts.shared_requests import IntakeQuotaExceeded, ReaderIntakePolicy
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = SharedRequests(Path(directory) / "shared.sqlite3", intake_policy=ReaderIntakePolicy())
+            approved_work = store.submit("admin-reader", "Manga", "1", "")
+            store.approve(approved_work["work_id"], "admin")
+            approved_request = store.submit("alice", "manga", "01", "")
+            self.assertEqual(approved_request["status"], "approved")
+
+            for index in range(2, 7):
+                store.submit("alice", "Manga", str(index), "")
+            with self.assertRaises(IntakeQuotaExceeded) as error:
+                store.submit("alice", "Manga", "7", "")
+            self.assertEqual(error.exception.code, "pending_limit")
+
+    def test_hosted_intake_limits_duplicates_pending_release_daily_ledger_and_reader_isolation(self):
+        from datetime import datetime, timezone
+
+        from manga_tts.shared_requests import IntakeQuotaExceeded, ReaderIntakePolicy
+
+        with tempfile.TemporaryDirectory() as directory:
+            now = [datetime(2026, 10, 29, 12, tzinfo=timezone.utc)]
+            store = SharedRequests(Path(directory) / "shared.sqlite3", intake_policy=ReaderIntakePolicy(),
+                                   clock=lambda: now[0])
+            requests = [store.submit("alice", "Manga", str(index), "") for index in range(1, 6)]
+            with self.assertRaises(IntakeQuotaExceeded) as pending_error:
+                store.submit("alice", "Manga", "6", "")
+            self.assertEqual(pending_error.exception.code, "pending_limit")
+
+            duplicate = store.submit("alice", "manga", "01", "replacement")
+            self.assertTrue(duplicate["duplicate"])
+            self.assertEqual(duplicate["id"], requests[0]["id"])
+            self.assertEqual(duplicate["notes"], "")
+
+            store.approve(requests[0]["work_id"], "admin")
+            released = store.submit("alice", "Manga", "6", "")
+            self.assertFalse(released["duplicate"])
+
+            # Pending work blocks intake across UTC midnight, while a new day gets
+            # a fresh daily allowance after pending capacity becomes available.
+            now[0] = datetime(2026, 10, 30, 0, 1, tzinfo=timezone.utc)
+            with self.assertRaises(IntakeQuotaExceeded) as pending_error:
+                store.submit("alice", "Manga", "7", "")
+            self.assertEqual(pending_error.exception.code, "pending_limit")
+            for request in (requests[1], requests[2], requests[3], requests[4], released):
+                store.approve(request["work_id"], "admin")
+            for index in range(7, 17):
+                request = store.submit("alice", "Manga", str(index), "")
+                store.approve(request["work_id"], "admin")
+            with self.assertRaises(IntakeQuotaExceeded) as daily_error:
+                store.submit("alice", "Manga", "17", "")
+            self.assertEqual(daily_error.exception.code, "daily_limit")
+
+            # A second reader has independent pending and daily counters.
+            bob = store.submit("bob", "Manga", "17", "")
+            self.assertFalse(bob["duplicate"])
+
+    def test_deleted_requests_do_not_refund_daily_quota(self):
+        from datetime import datetime, timezone
+
+        from manga_tts.shared_requests import IntakeQuotaExceeded, ReaderIntakePolicy
+
+        with tempfile.TemporaryDirectory() as directory:
+            now = datetime(2026, 10, 29, tzinfo=timezone.utc)
+            store = SharedRequests(Path(directory) / "shared.sqlite3", intake_policy=ReaderIntakePolicy(),
+                                   clock=lambda: now)
+            first = None
+            for index in range(1, 11):
+                request = store.submit("alice", "Manga", str(index), "")
+                first = first or request
+                store.approve(request["work_id"], "admin")
+            store.delete("alice", first["id"])
+            with self.assertRaises(IntakeQuotaExceeded) as error:
+                store.submit("alice", "Manga", "11", "")
+            self.assertEqual(error.exception.code, "daily_limit")
+
+    def test_invalid_reader_requests_do_not_consume_daily_quota_and_legacy_default_is_unlimited(self):
+        from datetime import datetime, timezone
+
+        from manga_tts.shared_requests import IntakeQuotaExceeded, ReaderIntakePolicy
+
+        with tempfile.TemporaryDirectory() as directory:
+            now = datetime(2026, 10, 29, tzinfo=timezone.utc)
+            store = SharedRequests(Path(directory) / "hosted.sqlite3", intake_policy=ReaderIntakePolicy(),
+                                   clock=lambda: now)
+            with self.assertRaises(ValueError):
+                store.submit("alice", "Manga", "not-a-chapter", "")
+            for index in range(1, 6):
+                request = store.submit("alice", "Manga", str(index), "")
+                store.approve(request["work_id"], "admin")
+            # Invalid input did not add to the five successful creations.
+            for index in range(6, 11):
+                request = store.submit("alice", "Manga", str(index), "")
+                store.approve(request["work_id"], "admin")
+            with self.assertRaises(IntakeQuotaExceeded) as error:
+                store.submit("alice", "Manga", "11", "")
+            self.assertEqual(error.exception.code, "daily_limit")
+
+            legacy = SharedRequests(Path(directory) / "legacy.sqlite3")
+            for index in range(1, 8):
+                legacy.submit("alice", "Other", str(index), "")
+
     def test_metadata_retry_reuses_candidate_identity_without_recopying_artifacts(self):
         from unittest.mock import patch
 

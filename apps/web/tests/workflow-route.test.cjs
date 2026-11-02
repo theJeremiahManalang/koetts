@@ -25,6 +25,7 @@ function route(root, enqueueOperation, requireAdmin = async () => null) {
   new Function("exports", "require", compiled)(api, name => {
     if (name.endsWith("/workflow")) return workflow;
     if (name.endsWith("/python")) return {};
+    if (name.endsWith("/private-api")) return { hostedMode: () => false, PrivateApiError: class extends Error {} };
     if (name.endsWith("/require-admin")) return { requireAdmin, adminPrincipal: () => ({ kind: "firebase", uid: "admin-fixture", project_id: "test-project" }) };
     return require(name);
   });

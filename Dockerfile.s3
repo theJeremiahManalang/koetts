@@ -6,11 +6,11 @@ COPY pyproject.toml uv.lock ./
 COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
 COPY packages/engine/pyproject.toml packages/engine/pyproject.toml
 COPY packages/vision/pyproject.toml packages/vision/pyproject.toml
-RUN uv sync --frozen --no-dev --package manga-worker --extra api --no-install-workspace --no-editable
+RUN uv sync --frozen --no-dev --package manga-worker --extra api --extra cloud --no-install-workspace --no-editable
 COPY apps/worker/src apps/worker/src
 COPY packages/engine/src packages/engine/src
 COPY packages/vision/src packages/vision/src
-RUN uv sync --frozen --no-dev --package manga-worker --extra api --no-editable
+RUN uv sync --frozen --no-dev --package manga-worker --extra api --extra cloud --no-editable
 ENV S3_API_MODE=verification PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ENV PATH="/app/.venv/bin:$PATH" MANGA_DATA_ROOT=/tmp/manga-studio
 USER 65532:65532

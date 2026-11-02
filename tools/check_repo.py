@@ -1,6 +1,7 @@
 """Validate workspace ownership, dependency boundaries, and active document links."""
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -85,6 +86,7 @@ def owners_to_members():
 
 
 if __name__ == "__main__":
+    argparse.ArgumentParser(description=__doc__).parse_args()
     problems = check()
     print("\n".join(problems) if problems else "Workspace boundaries, imports, pointers, and active documentation links passed.")
     sys.exit(bool(problems))

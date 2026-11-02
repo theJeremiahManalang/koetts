@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("work_id");
   if (id !== null && !validSharedId(id)) return Response.json({ error: "Invalid work." }, { status: 400 });
   try {
-    const work = await sharedCall<{ id: string; requests: { reader?: string }[] }[]>({ action: "work" });
+    const work = await sharedCall<{ id: string; requests: { reader?: string }[] }[]>({ action: "work" }, request);
     const selected = id === null ? work : work.filter(item => item.id === id);
     if (id !== null && !selected.length) return Response.json({ error: "Work not found." }, { status: 404 });
     return Response.json({ work: await withRequesterNames(selected, adminPrincipal(request).project_id) }, { headers: { "Cache-Control": "private, no-store" } });
@@ -46,6 +46,6 @@ export async function POST(request: Request) {
         payload = { action: "publish", ...base, revision: body.revision, review_id: body.review_id, expected_publication: body.expected_publication }; break;
       default: return Response.json({ error: "Invalid action." }, { status: 400 });
     }
-    return Response.json({ result: await sharedCall(payload) }, { headers: { "Cache-Control": "private, no-store" } });
+    return Response.json({ result: await sharedCall(payload, request) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return Response.json({ error: "Shared work could not be updated. Reload and try again." }, { status: 409 }); }
 }

@@ -1,0 +1,192 @@
+# Hosted production cost controls
+
+This document describes the implemented ledger boundary. Offline phase 4
+implementation, review and acceptance are complete. Authorized phase 5 provisioning
+created the billing budget and notification resources. Real report ingestion was
+verified after ledger initialization; measured model costs, final charges and
+full production acceptance remain unverified; no
+guaranteed spending cap is established.
+
+## Admission and execution
+
+Hosted application construction always attaches `CloudBudgetLedger` to its
+Firestore operation store. The coordinator and finite-job entrypoint attach the
+same ledger. Local SQLite scheduling does not use this cloud policy.
+
+An absent ledger rejects new operations. Developer configuration must supply an
+explicit remaining provider allowance of at most USD 80 and conservative caps for
+both job stages. No code assumes that the existing provider account still has
+USD 80 available or renews that allowance each month. All money uses integer USD
+micro-units; floating-point amounts, booleans, negative values, zero infrastructure
+caps, and enabled zero-cost provider calls are rejected.
+
+Enqueue reads the budget reservation before chapter-admission writes and commits
+both ledgers with the operation. A failed chapter approval or quota check commits
+neither reservation. An idempotent operation retry returns the original intent,
+including while paused, without making another reservation. Infrastructure caps
+must cover all three application attempts and associated CPU/memory time; provider
+operation caps must cover the configured maximum call count and per-call bound.
+Those bounds require measured workload evidence before production is enabled.
+
+Claims check the reservation and pause state in their own Firestore transaction.
+The finite job checks again before materializing/extracting, and each provider
+boundary debits its configured call bound before marking a provider outcome
+pending. Duplicate worker registration and uncertain-outcome reconciliation retain
+their existing safeguards. Budget admission does not authorize a retry of an
+uncertain paid call.
+
+## Pause and visibility
+
+New reservations reject when reported project cost plus retained reservations
+would reach USD 15, or when the separate provider allowance cannot cover the
+reservation. Billing reports accumulate interval highwater marks;
+duplicate or lower out-of-order reports cannot reduce costs or clear a pause.
+The project-filtered USD 20 billing budget includes Gemini model charges and other
+project spend; it is not an infrastructure-only budget or a hard cap. The separate
+application provider allowance is an admission control, not separate billing credit
+or attribution. The application stores received project charges in its
+`infrastructure_reported_micro` ledger field; this is an accounting bucket, not an
+infrastructure-only measurement or SKU filter. USD 10, 15 and 20 thresholds are
+exposed as alert configuration. Delivery of actual Cloud Billing notifications
+requires separately provisioned budget alerts and a Pub/Sub push subscription; no
+live delivery is established by offline tests.
+
+`GET /production/status` requires the private service's `production-status`
+permission and a verified Firebase administrator. `POST /production/pause`
+requires `production-control` and the same administrator check. Its exact JSON
+body is `{ "paused": true, "reason": "operator explanation" }`; the actor is
+derived from verified claims. Resume uses `paused: false` and a new reason.
+Resume does not bypass exhausted reservation limits. Budget configuration and
+provider allowance changes remain developer operations, not browser-admin APIs.
+
+`POST /internal/billing-report` accepts authenticated Pub/Sub push envelopes. The
+push identity needs only the private service's `budget-report` permission; this
+path does not impersonate a Firebase user. Configure the exact expected
+`MANGA_BILLING_ACCOUNT_ID`, `MANGA_BILLING_BUDGET_ID`, and
+`MANGA_BILLING_SUBSCRIPTION`. The subscription must belong to the API project.
+Provision its OIDC token with the canonical private service audience and preserve
+the standard Authorization header for the independent credential verifier.
+
+The envelope must match the configured subscription, billing account, budget and
+schema version `1.0`. Its decoded report must use USD and the USD 20 pilot budget.
+Cost amounts are parsed as decimals and rounded upward to micro-units; credits
+cannot lower accepted highwater costs. RFC3339 interval offsets are normalized to
+UTC. Pub/Sub message identity provides idempotency. Invalid identities, malformed
+payloads, duplicate JSON fields and non-finite amounts are rejected before ledger
+ingestion. These fields follow the official [Cloud Billing notification format](https://docs.cloud.google.com/billing/docs/how-to/budgets-programmatic-notifications);
+payload checks supplement the verified OIDC identity and never replace it.
+
+Production pause does not gate identity, reader requests, published catalog, or
+private published-audio retrieval. HTTP budget denials return a sanitized 429
+with `production_paused`; job denials retain completed durable work and do not
+cross the provider-pending boundary.
+
+## Conservative accounting and recovery
+
+Reservations are not automatically refunded at completion, after a crash, or on
+calendar rollover. Provider debits are maximum-cost accounting entries rather
+than a claim about the provider's final bill. Terminal operation settlement is an
+explicit developer action. It reads the operation and all attempt identities,
+queries Cloud Run for every submitted execution, and then re-reads the same
+operation/attempt snapshot inside the Firestore transaction. The operation must
+be `complete` or `failed`, have no pending provider outcome, and own no project or
+stage slot. Every submitted attempt needs a unique execution name whose Cloud Run
+state is `succeeded`, `failed`, or `cancelled`; active, missing, or unknown
+executions block settlement. A queued operation, an ambiguous submission, or an
+expired lease is not settlement evidence.
+
+Settlement writes an immutable marker under a SHA-256 operation-key document ID.
+It retains the original reservation, provider-call debits, and operation history.
+Only unused provider reservation is released. The marker permanently closes the
+operation key: enqueue callbacks, dispatch checks, and provider authorization
+reject it even if an idempotent submission returns its original operation.
+Operation completion never releases infrastructure reserve. Infrastructure
+reserve remains conservative until a human reviews billed costs and performs an
+explicit monthly reconciliation for a named `YYYY-MM` billing period.
+Reconciliation requires an actor, reason, and evidence reference, can reset the
+reported monthly amount and release only settled infrastructure reserves, and
+must retain every unsettled reservation and provider debit. The closed month is
+recorded permanently. Later delayed reports for it are validated and acknowledged
+as ignored, without ledger writes or impact on a newer month's total. A corrupt
+closeout record still fails closed. Provider used totals must continue to equal
+the durable debit ledger; reconciliation cannot refund them or renew the allowance.
+
+## Developer operator CLI
+
+Use `python -m manga_worker.cloud_operator` with explicit `CloudSettings`
+environment values (`FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`,
+`MANGA_CLOUD_DATASET`, `MANGA_ARTIFACT_BUCKET`, and
+`MANGA_ARTIFACT_NAMESPACE`). Region and both job names must also be explicit for
+settlement. `status` and `inspect --operation-key KEY` are read-only. `configure`
+loads JSON stage caps from `--stage-caps PATH` and requires
+`--provider-allowance-micro`; `pause`, `resume`, `settle`, and `reconcile` expose
+the corresponding ledger operations. Commands print a JSON plan by default.
+Only `--execute` constructs the Firestore or Cloud Run client. Every mutating
+command then requires `--actor`, `--reason`, and `--evidence`; evidence is an
+operator supplied ticket, billing export, invoice, or execution review reference.
+The CLI does not run Cloud Run jobs, change IAM, alter Billing budgets, or deploy
+services.
+
+For an interactive cap editor, run `uv run --locked python
+tools/manage_hosted_budget.py --actor ACCOUNT --reason REASON --evidence RECORD`
+from the repository root. Enter amounts in USD; the tool validates stage
+relationships, writes a mode-600 caps file under `results/hosted-budget/`, and
+prints the existing operator CLI plan. This default mode does not change Firestore.
+Review the plan and saved caps file. Apply that reviewed file with the existing
+operator CLI by adding `--execute`, or rerun the wizard using `--stage-caps FILE`
+to reuse the reviewed file and adding `--execute`. The wizard never starts jobs
+or resumes production. Provider allowance and stage call caps remain distinct;
+the combined per-stage operation caps must fit within the overall allowance.
+
+Use a dedicated human operator identity and custom IAM role. Grant Firestore
+entity `get`, `list`, `create`, and `update` only as needed for ledger reads and
+audited writes, plus `run.executions.get` for settlement checks. Do not grant
+Firestore delete, Cloud Run job run/update, or Storage object access. Firestore
+entity permissions are database scoped rather than collection scoped, so a
+separate operator database/project is needed for stronger data isolation. This
+role is guidance; no live IAM configuration or authorization is established by
+the local implementation or emulator tests.
+
+Missing or corrupt controls fail closed. Existing reservation, report or audit
+records cannot be adopted by reinitializing a missing control document. Status
+checks validate the namespace binding transactionally and do not create records
+or initialize inference/provider clients. Never delete a ledger to reset a budget.
+
+Billing reports are delayed. Login, playback, storage, builds, existing executions
+and other services can continue accruing charges while production is paused.
+The accepted USD 10 infrastructure target and desired USD 20 infrastructure
+ceiling remain operating goals, not guarantees. Current project-wide reporting
+does not establish independent infrastructure-only attribution. On 2026-11-01,
+the user accepted combined project monitoring for now and will inspect the
+infrastructure-versus-Gemini breakdown in the GCP console. Separate service/SKU
+budgets are not a launch prerequisite. Keep the USD 20 combined budget, USD
+10/15/20 alerts, and USD 15 production pause threshold. Gemini uses the pipeline identity and configured
+GCP project; its charges are included in project-reported costs. The provider
+ledger is an application allowance, not separate billing credit or a separate
+billing account. Production can pause before that allowance is exhausted.
+There is no infrastructure-only USD 20 budget. Do not subtract estimated model
+charges from accepted project reports.
+
+
+## Initial deployed controls — 2026-11-01
+
+Initial billing deliveries returned 429 because the clean ledger was not initialized.
+The deployment operator initialized the namespace and controls while frontend guards
+and paused schedules contained admission, with provider allowance and call caps zero,
+then explicitly paused production. A real October billing interval was subsequently
+recorded. Its preliminary reported zero is not a final cost reconciliation.
+
+At deployment, both stages held USD 5 infrastructure caps with provider calls
+disabled. Those were setup reservations, not measured operating estimates.
+
+## Manual hosted acceptance — 2026-11-02
+
+The authorized acceptance configuration keeps the USD 5 overall provider allowance
+and sets the pipeline operation cap and per-call cap to USD 1, with one provider
+call per operation. Magi and pipeline infrastructure reservations are USD 1 per
+operation. The prior Magi operation completed and has an immutable settlement; its
+USD 5 infrastructure reservation remains held until billing reports reconcile.
+The ledger is active. The user initiates paid calls manually; do not start Gemini
+calls as part of service checks.
+These limits apply to the small manual test only and do not establish final charges
+or production operating limits.

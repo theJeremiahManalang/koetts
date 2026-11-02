@@ -6,6 +6,7 @@ dependencies = ["manga-engine", "manga-vision", "psutil>=7.2,<8"]
 
 [project.optional-dependencies]
 firestore = ["google-cloud-firestore==2.34.1"]
+cloud = ["google-cloud-firestore==2.34.1", "google-cloud-storage==3.17.1"]
 api = ["fastapi==0.156.6", "uvicorn==0.54.0", "firebase-admin==7.7.0", "requests>=2.32,<3"]
 
 [project.scripts]

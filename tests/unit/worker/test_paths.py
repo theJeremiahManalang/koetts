@@ -21,7 +21,7 @@ class WorkerPathTests(unittest.TestCase):
 
     def test_packaged_commands_from_another_directory(self):
         with tempfile.TemporaryDirectory() as directory:
-            env = {**os.environ, "MANGA_DATA_ROOT": str(Path(directory) / "data"), "GEMINI_API_KEY": ""}
+            env = {**os.environ, "MANGA_DATA_ROOT": str(Path(directory) / "data"), "GEMINI_API_KEY": "", "GOOGLE_CLOUD_PROJECT": ""}
             for module in ("manga_tts", "manga_vision", "manga_worker.workflow", "manga_worker.extract"):
                 result = subprocess.run([sys.executable, "-m", module, "--help"], cwd=directory,
                                         env=env, capture_output=True, text=True, timeout=30)

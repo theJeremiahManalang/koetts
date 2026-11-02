@@ -14,13 +14,20 @@ from manga_tts.shared_requests import SharedRequests
 
 from . import workflow
 from .paths import data_root
+from .shared_actions import METADATA_ACTIONS, metadata_action
 
 
 class SharedService:
     def __init__(self, root: Path):
         backend = os.environ.get("MANGA_SHARED_BACKEND", "sqlite")
         metadata = None
-        if backend == "firestore":
+        artifacts = None
+        if backend == "cloud":
+            from .cloud import CloudSettings, cloud_stores
+
+            stores = cloud_stores(CloudSettings.from_environment(), root / "shared-cache")
+            metadata, artifacts = stores.shared_metadata, stores.shared_artifacts
+        elif backend == "firestore":
             from .shared_cutover import FirestoreSettings, bind_firestore
             from .shared_firestore import FirestoreSharedMetadata, artifact_store_identity
 
@@ -35,30 +42,18 @@ class SharedService:
                 raise ValueError("Data root is bound to Firestore; explicit cutover reconciliation required")
         else:
             raise ValueError("Invalid shared metadata backend")
-        self.store = SharedRequests(root / "shared.sqlite3", metadata=metadata)
+        self.store = SharedRequests(root / "shared.sqlite3", metadata=metadata, artifacts=artifacts)
 
     def execute(self, request: dict):
         action = request.get("action")
         store = self.store
-        if action == "submit":
-            return store.submit(request["reader"], request["title"], request["chapter"], request["notes"])
-        if action == "requests":
-            return store.list_reader(request["reader"])
-        if action == "delete":
-            store.delete(request["reader"], workflow.identifier(request["request_id"]))
-            return {"deleted": True}
-        if action == "work":
-            work = store.list_work()
-            for item in work:
-                item["requests"] = store.work_requests(item["id"])
-                item["link"] = store.get_link(item["id"])
-                item.update(store.review_state(item["id"]))
-                publication = store.publication(item["id"])
-                item["publication_id"] = publication["id"] if publication else None
-            return work
-        if action == "approve":
-            store.approve(workflow.identifier(request["work_id"]), request["actor"])
-            return {"approved": True}
+        if action in METADATA_ACTIONS:
+            result = metadata_action(store, request)
+            if action == "published":
+                result["path"] = str(store.published_artifact(
+                    request["work_id"], "chapter_narration.wav", result["publication_id"],
+                ))
+            return result
         if action == "link":
             return workflow.link_shared_project(store, workflow.identifier(request["work_id"]), request["project_id"], request["actor"])
         if action == "prepare":
@@ -72,17 +67,6 @@ class SharedService:
                 workflow.identifier(prior)
             return workflow.publish_shared_export(store, workflow.identifier(request["work_id"]),
                                                   workflow.identifier(request["review_id"]), request["actor"], request["revision"], prior)
-        if action == "catalog":
-            return store.catalog()
-        if action == "published":
-            work_id = workflow.identifier(request["work_id"])
-            publication = store.publication(work_id)
-            if not publication:
-                raise ValueError("Publication not found")
-            expected = request.get("publication_id", publication["id"])
-            workflow.identifier(expected)
-            return {"publication_id": expected,
-                    "path": str(store.published_artifact(work_id, "chapter_narration.wav", expected))}
         if action == "candidate":
             return {"path": str(store.candidate_artifact(workflow.identifier(request["candidate_id"]), "chapter_narration.wav"))}
         raise ValueError("Unsupported shared action")

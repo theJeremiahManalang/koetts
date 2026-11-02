@@ -10,15 +10,15 @@ verify current source and rerun checks before relying on it.
 
 Incrementally migrate the existing local production studio and disconnected reader demo into the intended shared reader/admin application. Preserve working UI, MAGI extraction and engine behavior.
 
-- [Implementation plan](../architecture-alignment-plan.md): scope IDs, dependencies, boundaries and acceptance checks.
-- [Scope prompts](../architecture-alignment-prompt.md): start exactly one bounded scope.
+- [Implementation plan](../plans/architecture-alignment-plan.md): scope IDs, dependencies, boundaries and acceptance checks.
+- [Scope prompts](../plans/architecture-alignment-prompt.md): start exactly one bounded scope.
 - Cloud design (`cloud-deployment-design.md`) and setup checklist
   (`gcp-firebase-setup-checklist.md`) were referenced by the imported plan but are
   absent here. Their concurrency, retry, retention, and infrastructure decisions
   are unavailable inputs, not defaults to invent. Continue independent scope work;
   resolve those inputs before implementing behavior that depends on them.
-- Current local workflow: [audio guide](../AUDIO_WORKFLOW.md).
-- Current frontend hosting boundary: [App Hosting guide](../APP_HOSTING.md).
+- Current local workflow: [audio guide](../../resources/AUDIO_WORKFLOW.md).
+- Current frontend hosting boundary: [App Hosting guide](../../resources/APP_HOSTING.md).
 
 The repository contains `web/`, `web_workflow.py`, and the extraction/CLI adapters.
 Inspect those existing implementations; preserve them through the migration.

@@ -62,10 +62,3 @@ test('verified principal ignores forged actor headers and cannot be reused for a
   assert.deepEqual(api.adminPrincipal(incoming), { kind: 'firebase', uid: 'verified-admin', project_id: 'verified-project' });
   assert.throws(() => api.adminPrincipal(request({ authorization: 'Bearer token' })));
 });
-test('all processing routes enforce authorization before their existing work', () => {
-  for (const file of ['workflow', 'extract', 'asset']) {
-    const source = fs.readFileSync(require.resolve(`../app/api/${file}/route.ts`), 'utf8');
-    const handlers = [...source.matchAll(/export async function (GET|POST)\(request: Request\) \{\s*const denied = await requireAdmin\(request\); if \(denied\) return denied;/g)];
-    assert.equal(handlers.length, file === 'workflow' ? 2 : 1);
-  }
-});

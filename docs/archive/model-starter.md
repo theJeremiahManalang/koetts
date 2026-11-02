@@ -1,7 +1,7 @@
 # Manga audiobook backend and MagiV3 starter
 
 The `dev-test-1` integration adds the supplied `manga_tts` package and an image-to-audio
-workflow. Start with [AUDIO_WORKFLOW.md](../AUDIO_WORKFLOW.md) for extraction, cast review,
+workflow. Start with [AUDIO_WORKFLOW.md](../../resources/AUDIO_WORKFLOW.md) for extraction, cast review,
 script approval, Gemini generation, take selection, WAV/MP3 export and recovery.
 The original MagiV3 starter remains available below and through `run.py`.
 

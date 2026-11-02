@@ -25,8 +25,11 @@ function load(relative, mocks, cache = new Map()) {
   return exports;
 }
 
-for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
-  const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${'a'.repeat(32)}&create=1` : 'http://localhost/request' });
+for (const surface of ['request', 'studio', 'polling', 'work-prepare', 'hosted-selection', 'hosted-stream']) test(surface === 'work-prepare' ? 'shared work preparation preserves an unrelated saved project and loads authorized context' : surface === 'polling' ? 'active studio polling resumes after session renewal and failed verification' : surface === 'hosted-selection' ? 'hosted create follows current work as Studio navigation changes the selection' : surface === 'hosted-stream' ? 'hosted Studio reconnects a saved operation by SSE without polling or resubmitting' : `${surface} draft survives token renewal and failed verification; account changes clear it`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const advance = async milliseconds => act(async () => { t.mock.timers.tick(milliseconds); });
+  const initialWork = 'a'.repeat(32);
+  const dom = new JSDOM('<div id="root"></div>', { url: surface === 'work-prepare' ? `http://localhost/?work=${initialWork}&create=1` : ['hosted-selection', 'hosted-stream'].includes(surface) ? `http://localhost/?work=${initialWork}` : 'http://localhost/request' });
   const originals = Object.fromEntries(['window', 'document', 'navigator', 'localStorage', 'URL', 'File', 'ResizeObserver', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage, File: dom.window.File, URL: dom.window.URL, ResizeObserver: class { observe() {} disconnect() {} }, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   dom.window.HTMLElement.prototype.scrollTo = () => {};
@@ -40,16 +43,30 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
   let polls = 0;
   let jobStatus = 'running';
   let observedReconciliation = false;
+  let pendingWorkResponse;
+  let releaseWork;
+  let eventStreams = 0;
+  let enqueuePosts = 0;
   const requestedUrls = [];
-  globalThis.fetch = async url => {
+  globalThis.fetch = async (url, options = {}) => {
     requestedUrls.push(String(url));
-    if (String(url).startsWith('/api/shared/admin?work_id=')) return { ok: true, json: async () => ({ work: [{ id: 'a'.repeat(32), title: 'Requested story', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
+    if (String(url) === '/api/workflow' && options.method === 'POST') enqueuePosts++;
+    if (String(url).startsWith('/api/shared/admin?work_id=')) {
+      const id = new URL(String(url), 'http://localhost').searchParams.get('work_id');
+      if (pendingWorkResponse) await pendingWorkResponse;
+      return { ok: true, json: async () => ({ work: [{ id, title: id === initialWork ? 'Requested story' : 'Second request', chapter: 3, status: 'approved', requests: [{ requester_name: 'Reader', notes: 'Narrate clearly' }] }] }) };
+    }
+    if (surface === 'hosted-stream' && String(url).startsWith('/api/workflow/events?job=')) {
+      eventStreams++;
+      const state = { id: 'c'.repeat(32), project: 'd'.repeat(32), status: eventStreams === 1 ? 'running' : 'failed', message: eventStreams === 1 ? 'Rendering' : 'Synthetic worker failure' };
+      return new Response(`event: operation\ndata: ${JSON.stringify(state)}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } });
+    }
     if (String(url).includes('?job=')) {
       polls++;
       return { ok: true, json: async () => { if (jobStatus === 'reconciliation_required') observedReconciliation = true; return { status: jobStatus, message: 'Rendering fixture' }; } };
     }
     if (pending && url === '/api/auth/session') await pending;
-    return { ok: !fail, json: async () => ({ projects: [], has_api_key: false }) };
+    return { ok: !fail, json: async () => ({ projects: [], provider_configured: false }) };
   };
   const mocks = {
     'firebase/auth': { onIdTokenChanged: (_, next) => { observer = next; return () => {}; }, GoogleAuthProvider: class { setCustomParameters() {} }, signInWithPopup: async () => { loginCalls++; }, signOut: async () => {} },
@@ -63,23 +80,56 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
     './script-workspace': { ScriptWorkspace: () => null },
     './loading-state': { LoadingState: () => null },
     'next/link': props => React.createElement('a', props),
-    'next/navigation': { useRouter: () => ({ replace() {} }), useSearchParams: () => new URLSearchParams() },
+    'next/navigation': { useRouter: () => ({ replace() {} }), useSearchParams: () => new URLSearchParams(window.location.search) },
   };
   const cache = new Map();
   const { AuthProvider } = load('../features/identity/auth-provider.tsx', mocks, cache);
   const Page = load(surface === 'request' ? '../features/requests/request-page.tsx' : '../features/studio/studio-workspace.tsx', mocks, cache).default;
   const { createRoot } = require('react-dom/client');
   const root = createRoot(document.getElementById('root'));
-  t.after(async () => { await act(async () => root.unmount()); if (surface === 'polling') await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); }); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
-  await act(async () => root.render(React.createElement(AuthProvider, null, React.createElement(Page))));
+  t.after(async () => { await act(async () => root.unmount()); await advance(1000); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
+  const app = () => React.createElement(AuthProvider, null, React.createElement(Page, ['hosted-selection', 'hosted-stream'].includes(surface) ? { hosted: true } : {}));
+  await act(async () => root.render(app()));
   const emit = user => { firebaseAuth.currentUser = user; return observer(user); };
   const user = uid => ({ uid, getIdToken: async () => 'token', getIdTokenResult: async () => ({ token: 'token', claims: { admin: true } }) });
   if (surface === 'polling') {
     localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'a'.repeat(32), project: 'b'.repeat(32), idempotencyKey: 'retained-intent' }));
     localStorage.setItem('manga-tts-pending-operation', JSON.stringify([{ key: 'retained-intent', fingerprint: 'operation' }]));
   }
+  if (surface === 'hosted-stream') localStorage.setItem('manga-tts-job', JSON.stringify({ id: 'c'.repeat(32), project: 'd'.repeat(32), operation: { pending: 'Working…', success: 'Ready', detail: 'Complete' } }));
   if (surface === 'work-prepare') localStorage.setItem('manga-tts-project', 'unrelated-saved-project');
   await act(async () => emit(user('alice')));
+  if (surface === 'hosted-selection') {
+    const images = document.querySelector('input[aria-label="Upload manga images"]');
+    await act(async () => {
+      Object.defineProperty(images, 'files', { configurable: true, value: [new dom.window.File(['page'], 'page.png', { type: 'image/png' })] });
+      images.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    const create = () => [...document.querySelectorAll('button')].find(button => button.textContent.includes('Extract & create project'));
+    assert.equal(create().disabled, false, 'verified selected work enables hosted creation');
+    window.history.pushState(null, '', '/');
+    await act(async () => root.render(app()));
+    assert.equal(create().disabled, true, 'removing the work query disables creation immediately');
+    assert.match(document.body.textContent, /No chapter work selected/);
+    window.history.pushState(null, '', `/?work=${'b'.repeat(32)}`);
+    pendingWorkResponse = new Promise(resolve => { releaseWork = resolve; });
+    await act(async () => root.render(app()));
+    assert.equal(create().disabled, true, 'a different unverified work never inherits prior eligibility');
+    assert.equal(create().disabled, true, 'creation stays disabled while the new work is still loading');
+    await act(async () => releaseWork());
+    pendingWorkResponse = null;
+    assert.equal(create().disabled, false, 'the newly verified current work enables creation');
+    assert.match(document.body.textContent, /Second request · Chapter 3/);
+    return;
+  }
+  if (surface === 'hosted-stream') {
+    await advance(1000);
+    assert.equal(eventStreams, 2, 'a disconnected stream reconnects to current operation state');
+    assert.equal(requestedUrls.some(url => url.startsWith('/api/workflow?job=')), false);
+    assert.equal(localStorage.getItem('manga-tts-job'), null);
+    assert.equal(enqueuePosts, 0, 'reconnecting status must not enqueue another operation');
+    return;
+  }
   if (surface === 'work-prepare') {
     assert.ok(document.querySelector('input[aria-label="Upload manga images"]'));
     assert.match(document.body.textContent, /Requested story · Chapter 3/);
@@ -95,20 +145,20 @@ for (const surface of ['request', 'studio', 'polling', 'work-prepare']) test(sur
     pending = new Promise(resolve => { release = resolve; });
     let refresh;
     await act(async () => { refresh = emit(user('alice')); });
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    await advance(1100);
     fail = true;
     await act(async () => { release(); await refresh; });
     const pausedPolls = polls;
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    await advance(1100);
     assert.equal(polls, pausedPolls, 'verification failure must pause protected requests');
     pending = null;
     fail = false;
     await act(async () => emit(user('alice')));
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    await advance(1100);
     assert.ok(polls > pausedPolls, 'reauthentication must resume the existing operation without reload');
     assert.ok(localStorage.getItem('manga-tts-job'), 'running operation recovery record must remain');
     jobStatus = 'reconciliation_required';
-    await act(async () => { for (let elapsed = 0; elapsed < 2000 && !observedReconciliation; elapsed += 50) await new Promise(resolve => setTimeout(resolve, 50)); });
+    await advance(1100);
     assert.ok(observedReconciliation, 'worker reconciliation state must be observed before checking retained intent');
     assert.ok(localStorage.getItem('manga-tts-pending-operation')?.includes('retained-intent'), 'uncertain outcome must retain its idempotency lookup key');
     return;

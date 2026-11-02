@@ -105,7 +105,7 @@ def operation(stage: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                         "Missing current audio": "Current audio is missing. Render the selected approved scenes before export.",
                         "MP3 encoder unavailable": "MP3 export needs the audio dependencies. Install requirements-audio.txt, then export again.",
                         "No active project": "Create, load or restore a project before this operation.",
-                        "Configure GEMINI_API_KEY": "Configure GEMINI_API_KEY in the environment or Colab Secrets, or inject a configured client.",
+                        "Configure GOOGLE_CLOUD_PROJECT": "Configure GOOGLE_CLOUD_PROJECT and Application Default Credentials, or inject a configured client.",
                     }
                     message = next((safe for key, safe in explanations.items() if key in text), message)
                 LOGGER.warning("workflow_failed", extra={"stage": stage, "outcome": "failed", "failure_code": code})

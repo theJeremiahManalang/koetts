@@ -1,21 +1,36 @@
 """Exercise documented frozen onboarding in a disposable copy without secrets or results."""
 from pathlib import Path
+import argparse
 import os
 import shutil
 import subprocess
 import tempfile
 
 
-def main():
+def ignore_checkout_artifacts(directory, names):
+    patterns = (
+        "node_modules", ".next", "__pycache__", ".pytest_cache", ".mypy_cache",
+        ".ruff_cache", ".cache", ".turbo", ".terraform", ".venv", "venv",
+        "model-cache", "*.pyc", "*.tsbuildinfo", "next-env.d.ts", ".env", ".env.*",
+        "*.tfstate", "*.tfstate.*", "*.tfvars", "*.tfvars.json",
+        "application_default_credentials.json", "service-account*.json",
+    )
+    return {
+        name for name in names
+        if name != ".env.example" and any(Path(name).match(pattern) for pattern in patterns)
+    }
+
+
+def main(argv=None):
+    argparse.ArgumentParser(description=__doc__).parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="manga-onboarding-") as directory:
         checkout = Path(directory)
         for name in ("package.json", "package-lock.json", "pyproject.toml", "uv.lock", ".nvmrc", ".npmrc", ".python-version", "firebase.json", "README.md", "AGENTS.md", "CONTRIBUTING.md", "GLOSSARY.md", "CONTEXT.md"):
             shutil.copy2(root / name, checkout / name)
-        for name in ("apps", "packages", "tests", "tools", "docs", "images"):
-            shutil.copytree(root / name, checkout / name, ignore=shutil.ignore_patterns(
-                "node_modules", ".next", "__pycache__", "*.tsbuildinfo", "next-env.d.ts", ".env", ".env.local"))
-        env = {**os.environ, "GEMINI_API_KEY": "", "NEXT_TELEMETRY_DISABLED": "1"}
+        for name in ("apps", "packages", "tests", "tools", "docs", "images", "resources", "infra"):
+            shutil.copytree(root / name, checkout / name, ignore=ignore_checkout_artifacts)
+        env = {**os.environ, "GEMINI_API_KEY": "", "GOOGLE_CLOUD_PROJECT": "", "NEXT_TELEMETRY_DISABLED": "1"}
         for name in ("PYTHON_EXECUTABLE", "MANGA_DATA_ROOT", "MANGA_REPO_ROOT", "MANGA_TTS_SAMPLE_PROJECT", "MANGA_WEB_TEST_URL", "VIRTUAL_ENV"):
             env.pop(name, None)
         for command in (["uv", "sync", "--frozen"], ["npm", "ci"], ["npm", "run", "check:repo"], ["npm", "test"]):

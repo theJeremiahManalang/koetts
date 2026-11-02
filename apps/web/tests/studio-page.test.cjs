@@ -20,6 +20,7 @@ function page(status) {
       return status ? new Response(null, { status }) : null;
     } };
     if (name === "../features/studio/studio-workspace") return workspace;
+    if (name.endsWith("/private-api")) return { hostedMode: () => process.env.MANGA_EXECUTION_MODE === "cloud" };
     return require(name);
   });
   return { render: api.default, workspace, calls };

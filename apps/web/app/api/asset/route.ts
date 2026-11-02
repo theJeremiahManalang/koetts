@@ -2,17 +2,25 @@ import { requireAdmin } from "../../../features/identity/require-admin";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot, validId, sameOrigin } from "../../../lib/workflow";
+import { hostedMode, proxyPrivate, PrivateApiError } from "../../../lib/private-api";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const denied = await requireAdmin(request); if (denied) return denied;
   if (process.env.MANGA_FRONTEND_ONLY === "1") return Response.json({ error: "Processing is available only in the local studio." }, { status: 503 });
   try {
-    sameOrigin(request);
     const url = new URL(request.url), project = validId(url.searchParams.get("project") || "");
     const relative = url.searchParams.get("path") || "";
     const bundle = relative === "bundle.zip";
     if (!bundle && (!/^(input|originals|references|takes|exports)\//.test(relative) || relative.includes("..") || relative.includes("\\") || relative.includes(":"))) throw new Error();
+    if (hostedMode()) {
+      const response = await proxyPrivate(request, `/projects/${project}/assets/${relative.split("/").map(encodeURIComponent).join("/")}`);
+      if (url.searchParams.has("download") && response.ok) {
+        response.headers.set("Content-Disposition", `attachment; filename="${bundle ? "reviewed-project.zip" : relative.split("/").at(-1)!.replace(/[^a-zA-Z0-9._-]/g, "_")}"`);
+      }
+      return response;
+    }
+    sameOrigin(request);
     const base = await realpath(bundle ? path.join(dataRoot, "downloads") : path.join(dataRoot, "projects", project));
     const target = await realpath(path.join(base, bundle ? project + ".zip" : relative));
     if (!target.startsWith(base + path.sep)) throw new Error();
@@ -31,5 +39,8 @@ export async function GET(request: Request) {
       return new Response(bytes.subarray(start, end + 1), { status: 206, headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${bytes.length}`, "Content-Length": String(end - start + 1) } });
     }
     return new Response(bytes, { headers: { ...headers, "Content-Length": String(bytes.length) } });
-  } catch { return Response.json({ error: "Asset not available." }, { status: 404 }); }
+  } catch (error) {
+    if (error instanceof PrivateApiError) return Response.json({ error: error.message, code: error.code }, { status: error.status });
+    return Response.json({ error: "Asset not available." }, { status: 404 });
+  }
 }

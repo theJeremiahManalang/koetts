@@ -6,9 +6,11 @@ SQLite coordinates one host. Cloud persistence is a separate adapter.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
 
@@ -47,15 +49,37 @@ class ExportSnapshot:
         return {name: _file_checksum(path) for name, path in self.artifacts.items()}
 
 
+@dataclass(frozen=True, kw_only=True)
+class ReaderIntakePolicy:
+    """Optional hosted limits for newly created reader requests."""
+
+    max_pending: int = 5
+    max_new_per_utc_day: int = 10
+
+    def __post_init__(self):
+        if self.max_pending < 1 or self.max_new_per_utc_day < 1:
+            raise ValueError("Reader intake limits must be positive")
+
+
+class IntakeQuotaExceeded(ValueError):
+    """A reader request exceeded an enabled intake quota."""
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        super().__init__(message)
+
+
 class SharedRequests:
     """Shared workflow decisions independent of metadata storage and artifact transport."""
 
-    def __init__(self, database: Path, *, metadata=None, artifacts=None):
+    def __init__(self, database: Path, *, metadata=None, artifacts=None, intake_policy=None, clock=None):
         from .shared_metadata import SQLiteSharedMetadata
 
         self.database = Path(database)
         self.artifacts = artifacts if artifacts is not None else LocalSharedArtifacts(self.database.parent)
         self.metadata = metadata if metadata is not None else SQLiteSharedMetadata(self.database)
+        self.intake_policy = intake_policy
+        self.clock = clock if clock is not None else _now
 
     def submit(self, reader: str, title: str, chapter: str, notes: str):
         title = " ".join(title.split())
@@ -65,20 +89,49 @@ class SharedRequests:
             raise ValueError("Invalid chapter")
         work = dict(id=uuid.uuid4().hex, title=title, title_key=title.casefold(), chapter=int(chapter),
                     configuration="default", status="pending")
-        request = dict(id=uuid.uuid4().hex, reader=reader, notes=notes, created_at=_now())
+        created_at = _timestamp(self.clock())
+        request = dict(id=uuid.uuid4().hex, reader=reader, notes=notes, created_at=created_at)
 
         def submit(tx):
             existing = tx.find("chapter_work", title_key=work["title_key"], chapter=work["chapter"], configuration="default")
             current = existing[0] if existing else work
             prior = tx.find("reader_requests", work_id=current["id"], reader=reader)
             record = prior[0] if prior else {**request, "work_id": current["id"]}
+            if not prior and self.intake_policy is not None:
+                self._check_intake_quota(tx, reader, created_at,
+                                         adds_pending=current["status"] == "pending")
             if not existing:
                 tx.put("chapter_work", work)
             if not prior:
                 tx.put("reader_requests", record)
+                if self.intake_policy is not None:
+                    self._record_daily_request(tx, reader, created_at)
             return {**_fields(record, "id", "work_id", "notes", "created_at"),
                     **_fields(current, "title", "chapter", "status"), "duplicate": bool(prior)}
         return self.metadata.run(submit)
+
+    def _check_intake_quota(self, tx, reader, created_at, *, adds_pending):
+        policy = self.intake_policy
+        if adds_pending:
+            pending = 0
+            for request in tx.find("reader_requests", reader=reader):
+                work = tx.get("chapter_work", request["work_id"])
+                if work and work["status"] == "pending":
+                    pending += 1
+            if pending >= policy.max_pending:
+                raise IntakeQuotaExceeded("pending_limit", "Too many pending reader requests")
+        utc_day = _utc_day(created_at)
+        daily = tx.get("reader_daily_quotas", _quota_id(reader, utc_day))
+        if daily and daily["count"] >= policy.max_new_per_utc_day:
+            raise IntakeQuotaExceeded("daily_limit", "Daily reader request limit reached")
+
+    @staticmethod
+    def _record_daily_request(tx, reader, created_at):
+        utc_day = _utc_day(created_at)
+        identity = _quota_id(reader, utc_day)
+        daily = tx.get("reader_daily_quotas", identity)
+        tx.put("reader_daily_quotas", {"id": identity, "reader": reader,
+                                      "utc_day": utc_day, "count": (daily["count"] if daily else 0) + 1})
 
     def list_reader(self, reader):
         def read(tx):
@@ -258,9 +311,28 @@ class SharedRequests:
 
 
 def _now():
-    from datetime import datetime, timezone
-
     return datetime.now(timezone.utc).isoformat()
+
+
+def _timestamp(value):
+    if isinstance(value, datetime):
+        timestamp = value
+    elif isinstance(value, str):
+        timestamp = datetime.fromisoformat(value)
+    else:
+        raise ValueError("Clock must return a datetime or ISO timestamp")
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError("Clock timestamp must include a timezone")
+    return timestamp.astimezone(timezone.utc).isoformat()
+
+
+def _utc_day(timestamp):
+    return datetime.fromisoformat(timestamp).astimezone(timezone.utc).date().isoformat()
+
+
+def _quota_id(reader, utc_day):
+    identity = json.dumps([reader, utc_day], ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
 def _fields(record, *keys):

@@ -29,7 +29,7 @@ class BoundaryConfig:
     def __post_init__(self):
         if (not isinstance(self.project_id, str) or not self.project_id.strip() or self.project_id != self.project_id.strip()
                 or not isinstance(self.audience, str) or not self.audience.strip() or self.audience != self.audience.strip()
-                or not isinstance(self.mode, str) or self.mode not in {"verification", "local"}):
+                or not isinstance(self.mode, str) or self.mode not in {"verification", "local", "cloud"}):
             raise ValueError("Explicit project, audience and valid API mode required")
         if not isinstance(self.permissions, Mapping) or any(
             not isinstance(subject, str) or not subject or not isinstance(actions, frozenset)
@@ -76,7 +76,10 @@ class CredentialBoundary:
         from google.oauth2 import id_token
 
         return id_token.verify_oauth2_token(
-            token, GoogleRequest(), audience=self.config.audience
+            token, GoogleRequest(), audience=[
+                self.config.audience,
+                self.config.audience.rstrip("/") + "/internal/operation-events",
+            ]
         )
 
     def _verify_user(self, token, session):
@@ -94,7 +97,7 @@ class CredentialBoundary:
         verifier = auth.verify_session_cookie if session else auth.verify_id_token
         return verifier(token, app=app, check_revoked=True)
 
-    def authorize(self, request: Request, action: str, *, user=True):
+    def authorize(self, request: Request, action: str, *, user=True, admin=True):
         authorization = request.headers.getlist("authorization")
         if len(authorization) != 1:
             raise HTTPException(401, "Service credential required")
@@ -104,12 +107,16 @@ class CredentialBoundary:
         try:
             claims = self.service_verifier(token)
             subject = claims.get("sub")
+            audiences = {self.config.audience}
+            # Eventarc's managed push subscription signs for the full destination URL.
+            if action == "operation-event":
+                audiences.add(self.config.audience.rstrip("/") + "/internal/operation-events")
             if (
                 not isinstance(subject, str)
                 or not subject
                 or claims.get("iss")
                 not in {"accounts.google.com", "https://accounts.google.com"}
-                or claims.get("aud") != self.config.audience
+                or claims.get("aud") not in audiences
             ):
                 raise ValueError("Invalid service claims")
         except Exception:  # noqa: BLE001 - Credential SDK errors must fail closed without leaking details.
@@ -139,6 +146,6 @@ class CredentialBoundary:
                 raise ValueError("Invalid user claims")
         except Exception:  # noqa: BLE001 - Credential SDK errors must fail closed without leaking details.
             raise HTTPException(401, "Invalid user credential") from None
-        if principal.get("admin") is not True:
+        if admin and principal.get("admin") is not True:
             raise HTTPException(403, "Administrator required")
         return {"kind": "firebase", "uid": uid, "project_id": self.config.project_id}

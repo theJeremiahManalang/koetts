@@ -5,12 +5,17 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  GEMINI_API_KEY: ""
+  GOOGLE_CLOUD_PROJECT: ""
 jobs:
-  check:
+  preflight:
     runs-on: ubuntu-latest
-    env:
-      NEXT_TELEMETRY_DISABLED: "1"
-      GEMINI_API_KEY: ""
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,9 +26,83 @@ jobs:
         with:
           version: "0.11.16"
           enable-cache: true
-      - run: uv sync --locked
-      - run: npm ci
-      - run: npm run check
-      - run: npm run test:http
-      - run: npm run test:firestore
-      - run: uv run --locked python tools/verify_fresh_checkout.py
+      - name: Install locked dependencies
+        run: |
+          mkdir -p ci-logs
+          set -o pipefail
+          uv sync --locked 2>&1 | tee ci-logs/uv-install.log
+          npm ci 2>&1 | tee ci-logs/npm-install.log
+      - name: Fast checks
+        run: |
+          set -o pipefail
+          npm run check:repo 2>&1 | tee ci-logs/repo.log
+          npm run lint 2>&1 | tee ci-logs/lint.log
+          npm run typecheck 2>&1 | tee ci-logs/typecheck.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: preflight-logs
+          path: ci-logs/
+          retention-days: 7
+  acceptance:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [python, web, http, firestore, onboarding]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.16"
+          enable-cache: true
+      - uses: actions/setup-java@v4
+        if: matrix.suite == 'firestore'
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/cache@v4
+        if: matrix.suite == 'firestore'
+        with:
+          path: .cache/firestore/
+          key: firestore-emulator-${{ runner.os }}-${{ hashFiles('tools/verify_shared_firestore.py') }}
+      - name: Install locked dependencies
+        run: |
+          mkdir -p ci-logs
+          set -o pipefail
+          uv sync --locked 2>&1 | tee ci-logs/uv-install.log
+          npm ci 2>&1 | tee ci-logs/npm-install.log
+      - name: Run acceptance suite
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          set -o pipefail
+          case "$SUITE" in
+            python) npm run test:python 2>&1 | tee ci-logs/python.log ;;
+            web) npm run test:web 2>&1 | tee ci-logs/web.log ;;
+            http) npm run test:http 2>&1 | tee ci-logs/http.log ;;
+            firestore) uv run --locked python tools/verify_shared_firestore.py --log-file ci-logs/firestore-emulator.log 2>&1 | tee ci-logs/firestore.log ;;
+            onboarding) uv run --locked python tools/verify_fresh_checkout.py 2>&1 | tee ci-logs/onboarding.log ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ${{ matrix.suite }}-logs
+          path: ci-logs/
+          retention-days: 7
+  check:
+    if: always()
+    needs: [preflight, acceptance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all checks
+        env:
+          PREFLIGHT: ${{ needs.preflight.result }}
+          ACCEPTANCE: ${{ needs.acceptance.result }}
+        run: test "$PREFLIGHT" = success && test "$ACCEPTANCE" = success

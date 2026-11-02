@@ -10,7 +10,8 @@ from typing import Protocol, TypeVar
 T = TypeVar("T")
 KEYS = {"chapter_work": "id", "reader_requests": "id", "work_approvals": "work_id",
         "work_projects": "work_id", "audio_reviews": "id", "export_candidates": "id",
-        "review_candidates": "review_id", "publications": "work_id"}
+        "review_candidates": "review_id", "publications": "work_id",
+        "reader_daily_quotas": "id"}
 
 
 class MetadataTransaction(Protocol):
@@ -41,6 +42,10 @@ class SQLiteSharedMetadata:
                     reader TEXT NOT NULL, notes TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(work_id, reader)
+                );
+                CREATE TABLE IF NOT EXISTS reader_daily_quotas (
+                    id TEXT PRIMARY KEY, reader TEXT NOT NULL, utc_day TEXT NOT NULL,
+                    count INTEGER NOT NULL CHECK(count >= 0), UNIQUE(reader, utc_day)
                 );
                 CREATE TABLE IF NOT EXISTS work_approvals (
                     work_id TEXT PRIMARY KEY REFERENCES chapter_work(id),
@@ -129,4 +134,6 @@ class _SQLiteTransaction:
                         f"ON CONFLICT({key}) DO UPDATE SET {updates}", values)
 
     def delete(self, table, key):
+        if table == "reader_daily_quotas":
+            raise ValueError("Reader daily quota records cannot be deleted")
         self.db.execute(f"DELETE FROM {table} WHERE {KEYS[table]} = ?", (key,))
