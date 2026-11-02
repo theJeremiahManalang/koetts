@@ -5,6 +5,9 @@ Human developer setup and GCP diagrams live in [root resources](../../resources/
 The [hosted plan](../plans/hosted-service-plan.md) owns intended scope; [status](../STATUS.md)
 distinguishes implemented offline behavior from live acceptance.
 
+- [Hosted operations](hosted-operations.md): consolidated configuration,
+  resource boundaries, saved-plan procedure, modification lifecycle, and links
+  to detailed operations runbooks.
 - [Infrastructure configuration](hosted-infrastructure.md): Terraform inputs,
   dedicated identities, regional placement, ADC and signing-secret ownership.
 - [Backend decommission](hosted-backend-decommission.md): maintenance mode,

@@ -276,13 +276,15 @@ class FirestoreOperationStoreTests(unittest.TestCase):
         self.assertTrue(self.store.begin_dispatch(claim))
         self.store.mark_uncertain(claim, "Cloud Run start returned HTTPError")
 
-        resolved = self.store.resolve_dispatch_absent(operation.operation_id, "retry")
+        resolved = self.store.resolve_dispatch_absent(
+            claim, "retry", expected_operation=self.store.get(operation.operation_id),
+            expected_attempt=self.store.attempt(claim))
         attempt = self.store.attempt(claim)
 
         self.assertEqual(resolved.status, "queued")
         self.assertEqual(attempt["state"], "operator_retry")
         self.assertEqual(attempt["dispatch_state"], "not_submitted")
-        self.assertTrue(attempt["execution_stopped_confirmed"])
+        self.assertFalse(attempt["execution_stopped_confirmed"])
         self.assertIsNone(attempt["execution_name"])
         self.assertIsNone(self.store._slot_ref(operation.stage, 1).get().to_dict())
 

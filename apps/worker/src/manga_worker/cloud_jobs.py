@@ -338,7 +338,7 @@ class CloudJobDispatcher:
         resolve_absent = getattr(self.store, "resolve_dispatch_absent", None)
         if not callable(resolve_absent):
             raise CloudJobError("Operation store does not support absent-execution resolution")
-        return resolve_absent(operation_id, action)
+        return resolve_absent(claim, action, expected_operation=operation, expected_attempt=attempt)
 
     def _dispatch(self, claim: OperationClaim) -> None:
         if not self.store.begin_dispatch(claim):

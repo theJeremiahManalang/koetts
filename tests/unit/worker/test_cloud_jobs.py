@@ -306,7 +306,9 @@ class Store:
     def recover_unsubmitted(self, _):
         self.recovered_unsubmitted += 1
 
-    def resolve_dispatch_absent(self, _, action):
+    def resolve_dispatch_absent(self, claim, action, *, expected_operation, expected_attempt):
+        assert claim.fence == self.op.fence
+        assert expected_operation == self.op
         self.calls.append("resolve_absent:" + action)
         status = "queued" if action == "retry" else "failed"
         self.op = replace(self.op, status=status)

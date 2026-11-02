@@ -35,8 +35,10 @@ reinitialize them to release reservations.
 
    ```bash
    python tools/prepare_apphosting_source.py --output /tmp/koetts-apphosting-decommission
-   cd /tmp/koetts-apphosting-decommission
-   firebase deploy --only apphosting:koetts --project koetts-9bf7f
+   (
+     cd /tmp/koetts-apphosting-decommission
+     firebase deploy --only apphosting:koetts --project koetts-9bf7f
+   )
    ```
 2. Keep the ledger active and the coordinator running while already accepted
    queued/running work drains. Confirm there are no running Cloud Run executions

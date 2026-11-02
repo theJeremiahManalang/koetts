@@ -37,6 +37,7 @@ initial and final regional placement.
 
 | Task | Guide |
 | --- | --- |
+| Start hosted configuration, provisioning, modification, or retirement | [Hosted operations](resources/hosted-operations.md) |
 | Review accepted scope, limits and phase 5 authorization | [Hosted plan](plans/hosted-service-plan.md) |
 | Configure Terraform inputs, identities, resources and secrets | [Hosted infrastructure](resources/hosted-infrastructure.md) |
 | Retire backend compute and retain the Firebase frontend/data | [Backend decommission guide](resources/hosted-backend-decommission.md) |

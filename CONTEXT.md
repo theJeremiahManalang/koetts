@@ -772,3 +772,37 @@ service `koetts` (preserve), new API in `us-central1`, and legacy `koetts-s3-api
 in `us-east4` using its own service account. The decommission guide covers both
 APIs and requires request/client checks before deleting the legacy one. Final
 `check:repo`, `git diff --check`, changed-file Ruff, and Terraform fmt checks pass.
+
+## Retry compatibility follow-up (2026-11-02)
+
+User approved implementation of retry fencing, persisted-state compatibility,
+record repair, and decommission guide directory correction. Resolver now carries
+original claim and operation/attempt snapshots into the transaction and rejects
+changed evidence. Absent execution writes retain stopped=false and prior strict
+reader validation. Frontend deployment runs in a subshell in the guide.
+Focused cloud jobs/operator tests: 37 passed. git diff --check passed.
+Authorized production repair completed: attempt 1 of operation
+4978815938fa413e8e8307015b11dbb6 changed only execution_stopped_confirmed
+from true to false, guarded by both document update versions and known terminal
+operation/attempt state. Private before/after evidence and script:
+/tmp/koetts-repair/. No deployment, provider calls or budget writes.
+Remaining verification: emulator race/repair cases, prior-reader execution,
+full acceptance and independent re-review have not run.
+
+## Private manual-test records and hosted operations entry point — 2026-11-02
+
+User asked to keep personal acceptance evidence out of tracked docs and provide one
+hosted operations entry point. Copied the filled admin-processing checklist and
+production-deployment checklist into ignored root `manual-testing/` with private
+permissions. Replaced tracked admin checklist with a blank reusable template;
+reset deployment checklist checkboxes and removed its dated teardown actuals while
+preserving criteria. Added `docs/resources/hosted-operations.md` with config-source
+map, existing-versus-managed resource boundary, root-relative saved Terraform
+plan/apply workflow, provisioning prerequisites, modification lifecycle, and decommission links. Added copy commands for future private test campaigns and noted that gitignore does not erase old history. Explicitly distinguishes the project USD 20 billing notification budget from Firestore
+runtime provider/stage caps; both are not hard spend caps. Documents default
+`coordinator_paused=true` and private override, without claiming current live
+state. Indexed in docs READMEs. No cloud actions. Validation: `.venv/bin/python tools/check_repo.py` and `git diff --check` pass;
+`git check-ignore -v` confirms both private files match `/manual-testing/`; directory
+mode is 0700 and files are 0600. `npm run check:repo` could not acquire its uv
+cache lock because `/home/ssuish/.cache/uv` is read-only; direct pinned venv
+Python invocation passes. No cloud action ran.

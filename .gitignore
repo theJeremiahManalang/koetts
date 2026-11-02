@@ -21,3 +21,4 @@ firebase-debug*.log
 .codex/
 .aws/
 apps/web/next-env.d.ts
+/manual-testing/

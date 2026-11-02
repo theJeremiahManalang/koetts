@@ -1,9 +1,20 @@
 # Production deployment and acceptance checklist
 
-Use with [manual deployment](manual-production-deployment.md). An unchecked item is
-pending; a successful command is not proof of user-flow acceptance. No deployment is recorded as completed by this template. Limited teardown
-completed on 2026-11-02; evidence is private under
-`results/compute-teardown-20261102/`. Generate a fresh refreshing plan before redeployment.
+Use with [manual deployment](manual-production-deployment.md). An unchecked item is pending; a successful command is not proof of user-flow
+acceptance. This template records no deployment. Generate a fresh plan before
+redeployment.
+
+Create a private copy per campaign:
+
+```bash
+mkdir -p manual-testing
+test_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+cp docs/resources/production-deployment-checklist.md \
+  "manual-testing/production-deployment-$test_stamp.md"
+```
+
+`manual-testing/` is gitignored. Gitignore prevents future staging; it does not
+erase earlier Git history.
 
 ## Campaign record
 
@@ -17,59 +28,59 @@ completed on 2026-11-02; evidence is private under
 - Final API/frontend revisions and job digests:
 - Build IDs / App Hosting rollout ID:
 - Teardown decision / exact reviewed resource list and plan (or unnecessary):
-- Teardown readiness / execution evidence: completed 2026-11-02; private evidence directory above.
+- Teardown readiness / execution evidence:
 
 For each item, replace `Actual: pending` with observations and a pass/fail decision;
 use evidence paths or IDs without secrets or tokens.
 
 ## Preparation and protected state
 
-- [x] Expected: pinned Node22/npm10/uv and full local checks pass.
+- [ ] Expected: pinned Node22/npm10/uv and full local checks pass.
   Actual: pending. Evidence:
-- [x] Expected: state, backups and private tfvars secured; correct existing dataset,
+- [ ] Expected: state, backups and private tfvars secured; correct existing dataset,
   bucket/namespace, identities, billing IDs and signing versions retained.
   Actual: pending. Evidence:
-- [x] Expected: refreshed live baseline and rollback targets captured; active
+- [ ] Expected: refreshed live baseline and rollback targets captured; active
   executions positively identified; production/provider ledger and schedules paused.
   Actual: pending. Evidence:
-- [x] Expected: limited teardown, if selected, removes only `koetts-api`, jobs
+- [ ] Expected: limited teardown, if selected, removes only `koetts-api`, jobs
   `koetts-magi`, `koetts-pipeline`, `koetts-artifact-gc`, and schedulers
   `hosted-coordinator`, `hosted-artifact-gc`; preserves frontend `koetts` and old API `koetts-s3-api`; preserves all durable data, secrets, identities and budget resources.
   Actual: pending. Evidence:
 
 ## Build, plan and deployment
 
-- [x] Expected: backend build succeeds from candidate; API/magi/pipeline immutable
+- [ ] Expected: backend build succeeds from candidate; API/magi/pipeline immutable
   digests recorded and assigned to correct private Terraform inputs.
   Actual: pending. Evidence:
-- [x] Expected: exact saved plan reviewed; data/secret/identity/budget resources
+- [ ] Expected: exact saved plan reviewed; data/secret/identity/budget resources
   preserved; deletion protection changes individually reviewed if required.
   Actual: pending. Evidence:
-- [x] Expected: Firestore and Eventarc source `nam5`; API/jobs/bucket `us-central1`;
+- [ ] Expected: Firestore and Eventarc source `nam5`; API/jobs/bucket `us-central1`;
   existing frontend `us-east4`.
   Actual: pending. Evidence:
-- [x] Expected: applied saved plan matches reviewed candidate; ready API/job images
+- [ ] Expected: applied saved plan matches reviewed candidate; ready API/job images
   match digests; no public invoker; actual URL/audience match; event filter is scoped.
   Actual: pending. Evidence:
-- [x] Expected: sanitized App Hosting stage targets existing `koetts` backend;
+- [ ] Expected: sanitized App Hosting stage targets existing `koetts` backend;
   deployed frontend URL, secret reference, cloud mode, revision and traffic verified.
   Actual: pending. Evidence:
 
 ## Paused acceptance before activation
 
-- [x] Expected: browse/login accessible; anonymous private API rejected; non-admin
+- [ ] Expected: browse/login accessible; anonymous private API rejected; non-admin
   processing rejected before work; admin diagnostic access succeeds.
   Actual: pending. Evidence:
-- [x] Expected: admin create returns explicit paused notification; no execution
+- [ ] Expected: admin create returns explicit paused notification; no execution
   starts; provider allowance/calls disabled; recovery and GC schedules paused.
   Actual: pending. Evidence:
-- [x] Expected: browser Firestore access denied; private API IAM/signing references
+- [ ] Expected: browser Firestore access denied; private API IAM/signing references
   remain narrow and correct; billing notifications and combined controls retained.
   Actual: pending. Evidence:
 
 ## Human activation and manual processing
 
-- [x] Expected: human approves activation with measured stage/call caps and allowance;
+- [ ] Expected: human approves activation with measured stage/call caps and allowance;
   operator records audited configuration/resume, with separate scheduler decision.
   Actual: pending. Evidence:
 - [ ] Expected: user manually uploads approved sample and creates one operation;
