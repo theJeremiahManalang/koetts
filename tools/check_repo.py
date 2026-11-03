@@ -44,7 +44,7 @@ def check(root: Path = ROOT) -> list[str]:
                 if "/app/" in str(resolved):
                     errors.append(f"{source.relative_to(root)}: feature imports route adapter {spec}")
                 feature_root = root / "apps/web/features"
-                allowed = {"identity": {"identity"}, "library": {"library", "identity"},
+                allowed = {"identity": {"identity"}, "library": {"library", "identity", "temp-data"},
                            "requests": {"requests", "library", "identity"}, "studio": {"studio", "identity"}}
                 owner = source.relative_to(feature_root).parts[0]
                 if resolved.is_relative_to(feature_root):

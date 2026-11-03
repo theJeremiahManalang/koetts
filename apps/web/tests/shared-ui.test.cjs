@@ -120,25 +120,141 @@ test('admin publishes the saved review rather than a newer audition candidate', 
   assert.equal(new Headers(sent[1].headers).get('authorization'), 'Bearer admin-token');
 });
 
-test('browse displays only published catalog entries', async t => {
+test('browse fixtures filter and preserve chapter selection without audio', async t => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/browse' });
-  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'];
+  const keys = ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT', 'fetch', 'ResizeObserver'];
   const originals = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  const mangaId = 'b'.repeat(32), workId = 'a'.repeat(32);
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ chapters: [{ work_id: workId, manga_id: mangaId, title: 'Published Manga', chapter: 1, publication_id: 'c'.repeat(32) }] }) });
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; this.querySelector('input')?.focus(); };
+  dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+  let desktop = true;
+  let reducedMotion = false;
+  window.matchMedia = query => ({ matches: query.includes("prefers-reduced-motion") ? reducedMotion : desktop });
+  let signedIn = true;
+  const calls = [];
+  globalThis.fetch = async url => { calls.push(url); throw new Error('Unexpected fetch'); };
   const mocks = {
     'next/link': props => React.createElement('a', props),
-    '../identity/auth-provider': { useAuth: () => ({ user: { uid: 'reader' }, authorizationReady: true }) },
-    './library-ui': { LibraryHeader: () => null, MangaCover: ({ title }) => React.createElement('div', null, title) },
+    './browse.css': {},
+    '../identity/account-nav': { AccountNav: () => null },
+    '../identity/auth-provider': { useAuth: () => ({ user: signedIn ? { uid: 'reader' } : null, loading: false }) },
   };
   const Page = load('../features/library/browse-page.tsx', mocks).default;
   const { createRoot } = require('react-dom/client'); const root = createRoot(document.getElementById('root'));
   t.after(async () => { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(originals)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } });
   await act(async () => root.render(React.createElement(Page)));
-  assert.match(document.body.textContent, /Published Manga/);
-  assert.doesNotMatch(document.body.textContent, /Echoes of Tomorrow/);
-  assert.ok(document.querySelector(`a[href="/manga/${mangaId}"]`));
+  assert.equal(document.querySelectorAll('.browse-shelf .browse-card').length, 30);
+  assert.deepEqual([...document.querySelectorAll('.browse-shelf')].map(row => row.children.length), [10, 10, 10]);
+  assert.deepEqual([...document.querySelectorAll('.browse-rank')].map(rank => rank.textContent), Array.from({ length: 10 }, (_, i) => String(i + 1)));
+  const requestButton = document.querySelector('.browse-request-banner button');
+  requestButton.focus();
+  await act(async () => requestButton.click());
+  const modal = document.querySelector('dialog');
+  assert.equal(modal.open, true);
+  assert.equal(document.body.style.overflow, 'hidden');
+  assert.equal(document.activeElement.id, 'modal-manga-title');
+  assert.equal(modal.querySelector('[type="submit"]').disabled, true);
+  const fill = async (selector, value) => {
+    const field = modal.querySelector(selector);
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(field, value);
+    await act(async () => field.dispatchEvent(new dom.window.Event('input', { bubbles: true })));
+  };
+  await fill('#modal-manga-title', 'Preview manga');
+  await fill('#modal-manga-chapter', '0');
+  assert.equal(modal.querySelector('[type="submit"]').disabled, true);
+  await fill('#modal-manga-chapter', '12');
+  await act(async () => modal.dispatchEvent(new dom.window.Event('cancel', { cancelable: true })));
+  assert.equal(modal.open, false);
+  assert.equal(document.activeElement, requestButton);
+  assert.equal(document.body.style.overflow, '');
+  await act(async () => document.querySelector('.browse-links button').click());
+  assert.equal(modal.querySelector('#modal-manga-title').value, 'Preview manga');
+  await act(async () => modal.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })));
+  assert.match(modal.textContent, /has not been submitted/);
+  assert.deepEqual(calls, []);
+  await act(async () => modal.querySelector('[aria-label="Close request modal"]').click());
+  const row = document.querySelector('.browse-shelf');
+  let scrollOptions;
+  row.scrollTo = options => { scrollOptions = options; row.scrollLeft = options.left; };
+  Object.defineProperties(row, { clientWidth: { value: 500 }, scrollWidth: { value: 2000 } });
+  const wheel = async options => {
+    const event = new dom.window.WheelEvent('wheel', { bubbles: true, cancelable: true, ...options });
+    await act(async () => row.dispatchEvent(event));
+    return event.defaultPrevented;
+  };
+  assert.equal(await wheel({ deltaY: 120 }), true);
+  assert.equal(row.scrollLeft, 120);
+  assert.equal(scrollOptions.behavior, 'smooth');
+  row.scrollTo = options => { scrollOptions = options; };
+  await wheel({ deltaY: 40 });
+  await wheel({ deltaY: 40 });
+  assert.equal(scrollOptions.left, 200);
+  row.scrollLeft = 200;
+  await act(async () => row.dispatchEvent(new dom.window.Event('scroll')));
+  row.scrollLeft = 120;
+  row.scrollTo = options => { scrollOptions = options; row.scrollLeft = options.left; };
+  reducedMotion = true;
+  await wheel({ deltaY: 1 });
+  assert.equal(scrollOptions.behavior, 'instant');
+  reducedMotion = false;
+  row.scrollLeft = 120;
+  assert.equal(document.querySelectorAll('.browse-shelf')[1].scrollLeft, 0);
+  assert.equal(await wheel({ deltaY: -60 }), true);
+  assert.equal(row.scrollLeft, 60);
+  assert.equal(await wheel({ deltaY: 2, deltaMode: 1 }), true);
+  assert.equal(row.scrollLeft, 92);
+  assert.equal(await wheel({ deltaY: 1, deltaMode: 2 }), true);
+  assert.equal(row.scrollLeft, 592);
+  assert.equal(await wheel({ deltaX: 100, deltaY: 5 }), false);
+  assert.equal(await wheel({ deltaY: 100, ctrlKey: true }), false);
+  assert.equal(await wheel({ deltaY: 100, shiftKey: true }), false);
+  desktop = false;
+  assert.equal(await wheel({ deltaY: 100 }), false);
+  desktop = true;
+  row.scrollLeft = 1490;
+  assert.equal(await wheel({ deltaY: 100 }), true);
+  assert.equal(row.scrollLeft, 1500);
+  assert.equal(await wheel({ deltaY: 100 }), false);
+  row.scrollLeft = 0;
+  assert.equal(await wheel({ deltaY: -100 }), false);
+  let movement;
+  row.scrollBy = options => { movement = options; };
+  await act(async () => row.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })));
+  assert.equal(movement.left, 425);
+  await act(async () => row.dispatchEvent(new dom.window.Event('scroll')));
+  await act(async () => document.querySelector('[aria-label="Scroll Recently added right"]').click());
+  assert.equal(movement.left, 425);
+  await act(async () => document.querySelector('.browse-shelf .browse-card').click());
+  assert.equal(document.activeElement.getAttribute('aria-label'), 'Close manga details');
+  await act(async () => document.querySelector('.browse-chapters button').click());
+  await act(async () => document.querySelectorAll('.browse-shelf .browse-card')[1].click());
+  assert.match(document.querySelector('.browse-details').textContent, /Lantern Town/);
+  assert.match(document.querySelector('.browse-player-track').textContent, /Uncharted Sky/);
+  await act(async () => document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  assert.equal(document.querySelector('.browse-details'), null);
+  assert.equal(document.activeElement, document.querySelectorAll('.browse-shelf .browse-card')[1]);
+  await act(async () => [...document.querySelectorAll('.browse-filters button')].find(button => button.textContent === 'Sci-fi').click());
+  assert.equal(document.querySelectorAll('.browse-shelf .browse-card').length, 2);
+  const input = document.querySelector('input[type="search"]');
+  const change = value => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+  await act(async () => change('Nao Fujita'));
+  assert.equal(document.querySelectorAll('.browse-shelf .browse-card').length, 1);
+  await act(async () => change('no matching story'));
+  assert.match(document.body.textContent, /No stories found/);
+  await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'Reset filters').click());
+  assert.equal(document.querySelectorAll('.browse-shelf .browse-card').length, 30);
+  assert.ok([...document.querySelectorAll('.browse-player button, .browse-player input')].every(control => control.disabled));
+  assert.equal(document.querySelector('audio'), null);
+  assert.deepEqual(calls, []);
+  signedIn = false;
+  await act(async () => root.render(React.createElement(Page)));
+  assert.equal(document.querySelector('.browse-shelf'), null);
+  assert.match(document.body.textContent, /Sign in to explore/);
+
 });
 
 test('manga details links published chapters to playback', async t => {
