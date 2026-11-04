@@ -31,6 +31,8 @@ Each shelf has labelled previous/next buttons, disabled at its edges, and a focu
 
 UI: `apps/web/features/library/browse-page.tsx`, `manga-shelf.tsx`, and `browse.css`. Fixtures: `apps/web/features/temp-data/manga.ts`. Interaction coverage belongs in `apps/web/tests/shared-ui.test.cjs`.
 
+Browse component styling uses Tailwind utilities, including the request preview modal. `browse.css` retains scoped theme variables, shared-global/account overrides, focus/disabled behavior, and the WebKit scrollbar rule. Arbitrary pixel values and inclusive 700px/1100px media queries preserve the original design; do not substitute default spacing or breakpoint tokens without visual comparison. Existing `browse-*` classes remain as interaction-test hooks and contextual styling targets.
+
 Acceptance: search/filter/reset, selection independent from chapter metadata, details dismissal and focus restoration, signed-out collection gate, disabled playback, and no catalog/audio requests. Verify narrow and wide layouts, long titles, chapter overflow, and bottom-player clearance. Run root `npm run check` and record exact outcomes in `CONTEXT.md`.
 
 ## Deferred
